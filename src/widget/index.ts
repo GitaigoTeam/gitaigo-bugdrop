@@ -1196,13 +1196,15 @@ function showAnnotationStep(
           <button class="bd-tool" data-tool="rect">▢ Rectangle</button>
           <button class="bd-tool" data-action="undo">↶ Undo</button>
         </div>
-        <div id="annotation-canvas"></div>
+        <div id="annotation-canvas" class="bd-annotation-stage"></div>
         <div class="bd-actions">
           <button class="bd-btn bd-btn-secondary" data-action="retake">Retake</button>
           <button class="bd-btn bd-btn-secondary" data-action="skip">Skip Annotations</button>
           <button class="bd-btn bd-btn-primary" data-action="done">Done</button>
         </div>
-      `
+      `,
+      false,
+      'bd-modal--annotator'
     );
 
     const canvasContainer = modal.querySelector('#annotation-canvas') as HTMLElement;
