@@ -2140,6 +2140,25 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     await captureBtn.click();
   }
 
+  async function trackFeedbackSubmissions(page: Page) {
+    let count = 0;
+    await page.route('**/feedback', async route => {
+      count++;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, issueNumber: 1, issueUrl: '#', isPublic: false }),
+      });
+    });
+    return () => count;
+  }
+
+  async function expectReturnedToForm(host: ReturnType<Page['locator']>, title: string) {
+    const titleInput = host.locator('css=#title');
+    await expect(titleInput).toBeVisible({ timeout: 5000 });
+    await expect(titleInput).toHaveValue(title);
+  }
+
   test('reduces pixelRatio on complex DOM pages (>3000 nodes)', async ({ page }) => {
     await mockHtmlToImage(page, spyToPng());
     await page.goto('/test/complex-dom.html');
@@ -2213,6 +2232,50 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     const retryBtn = host.locator('css=[data-action="retry"]');
     await expect(skipBtn).toBeVisible();
     await expect(retryBtn).toBeVisible();
+  });
+
+  test('closing screenshot options returns to the form without submitting', async ({ page }) => {
+    const getSubmissionCount = await trackFeedbackSubmissions(page);
+    await page.goto('/test/');
+
+    const host = await navigateToScreenshotOptions(page);
+
+    await host.locator('css=.bd-close').click();
+
+    await expectReturnedToForm(host, 'Screenshot test');
+    expect(getSubmissionCount()).toBe(0);
+  });
+
+  test('closing capture error returns to the form without submitting', async ({ page }) => {
+    const getSubmissionCount = await trackFeedbackSubmissions(page);
+    await mockHtmlToImage(page, "function() { return Promise.reject(new Error('mock failure')); }");
+    await page.goto('/test/');
+    await navigateToFullPageCapture(page);
+
+    const host = page.locator('#bugdrop-host');
+    const errorText = host.locator('css=.bd-error-message__text');
+    await expect(errorText).toBeVisible({ timeout: 5000 });
+
+    await host.locator('css=.bd-close').click();
+
+    await expectReturnedToForm(host, 'Screenshot test');
+    expect(getSubmissionCount()).toBe(0);
+  });
+
+  test('closing annotation step returns to the form without submitting', async ({ page }) => {
+    const getSubmissionCount = await trackFeedbackSubmissions(page);
+    await mockHtmlToImage(page, spyToPng());
+    await page.goto('/test/');
+    await navigateToFullPageCapture(page);
+
+    const host = page.locator('#bugdrop-host');
+    const annotationCanvas = host.locator('css=#annotation-canvas');
+    await expect(annotationCanvas).toBeVisible({ timeout: 10000 });
+
+    await host.locator('css=.bd-close').click();
+
+    await expectReturnedToForm(host, 'Screenshot test');
+    expect(getSubmissionCount()).toBe(0);
   });
 
   test('skip button on error modal continues without screenshot', async ({ page }) => {

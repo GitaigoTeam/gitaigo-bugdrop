@@ -642,94 +642,124 @@ async function openFeedbackFlow(
     }
   }
 
-  // Step 2: Feedback form (with optional screenshot checkbox)
-  const formResult = await showFeedbackFormWithScreenshotOption(root, config);
-  if (!formResult) {
-    // User cancelled
-    _isModalOpen = false;
-    return;
-  }
+  let formResult: FeedbackFormResult | null = null;
+  while (true) {
+    // Step 2: Feedback form (with optional screenshot checkbox)
+    formResult = await showFeedbackFormWithScreenshotOption(root, config, formResult);
+    if (!formResult) {
+      // User cancelled
+      _isModalOpen = false;
+      return;
+    }
 
-  let screenshot: string | null = null;
-  let elementSelector: string | null = null;
+    let screenshot: string | null = null;
+    let elementSelector: string | null = null;
+    let returnToForm = false;
 
-  // Step 3: Screenshot flow (if configured/user opted in)
-  if (config.screenshotMode === 'auto') {
-    screenshot = await captureWithLoading(root, undefined, config.screenshotScale);
-  } else if (formResult.includeScreenshot) {
-    const screenshotRequired = config.screenshotMode === 'required';
-    while (true) {
-      screenshot = null;
-      elementSelector = null;
-
-      const screenshotChoice = await showScreenshotOptions(root, {
-        allowSkip: !screenshotRequired,
-      });
-      if (screenshotChoice === 'cancel') {
-        _isModalOpen = false;
-        return;
-      }
-      if (screenshotChoice === 'skip') {
-        break;
-      }
-
-      const pickerStyle = {
-        accentColor: config.accentColor,
-        font: config.font,
-        radius: config.radius,
-        borderWidth: config.borderWidth,
-        bgColor: config.bgColor,
-        textColor: config.textColor,
-        borderColor: config.borderColor,
-        theme: config.theme,
-      };
-
-      if (screenshotChoice === 'capture') {
-        screenshot = await captureWithLoading(root, undefined, config.screenshotScale, {
-          allowSkip: !screenshotRequired,
-        });
-      } else if (screenshotChoice === 'element') {
-        const element = await createElementPicker(pickerStyle);
-        if (element) {
-          screenshot = await captureWithLoading(root, element, config.screenshotScale, {
-            allowSkip: !screenshotRequired,
-          });
-          elementSelector = getElementSelector(element);
-        }
-      } else if (screenshotChoice === 'area') {
-        const rect = await createAreaPicker(pickerStyle);
-        if (rect) {
-          const pixelRatio = getPixelRatio(true, config.screenshotScale);
-          const fullPage = await captureWithLoading(root, undefined, config.screenshotScale, {
-            allowSkip: !screenshotRequired,
-          });
-          if (fullPage) {
-            screenshot = await cropScreenshot(fullPage, rect, pixelRatio);
-          }
-        }
-      }
-
-      // Step 4: Annotate (if screenshot exists)
-      if (screenshot) {
-        const result = await showAnnotationStep(root, screenshot, config);
-        if (result === 'retake') continue;
+    // Step 3: Screenshot flow (if configured/user opted in)
+    if (config.screenshotMode === 'auto') {
+      const result = await captureWithLoading(root, undefined, config.screenshotScale);
+      if (result === 'cancel') {
+        returnToForm = true;
+      } else {
         screenshot = result;
       }
-      if (screenshotRequired && !screenshot) continue;
-      break;
-    }
-  }
+    } else if (formResult.includeScreenshot) {
+      const screenshotRequired = config.screenshotMode === 'required';
+      while (true) {
+        screenshot = null;
+        elementSelector = null;
 
-  // Submit
-  await submitFeedback(root, config, {
-    title: formResult.title,
-    description: formResult.description,
-    category: formResult.category,
-    name: formResult.name,
-    email: formResult.email,
-    screenshot,
-    elementSelector,
-  });
+        const screenshotChoice = await showScreenshotOptions(root, {
+          allowSkip: !screenshotRequired,
+        });
+        if (screenshotChoice === 'cancel') {
+          returnToForm = true;
+          break;
+        }
+        if (screenshotChoice === 'skip') {
+          break;
+        }
+
+        const pickerStyle = {
+          accentColor: config.accentColor,
+          font: config.font,
+          radius: config.radius,
+          borderWidth: config.borderWidth,
+          bgColor: config.bgColor,
+          textColor: config.textColor,
+          borderColor: config.borderColor,
+          theme: config.theme,
+        };
+
+        if (screenshotChoice === 'capture') {
+          const result = await captureWithLoading(root, undefined, config.screenshotScale, {
+            allowSkip: !screenshotRequired,
+          });
+          if (result === 'cancel') {
+            returnToForm = true;
+            break;
+          }
+          screenshot = result;
+        } else if (screenshotChoice === 'element') {
+          const element = await createElementPicker(pickerStyle);
+          if (element) {
+            const result = await captureWithLoading(root, element, config.screenshotScale, {
+              allowSkip: !screenshotRequired,
+            });
+            if (result === 'cancel') {
+              returnToForm = true;
+              break;
+            }
+            screenshot = result;
+            elementSelector = getElementSelector(element);
+          }
+        } else if (screenshotChoice === 'area') {
+          const rect = await createAreaPicker(pickerStyle);
+          if (rect) {
+            const pixelRatio = getPixelRatio(true, config.screenshotScale);
+            const fullPage = await captureWithLoading(root, undefined, config.screenshotScale, {
+              allowSkip: !screenshotRequired,
+            });
+            if (fullPage === 'cancel') {
+              returnToForm = true;
+              break;
+            }
+            if (fullPage) {
+              screenshot = await cropScreenshot(fullPage, rect, pixelRatio);
+            }
+          }
+        }
+
+        // Step 4: Annotate (if screenshot exists)
+        if (screenshot) {
+          const result = await showAnnotationStep(root, screenshot, config);
+          if (result === 'retake') continue;
+          if (result === 'cancel') {
+            returnToForm = true;
+            break;
+          }
+          screenshot = result;
+        }
+        if (screenshotRequired && !screenshot) continue;
+        break;
+      }
+    }
+
+    if (returnToForm) continue;
+
+    // Submit
+    await submitFeedback(root, config, {
+      title: formResult.title,
+      description: formResult.description,
+      category: formResult.category,
+      name: formResult.name,
+      email: formResult.email,
+      screenshot,
+      elementSelector,
+    });
+    break;
+  }
 
   // Flow complete
   _isModalOpen = false;
@@ -740,7 +770,7 @@ async function captureWithLoading(
   element?: Element,
   screenshotScale?: number,
   opts?: { allowSkip?: boolean }
-): Promise<string | null> {
+): Promise<string | null | 'cancel'> {
   // Show a temporary loading indicator
   const loadingModal = createModal(
     root,
@@ -787,7 +817,7 @@ async function captureWithLoading(
 
       closeBtn?.addEventListener('click', () => {
         errorModal.remove();
-        resolve(null);
+        resolve('cancel');
       });
 
       skipBtn?.addEventListener('click', () => {
@@ -911,7 +941,8 @@ interface FeedbackFormResult {
 
 function showFeedbackFormWithScreenshotOption(
   root: HTMLElement,
-  config: WidgetConfig
+  config: WidgetConfig,
+  initialValues?: FeedbackFormResult | null
 ): Promise<FeedbackFormResult | null> {
   return new Promise(resolve => {
     // Build optional name field
@@ -919,7 +950,7 @@ function showFeedbackFormWithScreenshotOption(
       ? `
           <div class="bd-form-group">
             <label class="bd-label" for="name">Name${config.requireName ? ' *' : ''}</label>
-            <input type="text" id="name" class="bd-input" ${config.requireName ? 'required' : ''} placeholder="Your name" />
+            <input type="text" id="name" class="bd-input" ${config.requireName ? 'required' : ''} placeholder="Your name" value="${escapeHtml(initialValues?.name || '')}" />
           </div>
         `
       : '';
@@ -929,7 +960,7 @@ function showFeedbackFormWithScreenshotOption(
       ? `
           <div class="bd-form-group">
             <label class="bd-label" for="email">Email${config.requireEmail ? ' *' : ''}</label>
-            <input type="email" id="email" class="bd-input" ${config.requireEmail ? 'required' : ''} placeholder="your@email.com" />
+            <input type="email" id="email" class="bd-input" ${config.requireEmail ? 'required' : ''} placeholder="your@email.com" value="${escapeHtml(initialValues?.email || '')}" />
           </div>
         `
       : '';
@@ -943,30 +974,30 @@ function showFeedbackFormWithScreenshotOption(
           ${emailFieldHtml}
           <div class="bd-form-group">
             <label class="bd-label" for="title">Title *</label>
-            <input type="text" id="title" class="bd-input" required placeholder="Brief description of the issue or suggestion" />
+            <input type="text" id="title" class="bd-input" required placeholder="Brief description of the issue or suggestion" value="${escapeHtml(initialValues?.title || '')}" />
           </div>
           <div class="bd-form-group">
             <label class="bd-label">Category</label>
             <div class="bd-category-selector" style="display: flex; gap: 8px; margin-top: 6px;">
               <label class="bd-category-option" style="flex: 1; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: var(--bd-border-style); border-radius: var(--bd-radius-sm); cursor: pointer; transition: all 0.15s ease;">
-                <input type="radio" name="category" value="bug" checked style="accent-color: var(--bd-primary);" />
+                <input type="radio" name="category" value="bug" ${getCategoryChecked(initialValues, 'bug')} style="accent-color: var(--bd-primary);" />
                 <span style="font-size: 0.9rem;">🐛 Bug</span>
               </label>
               <label class="bd-category-option" style="flex: 1; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: var(--bd-border-style); border-radius: var(--bd-radius-sm); cursor: pointer; transition: all 0.15s ease;">
-                <input type="radio" name="category" value="feature" style="accent-color: var(--bd-primary);" />
+                <input type="radio" name="category" value="feature" ${getCategoryChecked(initialValues, 'feature')} style="accent-color: var(--bd-primary);" />
                 <span style="font-size: 0.9rem;">✨ Feature</span>
               </label>
               <label class="bd-category-option" style="flex: 1; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: var(--bd-border-style); border-radius: var(--bd-radius-sm); cursor: pointer; transition: all 0.15s ease;">
-                <input type="radio" name="category" value="question" style="accent-color: var(--bd-primary);" />
+                <input type="radio" name="category" value="question" ${getCategoryChecked(initialValues, 'question')} style="accent-color: var(--bd-primary);" />
                 <span style="font-size: 0.9rem;">❓ Question</span>
               </label>
             </div>
           </div>
           <div class="bd-form-group">
             <label class="bd-label" for="description">Description</label>
-            <textarea id="description" class="bd-textarea" placeholder="Provide additional details, steps to reproduce, or context..."></textarea>
+            <textarea id="description" class="bd-textarea" placeholder="Provide additional details, steps to reproduce, or context...">${escapeHtml(initialValues?.description || '')}</textarea>
           </div>
-          ${getScreenshotFormControl(config)}
+          ${getScreenshotFormControl(config, initialValues)}
           <div class="bd-actions">
             <button type="button" class="bd-btn bd-btn-secondary" data-action="cancel">Cancel</button>
             <button type="submit" class="bd-btn bd-btn-primary" id="submit-btn">${config.screenshotMode === 'auto' ? 'Submit' : 'Continue'}</button>
@@ -1043,7 +1074,10 @@ function showFeedbackFormWithScreenshotOption(
   });
 }
 
-function getScreenshotFormControl(config: WidgetConfig): string {
+function getScreenshotFormControl(
+  config: WidgetConfig,
+  initialValues?: FeedbackFormResult | null
+): string {
   if (config.screenshotMode === 'auto') {
     return `
       <p style="margin: 8px 0 0; color: var(--bd-text-secondary); font-size: 0.95rem;">
@@ -1062,12 +1096,28 @@ function getScreenshotFormControl(config: WidgetConfig): string {
 
   return `
     <div class="bd-form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
-      <input type="checkbox" id="include-screenshot" checked style="width: 18px; height: 18px; accent-color: var(--bd-primary); cursor: pointer;" />
+      <input type="checkbox" id="include-screenshot" ${initialValues?.includeScreenshot === false ? '' : 'checked'} style="width: 18px; height: 18px; accent-color: var(--bd-primary); cursor: pointer;" />
       <label for="include-screenshot" style="font-size: 0.95rem; color: var(--bd-text-secondary); cursor: pointer; user-select: none;">
         📸 Include a screenshot
       </label>
     </div>
   `;
+}
+
+function getCategoryChecked(
+  initialValues: FeedbackFormResult | null | undefined,
+  category: FeedbackCategory
+): string {
+  return (initialValues?.category || 'bug') === category ? 'checked' : '';
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function showScreenshotOptions(
@@ -1105,7 +1155,7 @@ function showScreenshotOptions(
 
     closeBtn?.addEventListener('click', () => {
       modal.remove();
-      resolve(allowSkip ? 'skip' : 'cancel');
+      resolve('cancel');
     });
 
     skipBtn?.addEventListener('click', () => {
@@ -1134,7 +1184,7 @@ function showAnnotationStep(
   root: HTMLElement,
   screenshot: string,
   config?: WidgetConfig
-): Promise<string | 'retake'> {
+): Promise<string | 'retake' | 'cancel'> {
   return new Promise(resolve => {
     const modal = createModal(
       root,
@@ -1184,7 +1234,7 @@ function showAnnotationStep(
     closeBtn?.addEventListener('click', () => {
       annotator.destroy();
       modal.remove();
-      resolve(screenshot);
+      resolve('cancel');
     });
 
     retakeBtn?.addEventListener('click', () => {
