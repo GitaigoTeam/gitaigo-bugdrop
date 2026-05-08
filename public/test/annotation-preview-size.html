@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BugDrop Annotation Preview Size Fixture</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 80px;
+      background: #f3f4f6;
+      color: #111827;
+      font-family: Arial, sans-serif;
+    }
+
+    .fixture-panel {
+      width: 1040px;
+      height: 260px;
+      padding: 28px 36px;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+    }
+
+    .fixture-panel > * {
+      pointer-events: none;
+    }
+
+    .fixture-panel h1 {
+      margin: 0 0 18px;
+      font-size: 18px;
+    }
+
+    .fixture-panel p {
+      margin: 0 0 14px;
+      color: #4b5563;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .row {
+      width: 520px;
+      margin-bottom: 14px;
+      padding: 9px 12px;
+      background: #f9fafb;
+      color: #374151;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <main id="preview-size-target" class="fixture-panel">
+    <h1>Widget</h1>
+    <p>Password Widget v2</p>
+    <p>Preview settings are represented here with small but readable text.</p>
+    <div class="row">Location Widget #3</div>
+    <div class="row">Object: example.company/feature/preview</div>
+  </main>
+
+  <script id="bugdrop-script" defer src="/widget.js" data-repo="mean-weasel/bugdrop-widget-test" data-theme="dark" data-color="#ff9e64"></script>
+</body>
+</html>

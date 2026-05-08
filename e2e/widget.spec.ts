@@ -2089,6 +2089,44 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     }`;
   }
 
+  function reporterLikePng(variant: 'preview-size' | 'small-wide-area') {
+    return `function(el, opts) {
+      window.__captureOpts = opts;
+      var canvas = document.createElement('canvas');
+      var ctx = canvas.getContext('2d');
+      if ('${variant}' === 'preview-size') {
+        canvas.width = 1040;
+        canvas.height = 260;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#111827';
+        ctx.font = '600 16px Arial';
+        ctx.fillText('Widget', 36, 34);
+        ctx.fillStyle = '#4b5563';
+        ctx.font = '13px Arial';
+        ctx.fillText('Password Widget v2', 36, 68);
+        ctx.fillText('Preview settings are represented here with small but readable text.', 36, 98);
+        ctx.fillStyle = '#f3f4f6';
+        ctx.fillRect(36, 120, 420, 24);
+        ctx.fillStyle = '#6b7280';
+        ctx.fillText('Location Widget #3', 48, 137);
+        ctx.fillStyle = '#f9fafb';
+        ctx.fillRect(36, 160, 520, 34);
+        ctx.fillStyle = '#374151';
+        ctx.fillText('Object: example.company/feature/preview', 48, 181);
+      } else {
+        canvas.width = 252;
+        canvas.height = 54;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#525252';
+        ctx.font = '28px Arial';
+        ctx.fillText('Settlement Stage', 14, 36);
+      }
+      return Promise.resolve(canvas.toDataURL('image/png'));
+    }`;
+  }
+
   test.beforeEach(async ({ page }) => {
     await page.route('**/api/check/**', async route => {
       await route.fulfill({
@@ -2138,6 +2176,35 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     const captureBtn = host.locator('css=[data-action="capture"]');
     await expect(captureBtn).toBeVisible({ timeout: 5000 });
     await captureBtn.click();
+  }
+
+  async function captureElementForAnnotation(page: Page, path: string, selector: string) {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto(path);
+
+    const host = await navigateToScreenshotOptions(page);
+    const elementBtn = host.locator('css=[data-action="element"]');
+    await expect(elementBtn).toBeVisible({ timeout: 5000 });
+    await elementBtn.click();
+    await expect(page.locator('#bugdrop-element-picker-tooltip')).toBeVisible({ timeout: 5000 });
+
+    const target = page.locator(selector);
+    await expect(target).toBeVisible({ timeout: 5000 });
+    const targetBox = await target.boundingBox();
+    expect(targetBox).toBeTruthy();
+    const targetX = targetBox!.x + targetBox!.width / 2;
+    const targetY = targetBox!.y + targetBox!.height / 2;
+    await page.mouse.move(targetX, targetY);
+    await page.mouse.click(targetX, targetY);
+
+    const modal = host.locator('css=.bd-modal--annotator');
+    const stage = host.locator('css=#annotation-canvas');
+    const canvas = stage.locator('css=canvas');
+    await expect(modal).toBeVisible({ timeout: 30000 });
+    await expect(stage).toBeVisible();
+    await expect(canvas).toBeVisible();
+
+    return { host, modal, stage, canvas };
   }
 
   async function trackFeedbackSubmissions(page: Page) {
@@ -2366,6 +2433,144 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
 
     // Complexity notice should NOT be shown
     await expect(host.locator('css=p >> text=too complex')).not.toBeAttached();
+  });
+
+  test('annotation modal gives issue #117 style previews enough readable width', async ({
+    page,
+  }) => {
+    await mockHtmlToImage(page, reporterLikePng('preview-size'));
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/test/');
+    await navigateToFullPageCapture(page);
+
+    const host = page.locator('#bugdrop-host');
+    const modal = host.locator('css=.bd-modal--annotator');
+    const stage = host.locator('css=#annotation-canvas');
+    const canvas = stage.locator('css=canvas');
+
+    await expect(modal).toBeVisible({ timeout: 10000 });
+    await expect(stage).toBeVisible();
+    await expect(canvas).toBeVisible();
+
+    const modalBox = await modal.boundingBox();
+    const stageBox = await stage.boundingBox();
+    const canvasBox = await canvas.boundingBox();
+
+    expect(modalBox?.width).toBeGreaterThanOrEqual(1040);
+    expect(stageBox?.width).toBeGreaterThanOrEqual(980);
+    expect(canvasBox?.width).toBeGreaterThanOrEqual(980);
+
+    const toolbarBox = await host.locator('css=.bd-tools').boundingBox();
+    const actionsBox = await host.locator('css=.bd-actions').boundingBox();
+    expect(toolbarBox && stageBox ? toolbarBox.y + toolbarBox.height <= stageBox.y : false).toBe(
+      true
+    );
+    expect(stageBox && actionsBox ? stageBox.y + stageBox.height <= actionsBox.y : false).toBe(
+      true
+    );
+  });
+
+  test('annotation stage frames issue #119 style short wide captures clearly', async ({ page }) => {
+    await mockHtmlToImage(page, reporterLikePng('small-wide-area'));
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/test/');
+    await navigateToFullPageCapture(page);
+
+    const host = page.locator('#bugdrop-host');
+    const stage = host.locator('css=#annotation-canvas');
+    const canvas = stage.locator('css=canvas');
+
+    await expect(host.locator('css=.bd-modal--annotator')).toBeVisible({ timeout: 10000 });
+    await expect(stage).toBeVisible();
+    await expect(canvas).toBeVisible();
+
+    const stageBox = await stage.boundingBox();
+    const canvasBox = await canvas.boundingBox();
+    expect(stageBox?.width).toBeGreaterThanOrEqual(980);
+    expect(stageBox?.height).toBeGreaterThanOrEqual(230);
+    expect(canvasBox?.width).toBeLessThan(320);
+    expect(canvasBox?.height).toBeLessThan(90);
+
+    const stageStyles = await stage.evaluate(el => {
+      const styles = getComputedStyle(el);
+      return {
+        borderStyle: styles.borderTopStyle,
+        borderWidth: styles.borderTopWidth,
+        overflow: styles.overflow,
+        padding: styles.paddingTop,
+      };
+    });
+
+    expect(stageStyles.borderStyle).not.toBe('none');
+    expect(parseFloat(stageStyles.borderWidth)).toBeGreaterThan(0);
+    expect(stageStyles.overflow).toBe('auto');
+    expect(parseFloat(stageStyles.padding)).toBeGreaterThan(0);
+
+    expect(stageBox && canvasBox ? canvasBox.x > stageBox.x : false).toBe(true);
+    expect(stageBox && canvasBox ? canvasBox.y > stageBox.y : false).toBe(true);
+  });
+
+  test('real element capture keeps issue #117 style content readable in annotation preview', async ({
+    page,
+  }) => {
+    const { modal, stage, canvas } = await captureElementForAnnotation(
+      page,
+      '/test/annotation-preview-size.html',
+      '#preview-size-target'
+    );
+
+    const modalBox = await modal.boundingBox();
+    const stageBox = await stage.boundingBox();
+    const canvasBox = await canvas.boundingBox();
+    const intrinsicSize = await canvas.evaluate(el => ({
+      width: (el as HTMLCanvasElement).width,
+      height: (el as HTMLCanvasElement).height,
+    }));
+
+    expect(intrinsicSize.width).toBeGreaterThanOrEqual(1000);
+    expect(intrinsicSize.height).toBeGreaterThanOrEqual(250);
+    expect(modalBox?.width).toBeGreaterThanOrEqual(1040);
+    expect(stageBox?.width).toBeGreaterThanOrEqual(980);
+    expect(canvasBox?.width).toBeGreaterThanOrEqual(980);
+  });
+
+  test('real element capture clearly frames issue #119 style small annotation targets', async ({
+    page,
+  }) => {
+    const { stage, canvas } = await captureElementForAnnotation(
+      page,
+      '/test/annotation-small-wide-area.html',
+      '#small-wide-target'
+    );
+
+    const stageBox = await stage.boundingBox();
+    const canvasBox = await canvas.boundingBox();
+    const intrinsicSize = await canvas.evaluate(el => ({
+      width: (el as HTMLCanvasElement).width,
+      height: (el as HTMLCanvasElement).height,
+    }));
+
+    expect(intrinsicSize.width).toBeLessThanOrEqual(600);
+    expect(intrinsicSize.height).toBeLessThanOrEqual(140);
+    expect(stageBox?.width).toBeGreaterThanOrEqual(980);
+    expect(stageBox?.height).toBeGreaterThanOrEqual(230);
+    expect(canvasBox?.width).toBeLessThan(600);
+    expect(canvasBox?.height).toBeLessThan(140);
+
+    const frame = await stage.evaluate(el => {
+      const styles = getComputedStyle(el);
+      return {
+        borderWidth: parseFloat(styles.borderTopWidth),
+        padding: parseFloat(styles.paddingTop),
+        overflow: styles.overflow,
+      };
+    });
+
+    expect(frame.borderWidth).toBeGreaterThan(0);
+    expect(frame.padding).toBeGreaterThan(0);
+    expect(frame.overflow).toBe('auto');
+    expect(stageBox && canvasBox ? canvasBox.x > stageBox.x : false).toBe(true);
+    expect(stageBox && canvasBox ? canvasBox.y > stageBox.y : false).toBe(true);
   });
 
   // --- Metadata: domNodeCount and fullPageDisabled in submission payload ---

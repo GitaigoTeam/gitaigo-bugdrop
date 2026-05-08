@@ -323,6 +323,11 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       animation: bd-slideUp var(--bd-transition-slow);
     }
 
+    .bd-modal--annotator {
+      width: min(96vw, 1100px);
+      max-width: 1100px;
+    }
+
     /* Modal Header */
     .bd-header {
       padding: 16px 20px;
@@ -704,6 +709,37 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       box-shadow: var(--bd-shadow-sm);
     }
 
+    .bd-annotation-stage {
+      min-height: 240px;
+      max-height: min(58vh, 620px);
+      padding: 18px;
+      border: 1px solid var(--bd-border, #e7e5e4);
+      border-radius: var(--bd-radius-md);
+      background:
+        linear-gradient(45deg, var(--bd-bg-secondary) 25%, transparent 25%),
+        linear-gradient(-45deg, var(--bd-bg-secondary) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, var(--bd-bg-secondary) 75%),
+        linear-gradient(-45deg, transparent 75%, var(--bd-bg-secondary) 75%),
+        var(--bd-bg-primary);
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+      background-size: 16px 16px;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bd-border) 60%, transparent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+    }
+
+    .bd-annotation-stage canvas {
+      display: block;
+      max-width: 100%;
+      max-height: calc(min(58vh, 620px) - 36px);
+      width: auto;
+      height: auto;
+      background: #ffffff;
+      box-shadow: var(--bd-shadow-md);
+    }
+
     /* Preview */
     .bd-preview {
       border: var(--bd-border-style);
@@ -839,6 +875,11 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
         animation: bd-slideUpMobile var(--bd-transition-slow);
       }
 
+      .bd-modal--annotator {
+        width: calc(100% - 16px);
+        max-width: calc(100% - 16px);
+      }
+
       .bd-header {
         padding: 16px;
         position: sticky;
@@ -884,6 +925,16 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
 
       .bd-tools {
         flex-wrap: wrap;
+      }
+
+      .bd-annotation-stage {
+        min-height: 180px;
+        max-height: 46vh;
+        padding: 12px;
+      }
+
+      .bd-annotation-stage canvas {
+        max-height: calc(46vh - 24px);
       }
 
       .bd-tool {
@@ -979,17 +1030,19 @@ export function createModal(
   container: HTMLElement,
   title: string,
   content: string,
-  showVersion: boolean = false
+  showVersion: boolean = false,
+  modalClass: string = ''
 ): HTMLElement {
   const overlay = document.createElement('div');
   overlay.className = 'bd-overlay';
+  const modalClasses = ['bd-modal', modalClass].filter(Boolean).join(' ');
 
   const versionBadge = showVersion
     ? `<div class="bd-version">BugDrop v${typeof __BUGDROP_VERSION__ !== 'undefined' ? __BUGDROP_VERSION__ : 'dev'}</div>`
     : '';
 
   overlay.innerHTML = `
-    <div class="bd-modal">
+    <div class="${modalClasses}">
       <div class="bd-header">
         <h2 class="bd-title">${title}</h2>
         <button class="bd-close">&times;</button>
