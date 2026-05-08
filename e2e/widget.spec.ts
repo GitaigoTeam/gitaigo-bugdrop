@@ -2376,3 +2376,102 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     await expect(annotationCanvas).toBeVisible({ timeout: 30000 });
   });
 });
+
+test.describe('Screenshot Mode Configuration', () => {
+  const STUB_PNG =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+  async function setupInstalledApp(page: Page) {
+    await page.route('**/api/check/**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      });
+    });
+  }
+
+  async function setupSuccessfulSubmit(page: Page) {
+    let payload: Record<string, unknown> | null = null;
+    await page.route('**/feedback', async route => {
+      payload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, issueNumber: 1, issueUrl: '#', isPublic: false }),
+      });
+    });
+    return () => payload;
+  }
+
+  async function mockSuccessfulCapture(page: Page) {
+    await page.addInitScript(`window.__bugdropMockToPng = function() {
+      window.__autoCaptureCount = (window.__autoCaptureCount || 0) + 1;
+      return Promise.resolve('${STUB_PNG}');
+    };`);
+  }
+
+  async function openForm(page: Page) {
+    const host = page.locator('#bugdrop-host');
+    await expect(host.locator('css=.bd-trigger')).toBeVisible({ timeout: 5000 });
+    await host.locator('css=.bd-trigger').click();
+
+    const getStartedBtn = host.locator('css=[data-action="continue"]');
+    await expect(getStartedBtn).toBeVisible({ timeout: 5000 });
+    await getStartedBtn.click();
+
+    const titleInput = host.locator('css=#title');
+    await expect(titleInput).toBeVisible({ timeout: 5000 });
+    await titleInput.fill('Screenshot mode test');
+    return host;
+  }
+
+  test('auto mode captures and submits a screenshot without the manual screenshot step', async ({
+    page,
+  }) => {
+    await setupInstalledApp(page);
+    await mockSuccessfulCapture(page);
+    const getPayload = await setupSuccessfulSubmit(page);
+
+    await page.goto('/test/?screenshot=auto');
+    const host = await openForm(page);
+
+    await expect(host.locator('css=#include-screenshot')).not.toBeAttached();
+    await host.locator('css=#submit-btn').click();
+
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+    await expect(host.locator('css=[data-action="capture"]')).not.toBeAttached();
+    await expect(host.locator('css=#annotation-canvas')).not.toBeAttached();
+
+    const payload = getPayload();
+    expect(payload?.screenshot).toBe(STUB_PNG);
+    expect(
+      await page.evaluate(
+        () => (window as Window & { __autoCaptureCount?: number }).__autoCaptureCount
+      )
+    ).toBe(1);
+  });
+
+  test('required mode removes the opt-out path and requires a capture before submit', async ({
+    page,
+  }) => {
+    await setupInstalledApp(page);
+    await mockSuccessfulCapture(page);
+    const getPayload = await setupSuccessfulSubmit(page);
+
+    await page.goto('/test/?screenshot=required');
+    const host = await openForm(page);
+
+    await expect(host.locator('css=#include-screenshot')).not.toBeAttached();
+    await host.locator('css=#submit-btn').click();
+
+    await expect(host.locator('css=[data-action="skip"]')).not.toBeAttached();
+    await host.locator('css=[data-action="capture"]').click();
+
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 10000 });
+    await host.locator('css=[data-action="done"]').click();
+
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+    expect(getPayload()?.screenshot).toEqual(expect.stringMatching(/^data:image\/png;base64,/));
+  });
+});
