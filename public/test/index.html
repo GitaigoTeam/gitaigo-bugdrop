@@ -604,7 +604,7 @@
         var script = document.getElementById('bugdrop-script');
         if (!script) return;
         var params = new URLSearchParams(location.search);
-        var mapping = { theme: 'data-theme', bg: 'data-bg' };
+        var mapping = { theme: 'data-theme', bg: 'data-bg', screenshot: 'data-screenshot' };
         Object.keys(mapping).forEach(function (key) {
           var v = params.get(key);
           if (v != null) script.setAttribute(mapping[key], v);

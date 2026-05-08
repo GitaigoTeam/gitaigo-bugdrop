@@ -53,6 +53,7 @@ interface WidgetConfig {
   // Welcome screen behavior
   welcome: 'once' | 'always' | 'never';
   // Screenshot configuration
+  screenshotMode: 'optional' | 'auto' | 'required';
   screenshotScale?: number; // Minimum pixel ratio for captures (default: 2)
 }
 
@@ -272,6 +273,16 @@ const config: WidgetConfig = {
     return 'once' as const;
   })(),
   // Screenshot configuration
+  screenshotMode: (() => {
+    const val = script?.dataset.screenshot;
+    if (val === 'auto' || val === 'required') return val;
+    if (val && val !== 'optional') {
+      console.warn(
+        `[BugDrop] Invalid data-screenshot "${val}". Expected "optional", "auto", or "required".`
+      );
+    }
+    return 'optional' as const;
+  })(),
   screenshotScale: script?.dataset.screenshotScale
     ? parseFloat(script.dataset.screenshotScale)
     : undefined,
@@ -642,13 +653,26 @@ async function openFeedbackFlow(
   let screenshot: string | null = null;
   let elementSelector: string | null = null;
 
-  // Step 3: Screenshot flow (if user opted in)
-  if (formResult.includeScreenshot) {
+  // Step 3: Screenshot flow (if configured/user opted in)
+  if (config.screenshotMode === 'auto') {
+    screenshot = await captureWithLoading(root, undefined, config.screenshotScale);
+  } else if (formResult.includeScreenshot) {
+    const screenshotRequired = config.screenshotMode === 'required';
     while (true) {
       screenshot = null;
       elementSelector = null;
 
-      const screenshotChoice = await showScreenshotOptions(root);
+      const screenshotChoice = await showScreenshotOptions(root, {
+        allowSkip: !screenshotRequired,
+      });
+      if (screenshotChoice === 'cancel') {
+        _isModalOpen = false;
+        return;
+      }
+      if (screenshotChoice === 'skip') {
+        break;
+      }
+
       const pickerStyle = {
         accentColor: config.accentColor,
         font: config.font,
@@ -661,18 +685,24 @@ async function openFeedbackFlow(
       };
 
       if (screenshotChoice === 'capture') {
-        screenshot = await captureWithLoading(root, undefined, config.screenshotScale);
+        screenshot = await captureWithLoading(root, undefined, config.screenshotScale, {
+          allowSkip: !screenshotRequired,
+        });
       } else if (screenshotChoice === 'element') {
         const element = await createElementPicker(pickerStyle);
         if (element) {
-          screenshot = await captureWithLoading(root, element, config.screenshotScale);
+          screenshot = await captureWithLoading(root, element, config.screenshotScale, {
+            allowSkip: !screenshotRequired,
+          });
           elementSelector = getElementSelector(element);
         }
       } else if (screenshotChoice === 'area') {
         const rect = await createAreaPicker(pickerStyle);
         if (rect) {
           const pixelRatio = getPixelRatio(true, config.screenshotScale);
-          const fullPage = await captureWithLoading(root, undefined, config.screenshotScale);
+          const fullPage = await captureWithLoading(root, undefined, config.screenshotScale, {
+            allowSkip: !screenshotRequired,
+          });
           if (fullPage) {
             screenshot = await cropScreenshot(fullPage, rect, pixelRatio);
           }
@@ -685,6 +715,7 @@ async function openFeedbackFlow(
         if (result === 'retake') continue;
         screenshot = result;
       }
+      if (screenshotRequired && !screenshot) continue;
       break;
     }
   }
@@ -707,7 +738,8 @@ async function openFeedbackFlow(
 async function captureWithLoading(
   root: HTMLElement,
   element?: Element,
-  screenshotScale?: number
+  screenshotScale?: number,
+  opts?: { allowSkip?: boolean }
 ): Promise<string | null> {
   // Show a temporary loading indicator
   const loadingModal = createModal(
@@ -727,6 +759,7 @@ async function captureWithLoading(
     return screenshot;
   } catch (_error) {
     loadingModal.remove();
+    const allowSkip = opts?.allowSkip !== false;
 
     // Show error with retry option
     return new Promise(resolve => {
@@ -741,7 +774,7 @@ async function captureWithLoading(
             <span class="bd-error-message__text">Failed to capture screenshot. The page may be too complex or browser restrictions may apply.</span>
           </div>
           <div class="bd-actions">
-            <button class="bd-btn bd-btn-secondary" data-action="skip">Skip Screenshot</button>
+            <button class="bd-btn bd-btn-secondary" data-action="skip">${allowSkip ? 'Skip Screenshot' : 'Choose Another Method'}</button>
             <button class="bd-btn bd-btn-primary" data-action="retry">Try Again</button>
           </div>
         `,
@@ -764,7 +797,7 @@ async function captureWithLoading(
 
       retryBtn?.addEventListener('click', async () => {
         errorModal.remove();
-        const result = await captureWithLoading(root, element, screenshotScale);
+        const result = await captureWithLoading(root, element, screenshotScale, opts);
         resolve(result);
       });
     });
@@ -933,15 +966,10 @@ function showFeedbackFormWithScreenshotOption(
             <label class="bd-label" for="description">Description</label>
             <textarea id="description" class="bd-textarea" placeholder="Provide additional details, steps to reproduce, or context..."></textarea>
           </div>
-          <div class="bd-form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
-            <input type="checkbox" id="include-screenshot" checked style="width: 18px; height: 18px; accent-color: var(--bd-primary); cursor: pointer;" />
-            <label for="include-screenshot" style="font-size: 0.95rem; color: var(--bd-text-secondary); cursor: pointer; user-select: none;">
-              📸 Include a screenshot
-            </label>
-          </div>
+          ${getScreenshotFormControl(config)}
           <div class="bd-actions">
             <button type="button" class="bd-btn bd-btn-secondary" data-action="cancel">Cancel</button>
-            <button type="submit" class="bd-btn bd-btn-primary" id="submit-btn">Continue</button>
+            <button type="submit" class="bd-btn bd-btn-primary" id="submit-btn">${config.screenshotMode === 'auto' ? 'Submit' : 'Continue'}</button>
           </div>
         </form>
       `
@@ -952,7 +980,9 @@ function showFeedbackFormWithScreenshotOption(
     const emailInput = modal.querySelector('#email') as HTMLInputElement | null;
     const titleInput = modal.querySelector('#title') as HTMLInputElement;
     const descInput = modal.querySelector('#description') as HTMLTextAreaElement;
-    const screenshotCheckbox = modal.querySelector('#include-screenshot') as HTMLInputElement;
+    const screenshotCheckbox = modal.querySelector(
+      '#include-screenshot'
+    ) as HTMLInputElement | null;
     const closeBtn = modal.querySelector('.bd-close') as HTMLElement;
     const cancelBtn = modal.querySelector('[data-action="cancel"]') as HTMLElement;
 
@@ -1001,7 +1031,8 @@ function showFeedbackFormWithScreenshotOption(
         category,
         name: nameInput?.value.trim() || undefined,
         email: emailInput?.value.trim() || undefined,
-        includeScreenshot: screenshotCheckbox.checked,
+        includeScreenshot:
+          config.screenshotMode === 'optional' ? (screenshotCheckbox?.checked ?? false) : true,
       });
     });
 
@@ -1012,10 +1043,39 @@ function showFeedbackFormWithScreenshotOption(
   });
 }
 
+function getScreenshotFormControl(config: WidgetConfig): string {
+  if (config.screenshotMode === 'auto') {
+    return `
+      <p style="margin: 8px 0 0; color: var(--bd-text-secondary); font-size: 0.95rem;">
+        📸 A screenshot will be attached automatically.
+      </p>
+    `;
+  }
+
+  if (config.screenshotMode === 'required') {
+    return `
+      <p style="margin: 8px 0 0; color: var(--bd-text-secondary); font-size: 0.95rem;">
+        📸 A screenshot is required before submitting.
+      </p>
+    `;
+  }
+
+  return `
+    <div class="bd-form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
+      <input type="checkbox" id="include-screenshot" checked style="width: 18px; height: 18px; accent-color: var(--bd-primary); cursor: pointer;" />
+      <label for="include-screenshot" style="font-size: 0.95rem; color: var(--bd-text-secondary); cursor: pointer; user-select: none;">
+        📸 Include a screenshot
+      </label>
+    </div>
+  `;
+}
+
 function showScreenshotOptions(
-  root: HTMLElement
-): Promise<'skip' | 'capture' | 'element' | 'area'> {
+  root: HTMLElement,
+  opts?: { allowSkip?: boolean }
+): Promise<'skip' | 'capture' | 'element' | 'area' | 'cancel'> {
   const fullPageDisabled = isFullPageDisabled();
+  const allowSkip = opts?.allowSkip !== false;
 
   return new Promise(resolve => {
     const complexNote = fullPageDisabled
@@ -1029,7 +1089,7 @@ function showScreenshotOptions(
         <p style="margin: 0 0 16px; color: var(--bd-text-secondary);">Choose what to capture:</p>
         ${complexNote}
         <div class="bd-actions" style="flex-wrap: wrap; gap: 8px;">
-          <button class="bd-btn bd-btn-secondary" data-action="skip">Skip Screenshot</button>
+          ${allowSkip ? '<button class="bd-btn bd-btn-secondary" data-action="skip">Skip Screenshot</button>' : ''}
           <button class="bd-btn bd-btn-secondary" data-action="element">Select Element</button>
           ${fullPageDisabled ? '' : '<button class="bd-btn bd-btn-secondary" data-action="area">Select Area</button>'}
           ${fullPageDisabled ? '' : '<button class="bd-btn bd-btn-primary" data-action="capture">Full Page</button>'}
@@ -1038,14 +1098,14 @@ function showScreenshotOptions(
     );
 
     const closeBtn = modal.querySelector('.bd-close') as HTMLElement;
-    const skipBtn = modal.querySelector('[data-action="skip"]') as HTMLElement;
+    const skipBtn = modal.querySelector('[data-action="skip"]') as HTMLElement | null;
     const elementBtn = modal.querySelector('[data-action="element"]') as HTMLElement;
     const areaBtn = modal.querySelector('[data-action="area"]') as HTMLElement;
     const captureBtn = modal.querySelector('[data-action="capture"]') as HTMLElement;
 
     closeBtn?.addEventListener('click', () => {
       modal.remove();
-      resolve('skip');
+      resolve(allowSkip ? 'skip' : 'cancel');
     });
 
     skipBtn?.addEventListener('click', () => {

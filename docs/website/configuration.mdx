@@ -136,6 +136,37 @@ Every feedback submission automatically captures the following system informatio
 
 This information is included in every GitHub Issue body under a "System Info" section, giving your team the context they need to reproduce and fix bugs.
 
+## Screenshot Behavior
+
+Control how screenshots are collected during the feedback flow.
+
+| Attribute | Default | Description |
+|-----------|---------|-------------|
+| `data-screenshot` | `"optional"` | Screenshot mode: `"optional"`, `"auto"`, or `"required"` |
+| `data-screenshot-scale` | `"2"` | Minimum pixel ratio for screenshot captures |
+
+### Screenshot Modes
+
+- **`optional`** -- Shows the screenshot checkbox checked by default. Users can choose full page, element, area, annotate, or skip.
+- **`auto`** -- Automatically captures a full-page screenshot after the form is submitted, without showing the manual screenshot picker.
+- **`required`** -- Requires a screenshot before submission. Users can choose full page, element, or area, but cannot skip the screenshot step.
+
+```html
+<!-- Automatically attach a full-page screenshot -->
+<script
+  src="https://bugdrop.neonwatty.workers.dev/widget.js"
+  data-repo="owner/repo"
+  data-screenshot="auto"
+></script>
+
+<!-- Require a screenshot before submitting feedback -->
+<script
+  src="https://bugdrop.neonwatty.workers.dev/widget.js"
+  data-repo="owner/repo"
+  data-screenshot="required"
+></script>
+```
+
 ## Custom Icon and Label
 
 ### Custom Icon
