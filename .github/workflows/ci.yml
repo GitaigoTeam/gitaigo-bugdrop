@@ -137,6 +137,7 @@ jobs:
     needs: [deploy-preview]
     if: github.event_name == 'merge_group'
     env:
+      LIVE_TARGET: preview
       PLAYWRIGHT_BASE_URL: https://bugdrop-widget-test-git-preview-jermwatts-projects.vercel.app
     steps:
       - uses: actions/checkout@v4
