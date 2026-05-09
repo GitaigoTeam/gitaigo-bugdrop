@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 
 /**
  * Live E2E tests for BugDrop widget on a real cross-origin deployment.
@@ -19,11 +19,120 @@ if (bypassSecret) {
       const headers = {
         ...route.request().headers(),
         'x-vercel-protection-bypass': bypassSecret,
-        'x-vercel-set-bypass-cookie': 'samesitenone',
       };
       await route.continue({ headers });
     });
   });
+}
+
+async function mockLiveScreenshotCapture(page: Page) {
+  await page.addInitScript(`window.__bugdropMockToPng = function(el, opts) {
+    window.__captureOpts = opts;
+    var canvas = document.createElement('canvas');
+    var ctx = canvas.getContext('2d');
+    canvas.width = 600;
+    canvas.height = 300;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#111827';
+    ctx.font = '600 18px Arial';
+    ctx.fillText('Live preview undo canvas', 24, 38);
+    ctx.fillStyle = '#e5e7eb';
+    ctx.fillRect(36, 82, 210, 128);
+    ctx.fillRect(354, 82, 210, 128);
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '14px Arial';
+    ctx.fillText('First annotation area', 58, 150);
+    ctx.fillText('Latest annotation area', 374, 150);
+    return Promise.resolve(canvas.toDataURL('image/png'));
+  };`);
+}
+
+async function mockInstalledRepo(page: Page) {
+  await page.route('**/api/check/**', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ installed: true }),
+    });
+  });
+}
+
+async function openScreenshotOptions(page: Page, title: string) {
+  await mockInstalledRepo(page);
+  await page.goto(process.env.LIVE_TARGET === 'preview' ? '/' : '/test/');
+
+  const host = page.locator('#bugdrop-host');
+  const button = host.locator('css=.bd-trigger');
+  await expect(button).toBeVisible({ timeout: 10_000 });
+  await button.click();
+
+  const getStartedBtn = host.locator('css=[data-action="continue"]');
+  await expect(getStartedBtn).toBeVisible({ timeout: 5_000 });
+  await getStartedBtn.click();
+
+  const titleInput = host.locator('css=#title');
+  await expect(titleInput).toBeVisible({ timeout: 5_000 });
+  await titleInput.fill(title);
+
+  const screenshotCheckbox = host.locator('css=#include-screenshot');
+  await screenshotCheckbox.check();
+
+  await host.locator('css=#submit-btn').click();
+  return host;
+}
+
+async function countRedPixelsInRegion(
+  canvas: Locator,
+  region: { left: number; top: number; right: number; bottom: number }
+) {
+  return canvas.evaluate((el, targetRegion) => {
+    const source = el as HTMLCanvasElement;
+    const ctx = source.getContext('2d');
+    if (!ctx) {
+      throw new Error('Missing canvas context');
+    }
+
+    const xStart = Math.floor(source.width * targetRegion.left);
+    const xEnd = Math.ceil(source.width * targetRegion.right);
+    const yStart = Math.floor(source.height * targetRegion.top);
+    const yEnd = Math.ceil(source.height * targetRegion.bottom);
+    const { data, width } = ctx.getImageData(xStart, yStart, xEnd - xStart, yEnd - yStart);
+    let red = 0;
+
+    for (let y = 0; y < yEnd - yStart; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const a = data[i + 3];
+
+        if (a > 200 && r > 220 && g < 80 && b < 80) {
+          red++;
+        }
+      }
+    }
+
+    return red;
+  }, region);
+}
+
+async function dragOnCanvas(
+  page: Page,
+  canvas: Locator,
+  from: { x: number; y: number },
+  to: { x: number; y: number }
+) {
+  const box = await canvas.boundingBox();
+  expect(box).toBeTruthy();
+
+  await page.mouse.move(box!.x + from.x * box!.width, box!.y + from.y * box!.height);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + to.x * box!.width, box!.y + to.y * box!.height, {
+    steps: 12,
+  });
+  await page.mouse.up();
 }
 
 test.describe('Widget Loading (Live)', () => {
@@ -273,6 +382,34 @@ test.describe('Screenshot Capture (Live)', () => {
 
     const areaBtn = host.locator('css=[data-action="area"]');
     await expect(areaBtn).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('annotation undo works on the deployed preview widget', async ({ page }) => {
+    await mockLiveScreenshotCapture(page);
+    const host = await openScreenshotOptions(page, 'Live preview annotation undo');
+
+    const captureBtn = host.locator('css=[data-action="capture"]');
+    await expect(captureBtn).toBeVisible({ timeout: 5_000 });
+    await captureBtn.click();
+
+    const canvas = host.locator('css=#annotation-canvas canvas');
+    await expect(host.locator('css=.bd-modal--annotator')).toBeVisible({ timeout: 10_000 });
+    await expect(canvas).toBeVisible({ timeout: 10_000 });
+    await expect.poll(() => canvas.evaluate(el => (el as HTMLCanvasElement).width)).toBe(600);
+
+    await dragOnCanvas(page, canvas, { x: 0.18, y: 0.28 }, { x: 0.42, y: 0.68 });
+    await dragOnCanvas(page, canvas, { x: 0.58, y: 0.28 }, { x: 0.82, y: 0.68 });
+
+    const firstRegion = { left: 0.1, top: 0.18, right: 0.48, bottom: 0.78 };
+    const latestRegion = { left: 0.52, top: 0.18, right: 0.9, bottom: 0.78 };
+
+    expect(await countRedPixelsInRegion(canvas, firstRegion)).toBeGreaterThan(20);
+    expect(await countRedPixelsInRegion(canvas, latestRegion)).toBeGreaterThan(20);
+
+    await host.locator('css=[data-action="undo"]').click();
+
+    expect(await countRedPixelsInRegion(canvas, firstRegion)).toBeGreaterThan(20);
+    expect(await countRedPixelsInRegion(canvas, latestRegion)).toBeLessThan(5);
   });
 });
 
