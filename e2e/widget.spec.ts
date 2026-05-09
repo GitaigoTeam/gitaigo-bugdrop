@@ -2137,7 +2137,9 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     }`;
   }
 
-  function reporterLikePng(variant: 'preview-size' | 'small-wide-area' | 'annotation-style') {
+  function reporterLikePng(
+    variant: 'preview-size' | 'small-wide-area' | 'annotation-style' | 'undo'
+  ) {
     return `function(el, opts) {
       window.__captureOpts = opts;
       var canvas = document.createElement('canvas');
@@ -2170,6 +2172,21 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
         ctx.fillStyle = '#525252';
         ctx.font = '28px Arial';
         ctx.fillText('Settlement Stage', 14, 36);
+      } else if ('${variant}' === 'undo') {
+        canvas.width = 600;
+        canvas.height = 300;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#111827';
+        ctx.font = '600 18px Arial';
+        ctx.fillText('Undo regression canvas', 24, 38);
+        ctx.fillStyle = '#e5e7eb';
+        ctx.fillRect(36, 82, 210, 128);
+        ctx.fillRect(354, 82, 210, 128);
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '14px Arial';
+        ctx.fillText('First annotation area', 58, 150);
+        ctx.fillText('Latest annotation area', 374, 150);
       } else {
         canvas.width = 1024;
         canvas.height = 252;
@@ -2346,6 +2363,93 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
 
       return { red, orange };
     });
+  }
+
+  async function countRedPixelsInRegion(
+    canvas: ReturnType<Page['locator']>,
+    region: { left: number; top: number; right: number; bottom: number }
+  ) {
+    return canvas.evaluate((el, targetRegion) => {
+      const source = el as HTMLCanvasElement;
+      const ctx = source.getContext('2d');
+      if (!ctx) {
+        throw new Error('Missing canvas context');
+      }
+
+      const xStart = Math.floor(source.width * targetRegion.left);
+      const xEnd = Math.ceil(source.width * targetRegion.right);
+      const yStart = Math.floor(source.height * targetRegion.top);
+      const yEnd = Math.ceil(source.height * targetRegion.bottom);
+      const { data, width } = ctx.getImageData(xStart, yStart, xEnd - xStart, yEnd - yStart);
+      let red = 0;
+
+      for (let y = 0; y < yEnd - yStart; y++) {
+        for (let x = 0; x < width; x++) {
+          const i = (y * width + x) * 4;
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const a = data[i + 3];
+
+          if (a > 200 && r > 220 && g < 80 && b < 80) {
+            red++;
+          }
+        }
+      }
+
+      return red;
+    }, region);
+  }
+
+  async function countRedPixelsInDataUrl(
+    page: Page,
+    dataUrl: string,
+    region: { left: number; top: number; right: number; bottom: number }
+  ) {
+    return page.evaluate(
+      async target => {
+        const img = new Image();
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error('Failed to load screenshot payload'));
+          img.src = target.dataUrl;
+        });
+
+        const source = document.createElement('canvas');
+        source.width = img.width;
+        source.height = img.height;
+        const ctx = source.getContext('2d');
+        if (!ctx) {
+          throw new Error('Missing canvas context');
+        }
+
+        ctx.drawImage(img, 0, 0);
+
+        const xStart = Math.floor(source.width * target.region.left);
+        const xEnd = Math.ceil(source.width * target.region.right);
+        const yStart = Math.floor(source.height * target.region.top);
+        const yEnd = Math.ceil(source.height * target.region.bottom);
+        const { data, width } = ctx.getImageData(xStart, yStart, xEnd - xStart, yEnd - yStart);
+        let red = 0;
+
+        for (let y = 0; y < yEnd - yStart; y++) {
+          for (let x = 0; x < width; x++) {
+            const i = (y * width + x) * 4;
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            const a = data[i + 3];
+
+            if (a > 200 && r > 220 && g < 80 && b < 80) {
+              red++;
+            }
+          }
+        }
+
+        return red;
+      },
+      { dataUrl, region }
+    );
   }
 
   async function dragOnCanvas(
@@ -2919,6 +3023,154 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
       path: test.info().outputPath('issue-115-annotation-style.png'),
       fullPage: false,
     });
+  });
+
+  for (const tool of ['draw', 'arrow', 'rect'] as const) {
+    test(`undo button removes the latest ${tool} annotation for issue #128`, async ({ page }) => {
+      await mockHtmlToImage(page, reporterLikePng('undo'));
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.goto('/test/');
+      await navigateToFullPageCapture(page);
+
+      const host = page.locator('#bugdrop-host');
+      const stage = host.locator('css=#annotation-canvas');
+      const canvas = stage.locator('css=canvas');
+      await expect(host.locator('css=.bd-modal--annotator')).toBeVisible({ timeout: 10000 });
+      await expect(stage).toBeVisible();
+      await expect(canvas).toBeVisible();
+      await expect.poll(() => canvas.evaluate(el => (el as HTMLCanvasElement).width)).toBe(600);
+
+      await host.locator(`css=[data-tool="${tool}"]`).click();
+      await dragOnCanvas(page, canvas, { x: 0.18, y: 0.28 }, { x: 0.42, y: 0.68 });
+      await dragOnCanvas(page, canvas, { x: 0.58, y: 0.28 }, { x: 0.82, y: 0.68 });
+
+      const firstRegion = { left: 0.1, top: 0.18, right: 0.48, bottom: 0.78 };
+      const latestRegion = { left: 0.52, top: 0.18, right: 0.9, bottom: 0.78 };
+      const firstBeforeUndo = await countRedPixelsInRegion(canvas, firstRegion);
+      const latestBeforeUndo = await countRedPixelsInRegion(canvas, latestRegion);
+
+      expect(firstBeforeUndo).toBeGreaterThan(20);
+      expect(latestBeforeUndo).toBeGreaterThan(20);
+
+      await host.locator('css=[data-action="undo"]').click();
+
+      const firstAfterOneUndo = await countRedPixelsInRegion(canvas, firstRegion);
+      const latestAfterOneUndo = await countRedPixelsInRegion(canvas, latestRegion);
+
+      expect(firstAfterOneUndo).toBeGreaterThan(20);
+      expect(latestAfterOneUndo).toBeLessThan(5);
+
+      await host.locator('css=[data-action="undo"]').click();
+
+      const firstAfterTwoUndos = await countRedPixelsInRegion(canvas, firstRegion);
+      const latestAfterTwoUndos = await countRedPixelsInRegion(canvas, latestRegion);
+
+      expect(firstAfterTwoUndos).toBeLessThan(5);
+      expect(latestAfterTwoUndos).toBeLessThan(5);
+
+      await host.locator('css=[data-action="undo"]').click();
+
+      expect(await countRedPixelsInRegion(canvas, firstRegion)).toBeLessThan(5);
+      expect(await countRedPixelsInRegion(canvas, latestRegion)).toBeLessThan(5);
+    });
+  }
+
+  test('undo preserves mixed annotation history in the submitted screenshot for issue #128', async ({
+    page,
+  }) => {
+    const payloads = await trackFeedbackPayloads(page);
+    await mockHtmlToImage(page, reporterLikePng('undo'));
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/test/');
+    await navigateToFullPageCapture(page);
+
+    const host = page.locator('#bugdrop-host');
+    const stage = host.locator('css=#annotation-canvas');
+    const canvas = stage.locator('css=canvas');
+    await expect(host.locator('css=.bd-modal--annotator')).toBeVisible({ timeout: 10000 });
+    await expect(stage).toBeVisible();
+    await expect(canvas).toBeVisible();
+
+    const drawRegion = { left: 0.08, top: 0.18, right: 0.32, bottom: 0.78 };
+    const arrowRegion = { left: 0.36, top: 0.18, right: 0.6, bottom: 0.78 };
+    const undoneRectRegion = { left: 0.62, top: 0.18, right: 0.9, bottom: 0.5 };
+    const finalRectRegion = { left: 0.62, top: 0.52, right: 0.9, bottom: 0.9 };
+
+    await host.locator('css=[data-tool="draw"]').click();
+    await dragOnCanvas(page, canvas, { x: 0.14, y: 0.28 }, { x: 0.3, y: 0.68 });
+
+    await host.locator('css=[data-tool="arrow"]').click();
+    await dragOnCanvas(page, canvas, { x: 0.4, y: 0.28 }, { x: 0.58, y: 0.68 });
+
+    await host.locator('css=[data-tool="rect"]').click();
+    await dragOnCanvas(page, canvas, { x: 0.66, y: 0.22 }, { x: 0.86, y: 0.45 });
+
+    expect(await countRedPixelsInRegion(canvas, drawRegion)).toBeGreaterThan(20);
+    expect(await countRedPixelsInRegion(canvas, arrowRegion)).toBeGreaterThan(20);
+    expect(await countRedPixelsInRegion(canvas, undoneRectRegion)).toBeGreaterThan(20);
+
+    await host.locator('css=[data-action="undo"]').click();
+
+    expect(await countRedPixelsInRegion(canvas, drawRegion)).toBeGreaterThan(20);
+    expect(await countRedPixelsInRegion(canvas, arrowRegion)).toBeGreaterThan(20);
+    expect(await countRedPixelsInRegion(canvas, undoneRectRegion)).toBeLessThan(5);
+
+    await dragOnCanvas(page, canvas, { x: 0.66, y: 0.58 }, { x: 0.86, y: 0.84 });
+    expect(await countRedPixelsInRegion(canvas, finalRectRegion)).toBeGreaterThan(20);
+
+    await host.locator('css=[data-action="done"]').click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+
+    expect(payloads).toHaveLength(1);
+    const submittedScreenshot = payloads[0].screenshot;
+    expect(typeof submittedScreenshot).toBe('string');
+
+    expect(
+      await countRedPixelsInDataUrl(page, submittedScreenshot as string, drawRegion)
+    ).toBeGreaterThan(20);
+    expect(
+      await countRedPixelsInDataUrl(page, submittedScreenshot as string, arrowRegion)
+    ).toBeGreaterThan(20);
+    expect(
+      await countRedPixelsInDataUrl(page, submittedScreenshot as string, undoneRectRegion)
+    ).toBeLessThan(5);
+    expect(
+      await countRedPixelsInDataUrl(page, submittedScreenshot as string, finalRectRegion)
+    ).toBeGreaterThan(20);
+  });
+
+  test('undo cancels an unfinished annotation draft for issue #128', async ({ page }) => {
+    await mockHtmlToImage(page, reporterLikePng('undo'));
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/test/');
+    await navigateToFullPageCapture(page);
+
+    const host = page.locator('#bugdrop-host');
+    const canvas = host.locator('css=#annotation-canvas canvas');
+    await expect(host.locator('css=.bd-modal--annotator')).toBeVisible({ timeout: 10000 });
+    await expect(canvas).toBeVisible();
+
+    const committedRegion = { left: 0.08, top: 0.18, right: 0.32, bottom: 0.78 };
+    const draftRegion = { left: 0.52, top: 0.18, right: 0.9, bottom: 0.78 };
+
+    await dragOnCanvas(page, canvas, { x: 0.14, y: 0.28 }, { x: 0.3, y: 0.68 });
+    expect(await countRedPixelsInRegion(canvas, committedRegion)).toBeGreaterThan(20);
+
+    await host.locator('css=[data-tool="arrow"]').click();
+    const box = await canvas.boundingBox();
+    expect(box).toBeTruthy();
+    await page.mouse.move(box!.x + box!.width * 0.58, box!.y + box!.height * 0.28);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + box!.width * 0.82, box!.y + box!.height * 0.68, {
+      steps: 12,
+    });
+    expect(await countRedPixelsInRegion(canvas, draftRegion)).toBeGreaterThan(20);
+
+    await host.locator('css=[data-action="undo"]').dispatchEvent('click');
+    await page.mouse.up();
+
+    expect(await countRedPixelsInRegion(canvas, committedRegion)).toBeGreaterThan(20);
+    expect(await countRedPixelsInRegion(canvas, draftRegion)).toBeLessThan(5);
   });
 
   // --- Metadata: domNodeCount and fullPageDisabled in submission payload ---

@@ -8,7 +8,7 @@ import {
 } from './screenshot';
 import { createElementPicker } from './picker';
 import { createAreaPicker } from './area-picker';
-import { createAnnotator } from './annotator';
+import { createAnnotator, type Tool } from './annotator';
 import { injectStyles, createModal, showSuccessModal } from './ui';
 import {
   resolveTheme,
@@ -1272,18 +1272,19 @@ function showAnnotationStep(
     const toolButtons = modal.querySelectorAll('[data-tool]');
     toolButtons.forEach(btn => {
       btn.addEventListener('click', e => {
-        const target = e.target as HTMLElement;
+        const target = e.currentTarget as HTMLElement;
         const tool = target.dataset.tool;
 
-        if (tool === 'undo') {
-          annotator.undo();
-        } else if (tool) {
+        if (tool) {
           toolButtons.forEach(b => b.classList.remove('active'));
           target.classList.add('active');
-          annotator.setTool(tool as any);
+          annotator.setTool(tool as Tool);
         }
       });
     });
+
+    const undoBtn = modal.querySelector('[data-action="undo"]') as HTMLElement | null;
+    undoBtn?.addEventListener('click', () => annotator.undo());
 
     // Action buttons
     const closeBtn = modal.querySelector('.bd-close') as HTMLElement;

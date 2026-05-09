@@ -1,4 +1,4 @@
-type Tool = 'draw' | 'arrow' | 'rect' | 'text';
+export type Tool = 'draw' | 'arrow' | 'rect' | 'text';
 
 interface Point {
   x: number;
@@ -8,6 +8,7 @@ interface Point {
 const ANNOTATION_COLOR = '#ff0000';
 const VISIBLE_ANNOTATION_LINE_WIDTH = 5.5;
 const ARROW_HEAD_ANGLE = Math.PI / 7;
+const MIN_ANNOTATION_DISTANCE = 2;
 
 export function createAnnotator(
   container: HTMLElement,
@@ -24,6 +25,8 @@ export function createAnnotator(
   let currentTool: Tool = 'draw';
   let isDrawing = false;
   let points: Point[] = [];
+  let draftBase: ImageData | null = null;
+  let hasDrawnStroke = false;
   const history: ImageData[] = [];
 
   // Load image
@@ -38,15 +41,40 @@ export function createAnnotator(
 
     ctx.drawImage(img, 0, 0);
 
-    // Save initial state
-    saveState();
+    // Commit the unannotated screenshot as the undo floor.
+    commitState();
   };
   img.src = imageData;
 
   container.appendChild(canvas);
 
-  function saveState() {
+  function commitState() {
     history.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+  }
+
+  function restoreState(state: ImageData) {
+    ctx.putImageData(state, 0, 0);
+  }
+
+  function getLatestState() {
+    return history[history.length - 1] ?? null;
+  }
+
+  function getDistance(from: Point, to: Point) {
+    return Math.hypot(to.x - from.x, to.y - from.y);
+  }
+
+  function resetDraft() {
+    window.removeEventListener('mouseup', handleMouseUp);
+    isDrawing = false;
+    points = [];
+    draftBase = null;
+    hasDrawnStroke = false;
+  }
+
+  function cancelDraft() {
+    if (draftBase) restoreState(draftBase);
+    resetDraft();
   }
 
   function getCanvasPoint(e: MouseEvent): Point {
@@ -109,24 +137,29 @@ export function createAnnotator(
     ctx.strokeRect(from.x, from.y, to.x - from.x, to.y - from.y);
   }
 
-  // Event handlers
-  canvas.addEventListener('mousedown', e => {
+  function handleMouseDown(e: MouseEvent) {
+    const base = getLatestState();
+    if (!base) return;
+
     isDrawing = true;
     points = [getCanvasPoint(e)];
-    saveState();
-  });
+    draftBase = base;
+    hasDrawnStroke = false;
+    window.addEventListener('mouseup', handleMouseUp);
+  }
 
-  canvas.addEventListener('mousemove', e => {
-    if (!isDrawing) return;
+  function handleMouseMove(e: MouseEvent) {
+    if (!isDrawing || !draftBase) return;
 
     const point = getCanvasPoint(e);
 
     if (currentTool === 'draw') {
       drawLine(points[points.length - 1], point);
       points.push(point);
+      hasDrawnStroke = hasDrawnStroke || getDistance(points[0], point) >= MIN_ANNOTATION_DISTANCE;
     } else {
       // Preview for arrow/rect
-      ctx.putImageData(history[history.length - 1], 0, 0);
+      restoreState(draftBase);
 
       if (currentTool === 'arrow') {
         drawArrow(points[0], point);
@@ -134,33 +167,62 @@ export function createAnnotator(
         drawRect(points[0], point);
       }
     }
-  });
+  }
 
-  canvas.addEventListener('mouseup', e => {
-    if (!isDrawing) return;
-    isDrawing = false;
-
-    const point = getCanvasPoint(e);
-
-    if (currentTool === 'arrow') {
-      drawArrow(points[0], point);
-    } else if (currentTool === 'rect') {
-      drawRect(points[0], point);
+  function handleMouseUp(e: MouseEvent) {
+    if (!isDrawing || !draftBase) {
+      resetDraft();
+      return;
     }
 
-    points = [];
-  });
+    const point = getCanvasPoint(e);
+    const start = points[0];
+    const isMeaningfulAnnotation =
+      hasDrawnStroke || getDistance(start, point) >= MIN_ANNOTATION_DISTANCE;
+
+    if (!isMeaningfulAnnotation) {
+      restoreState(draftBase);
+      resetDraft();
+      return;
+    }
+
+    if (currentTool === 'arrow') {
+      restoreState(draftBase);
+      drawArrow(start, point);
+    } else if (currentTool === 'rect') {
+      restoreState(draftBase);
+      drawRect(start, point);
+    } else if (currentTool === 'draw' && !hasDrawnStroke) {
+      drawLine(start, point);
+    }
+
+    commitState();
+    resetDraft();
+  }
+
+  // Event handlers
+  canvas.addEventListener('mousedown', handleMouseDown);
+  canvas.addEventListener('mousemove', handleMouseMove);
+  canvas.addEventListener('mouseup', handleMouseUp);
 
   return {
     setTool(tool: Tool) {
+      cancelDraft();
       currentTool = tool;
     },
 
     undo() {
-      if (history.length > 1) {
-        history.pop();
-        ctx.putImageData(history[history.length - 1], 0, 0);
+      if (draftBase) {
+        cancelDraft();
+        return;
       }
+
+      if (history.length <= 1) return;
+
+      resetDraft();
+      history.pop();
+      const previousState = getLatestState();
+      if (previousState) restoreState(previousState);
     },
 
     getImageData(): string {
@@ -168,6 +230,10 @@ export function createAnnotator(
     },
 
     destroy() {
+      resetDraft();
+      canvas.removeEventListener('mousedown', handleMouseDown);
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mouseup', handleMouseUp);
       canvas.remove();
     },
   };
