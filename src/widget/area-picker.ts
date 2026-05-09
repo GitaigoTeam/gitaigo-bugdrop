@@ -2,6 +2,7 @@ import type { PickerStyle } from './picker';
 import { resolvePickerStyle } from './picker';
 
 const MIN_SELECTION_SIZE = 10;
+const AREA_PICKER_INSTRUCTION = 'Draw a selection around the area to capture (ESC to cancel)';
 
 export function createAreaPicker(style?: PickerStyle): Promise<DOMRect | null> {
   return new Promise(resolve => {
@@ -64,7 +65,7 @@ function startAreaPicker(resolve: (rect: DOMRect | null) => void, style?: Picker
     border: ${bw}px solid ${tooltipBorder};
     pointer-events: none;
   `;
-  tooltip.textContent = 'Drag to select an area (ESC to cancel)';
+  tooltip.textContent = AREA_PICKER_INSTRUCTION;
   document.body.appendChild(tooltip);
 
   let startX = 0;

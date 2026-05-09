@@ -444,7 +444,8 @@ test.describe('Widget Interaction', () => {
     // Tooltip should be visible
     const tooltip = page.locator('#bugdrop-area-picker-tooltip');
     await expect(tooltip).toBeVisible();
-    await expect(tooltip).toContainText('Drag to select an area');
+    await expect(tooltip).toHaveText('Draw a selection around the area to capture (ESC to cancel)');
+    await expect(tooltip).not.toContainText('Drag');
 
     // Press ESC to cancel
     await page.keyboard.press('Escape');
