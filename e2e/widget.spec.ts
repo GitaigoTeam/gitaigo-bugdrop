@@ -2137,7 +2137,7 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     }`;
   }
 
-  function reporterLikePng(variant: 'preview-size' | 'small-wide-area') {
+  function reporterLikePng(variant: 'preview-size' | 'small-wide-area' | 'annotation-style') {
     return `function(el, opts) {
       window.__captureOpts = opts;
       var canvas = document.createElement('canvas');
@@ -2162,7 +2162,7 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
         ctx.fillRect(36, 160, 520, 34);
         ctx.fillStyle = '#374151';
         ctx.fillText('Object: example.company/feature/preview', 48, 181);
-      } else {
+      } else if ('${variant}' === 'small-wide-area') {
         canvas.width = 252;
         canvas.height = 54;
         ctx.fillStyle = '#ffffff';
@@ -2170,6 +2170,36 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
         ctx.fillStyle = '#525252';
         ctx.font = '28px Arial';
         ctx.fillText('Settlement Stage', 14, 36);
+      } else {
+        canvas.width = 1024;
+        canvas.height = 252;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#2f2f2f';
+        ctx.font = '500 16px Arial';
+        ctx.fillText('Shipmen Overview', 24, 28);
+        var labels = ['Schedule Stage', 'Weight Stage', 'Settlement Stage', 'Amount Stage'];
+        var values = ['30-04-2026\\nForecasted', '25.000t\\nForecasted', "1'817.24\\nEUR/t\\nFinal", "45'431.03\\nEUR\\nForecasted"];
+        var xs = [24, 260, 520, 770];
+        labels.forEach(function(label, index) {
+          ctx.fillStyle = '#4a4a4a';
+          ctx.font = '14px Arial';
+          ctx.fillText(label, xs[index], 72);
+          ctx.fillStyle = '#f5f5f5';
+          ctx.fillRect(xs[index], 86, 128, 66);
+          ctx.fillStyle = index === 2 ? '#35a36d' : '#ef4444';
+          ctx.beginPath();
+          ctx.arc(xs[index] + 14, 106, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#777777';
+          ctx.font = '600 14px Arial';
+          values[index].split('\\n').forEach(function(line, lineIndex) {
+            ctx.fillText(line, xs[index] + 28, 104 + lineIndex * 18);
+          });
+          ctx.fillStyle = '#8a8a8a';
+          ctx.font = '13px Arial';
+          ctx.fillText('Auto-derived status text for comparison', xs[index], 176);
+        });
       }
       return Promise.resolve(canvas.toDataURL('image/png'));
     }`;
@@ -2272,6 +2302,54 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     const titleInput = host.locator('css=#title');
     await expect(titleInput).toBeVisible({ timeout: 5000 });
     await expect(titleInput).toHaveValue(title);
+  }
+
+  async function countAnnotationPixels(canvas: ReturnType<Page['locator']>) {
+    return canvas.evaluate(el => {
+      const source = el as HTMLCanvasElement;
+      const ctx = source.getContext('2d');
+      if (!ctx) {
+        throw new Error('Missing canvas context');
+      }
+
+      const { data } = ctx.getImageData(0, 0, source.width, source.height);
+      let red = 0;
+      let orange = 0;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const a = data[i + 3];
+
+        if (a > 200 && r > 220 && g < 80 && b < 80) {
+          red++;
+        }
+
+        if (a > 200 && r > 245 && g > 140 && g < 180 && b > 80 && b < 120) {
+          orange++;
+        }
+      }
+
+      return { red, orange };
+    });
+  }
+
+  async function dragOnCanvas(
+    page: Page,
+    canvas: ReturnType<Page['locator']>,
+    from: { x: number; y: number },
+    to: { x: number; y: number }
+  ) {
+    const box = await canvas.boundingBox();
+    expect(box).toBeTruthy();
+
+    await page.mouse.move(box!.x + from.x * box!.width, box!.y + from.y * box!.height);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + to.x * box!.width, box!.y + to.y * box!.height, {
+      steps: 12,
+    });
+    await page.mouse.up();
   }
 
   test('reduces pixelRatio on complex DOM pages (>3000 nodes)', async ({ page }) => {
@@ -2619,6 +2697,43 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     expect(frame.overflow).toBe('auto');
     expect(stageBox && canvasBox ? canvasBox.x > stageBox.x : false).toBe(true);
     expect(stageBox && canvasBox ? canvasBox.y > stageBox.y : false).toBe(true);
+  });
+
+  test('annotation tools use high-contrast red styling for issue #115', async ({ page }) => {
+    await mockHtmlToImage(page, reporterLikePng('annotation-style'));
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/test/annotation-style.html');
+    await navigateToFullPageCapture(page);
+
+    const host = page.locator('#bugdrop-host');
+    const stage = host.locator('css=#annotation-canvas');
+    const canvas = stage.locator('css=canvas');
+    await expect(host.locator('css=.bd-modal--annotator')).toBeVisible({ timeout: 10000 });
+    await expect(stage).toBeVisible();
+    await expect(canvas).toBeVisible();
+
+    const before = await countAnnotationPixels(canvas);
+
+    await host.locator('css=[data-tool="arrow"]').click();
+    await dragOnCanvas(page, canvas, { x: 0.72, y: 0.17 }, { x: 0.28, y: 0.34 });
+
+    await host.locator('css=[data-tool="rect"]').click();
+    await dragOnCanvas(page, canvas, { x: 0.58, y: 0.36 }, { x: 0.82, y: 0.72 });
+
+    const after = await countAnnotationPixels(canvas);
+
+    expect(after.red - before.red).toBeGreaterThan(2500);
+    expect(after.orange - before.orange).toBeLessThan(100);
+
+    const stageBox = await stage.boundingBox();
+    const canvasBox = await canvas.boundingBox();
+    expect(stageBox?.width).toBeGreaterThanOrEqual(980);
+    expect(canvasBox?.width).toBeGreaterThan(600);
+
+    await page.screenshot({
+      path: test.info().outputPath('issue-115-annotation-style.png'),
+      fullPage: false,
+    });
   });
 
   // --- Metadata: domNodeCount and fullPageDisabled in submission payload ---

@@ -5,10 +5,13 @@ interface Point {
   y: number;
 }
 
+const ANNOTATION_COLOR = '#ff0000';
+const VISIBLE_ANNOTATION_LINE_WIDTH = 5.5;
+const ARROW_HEAD_ANGLE = Math.PI / 7;
+
 export function createAnnotator(
   container: HTMLElement,
-  imageData: string,
-  accentColor?: string
+  imageData: string
 ): {
   setTool: (tool: Tool) => void;
   undo: () => void;
@@ -42,10 +45,6 @@ export function createAnnotator(
 
   container.appendChild(canvas);
 
-  // Drawing settings
-  const color = accentColor || '#ff0000';
-  const lineWidth = 3;
-
   function saveState() {
     history.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
   }
@@ -60,13 +59,22 @@ export function createAnnotator(
     };
   }
 
+  function getLineWidth() {
+    const rect = canvas.getBoundingClientRect();
+    const scale = Math.max(canvas.width / rect.width, canvas.height / rect.height, 1);
+    return Math.round(VISIBLE_ANNOTATION_LINE_WIDTH * scale);
+  }
+
   function drawLine(from: Point, to: Point) {
+    const lineWidth = getLineWidth();
+
     ctx.beginPath();
     ctx.moveTo(from.x, from.y);
     ctx.lineTo(to.x, to.y);
-    ctx.strokeStyle = color;
+    ctx.strokeStyle = ANNOTATION_COLOR;
     ctx.lineWidth = lineWidth;
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.stroke();
   }
 
@@ -76,26 +84,28 @@ export function createAnnotator(
 
     // Arrowhead
     const angle = Math.atan2(to.y - from.y, to.x - from.x);
-    const headLength = 15;
+    const headLength = getLineWidth() * 5;
 
     ctx.beginPath();
     ctx.moveTo(to.x, to.y);
     ctx.lineTo(
-      to.x - headLength * Math.cos(angle - Math.PI / 6),
-      to.y - headLength * Math.sin(angle - Math.PI / 6)
+      to.x - headLength * Math.cos(angle - ARROW_HEAD_ANGLE),
+      to.y - headLength * Math.sin(angle - ARROW_HEAD_ANGLE)
     );
     ctx.lineTo(
-      to.x - headLength * Math.cos(angle + Math.PI / 6),
-      to.y - headLength * Math.sin(angle + Math.PI / 6)
+      to.x - headLength * Math.cos(angle + ARROW_HEAD_ANGLE),
+      to.y - headLength * Math.sin(angle + ARROW_HEAD_ANGLE)
     );
     ctx.closePath();
-    ctx.fillStyle = color;
+    ctx.fillStyle = ANNOTATION_COLOR;
     ctx.fill();
   }
 
   function drawRect(from: Point, to: Point) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = ANNOTATION_COLOR;
+    ctx.lineWidth = getLineWidth();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.strokeRect(from.x, from.y, to.x - from.x, to.y - from.y);
   }
 

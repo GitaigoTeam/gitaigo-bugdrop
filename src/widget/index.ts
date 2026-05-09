@@ -733,7 +733,7 @@ async function openFeedbackFlow(
 
         // Step 4: Annotate (if screenshot exists)
         if (screenshot) {
-          const result = await showAnnotationStep(root, screenshot, config);
+          const result = await showAnnotationStep(root, screenshot);
           if (result === 'retake') continue;
           if (result === 'cancel') {
             returnToForm = true;
@@ -1182,8 +1182,7 @@ function showScreenshotOptions(
 
 function showAnnotationStep(
   root: HTMLElement,
-  screenshot: string,
-  config?: WidgetConfig
+  screenshot: string
 ): Promise<string | 'retake' | 'cancel'> {
   return new Promise(resolve => {
     const modal = createModal(
@@ -1208,7 +1207,7 @@ function showAnnotationStep(
     );
 
     const canvasContainer = modal.querySelector('#annotation-canvas') as HTMLElement;
-    const annotator = createAnnotator(canvasContainer, screenshot, config?.accentColor);
+    const annotator = createAnnotator(canvasContainer, screenshot);
 
     // Tool buttons
     const toolButtons = modal.querySelectorAll('[data-tool]');
