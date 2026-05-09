@@ -144,7 +144,7 @@ test.describe('Widget Loading (Live)', () => {
       }
     });
 
-    await page.goto('/');
+    await page.goto(process.env.LIVE_TARGET === 'preview' ? '/' : '/test/');
     await page.waitForTimeout(2000);
 
     // Widget host element should exist
@@ -182,7 +182,7 @@ test.describe('Widget Loading (Live)', () => {
 
 test.describe('Feedback Button (Live)', () => {
   test('feedback button is visible and clickable', async ({ page }) => {
-    await page.goto('/');
+    await page.goto(process.env.LIVE_TARGET === 'preview' ? '/' : '/test/');
 
     const button = page.locator('#bugdrop-host').locator('css=.bd-trigger');
     await expect(button).toBeVisible({ timeout: 10_000 });
@@ -359,7 +359,7 @@ test.describe('Screenshot Capture (Live)', () => {
       });
     });
 
-    await page.goto('/');
+    await page.goto(process.env.LIVE_TARGET === 'preview' ? '/' : '/test/');
 
     const host = page.locator('#bugdrop-host');
     const button = host.locator('css=.bd-trigger');
@@ -382,6 +382,17 @@ test.describe('Screenshot Capture (Live)', () => {
 
     const areaBtn = host.locator('css=[data-action="area"]');
     await expect(areaBtn).toBeVisible({ timeout: 5_000 });
+    await expect(areaBtn).toHaveText('Select Area');
+
+    await areaBtn.click();
+
+    const tooltip = page.locator('#bugdrop-area-picker-tooltip');
+    await expect(tooltip).toBeVisible({ timeout: 5_000 });
+    await expect(tooltip).toHaveText('Draw a selection around the area to capture (ESC to cancel)');
+    await expect(tooltip).not.toContainText('Drag');
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#bugdrop-area-picker-overlay')).not.toBeVisible({ timeout: 3_000 });
   });
 
   test('annotation undo works on the deployed preview widget', async ({ page }) => {
