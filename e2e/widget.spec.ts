@@ -3805,12 +3805,14 @@ test.describe('Screenshot Masking', () => {
       '/test/masking-basic.html'
     );
 
+    // Sample inside the panel's padding (top-left, ~3-4px in) where the yellow
+    // background is guaranteed to be rendered without overlapping text. Sampling
+    // the geometric center can land on anti-aliased glyph pixels in headless CI
+    // and produce a spurious [0,0,0,255] match.
     const rect = await docRectOf(page, '#public-note');
-    const cx = Math.floor((rect.x + rect.w / 2) * pixelRatio);
-    const cy = Math.floor((rect.y + rect.h / 2) * pixelRatio);
-
-    // Background of #public-note is light yellow; assert it's NOT solid black.
-    expect(await pixelAt(page, screenshot, cx, cy)).not.toEqual([0, 0, 0, 255]);
+    const sx = Math.floor((rect.x + 4) * pixelRatio);
+    const sy = Math.floor((rect.y + 4) * pixelRatio);
+    expect(await pixelAt(page, screenshot, sx, sy)).not.toEqual([0, 0, 0, 255]);
   });
 
   test('parent mask covers all descendants (inheritance)', async ({ page }) => {
@@ -3846,10 +3848,26 @@ test.describe('Screenshot Masking', () => {
     const cy = Math.floor((child.y + child.h / 2) * pixelRatio);
     expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
 
+    // The sibling is a <p> with no padding, so any pixel inside its rect could
+    // overlap rendered glyphs and produce a spurious solid-black sample on
+    // anti-aliased headless rendering. A real mask would make EVERY pixel inside
+    // the rect solid black; sampling four corners and asserting at least one is
+    // non-black is sufficient to disprove masking and is robust to text
+    // rendering differences across environments.
     const sibling = await docRectOf(page, '#visible-sibling');
-    const sx = Math.floor((sibling.x + sibling.w / 2) * pixelRatio);
-    const sy = Math.floor((sibling.y + sibling.h / 2) * pixelRatio);
-    expect(await pixelAt(page, screenshot, sx, sy)).not.toEqual([0, 0, 0, 255]);
+    const corners: Array<[number, number]> = [
+      [sibling.x + 1, sibling.y + 1],
+      [sibling.x + sibling.w - 2, sibling.y + 1],
+      [sibling.x + 1, sibling.y + sibling.h - 2],
+      [sibling.x + sibling.w - 2, sibling.y + sibling.h - 2],
+    ];
+    const samples = await Promise.all(
+      corners.map(([x, y]) =>
+        pixelAt(page, screenshot, Math.floor(x * pixelRatio), Math.floor(y * pixelRatio))
+      )
+    );
+    const anyNonBlack = samples.some(px => !(px[0] === 0 && px[1] === 0 && px[2] === 0));
+    expect(anyNonBlack).toBe(true);
   });
 
   test('scrolled full-page capture masks an element below the initial viewport', async ({
