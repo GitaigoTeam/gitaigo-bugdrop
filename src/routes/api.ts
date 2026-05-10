@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import type { CategoryLabelConfig, Env, FeedbackCategory, FeedbackPayload } from '../types';
+import type { Env, FeedbackCategory, FeedbackPayload } from '../types';
 import {
   getInstallationToken,
   createIssue,
   uploadScreenshotAsAsset,
   isRepoPublic,
+  GitHubLabelError,
 } from '../lib/github';
 import { rateLimit, rateLimitByRepo } from '../middleware/rateLimit';
 
@@ -159,6 +160,15 @@ api.post('/feedback', async c => {
     }
 
     const labelResolution = resolveCategoryLabels(payload, c.env, payload.repo);
+    if (labelResolution.warnings.length > 0) {
+      // Surface warnings in worker logs so self-host operators see the misconfig
+      // even when no issue is filed. Otherwise these warnings only ever appear
+      // in successfully-created issue bodies.
+      console.warn('[BugDrop] Category label config warnings:', {
+        repo: payload.repo,
+        warnings: labelResolution.warnings,
+      });
+    }
 
     // Check repo visibility (for UI to decide whether to show issue link)
     const isPublic = await isRepoPublic(token, owner, repo);
@@ -168,7 +178,7 @@ api.post('/feedback', async c => {
     try {
       issue = await createIssue(token, owner, repo, payload.title, body, labelResolution.labels);
     } catch (error) {
-      if (!labelResolution.usedCustomLabels || !isLikelyLabelError(error)) {
+      if (!labelResolution.usedCustomLabels || !(error instanceof GitHubLabelError)) {
         throw error;
       }
 
@@ -178,7 +188,25 @@ api.post('/feedback', async c => {
         `GitHub rejected the configured labels (${formatLabelList(labelResolution.labels)}), so BugDrop retried with default labels (${formatLabelList(fallbackLabels)}).`,
       ];
       body = formatIssueBody(payload, screenshotUrl, warning);
-      issue = await createIssue(token, owner, repo, payload.title, body, fallbackLabels);
+      try {
+        issue = await createIssue(token, owner, repo, payload.title, body, fallbackLabels);
+      } catch (fallbackError) {
+        // Both configured AND default labels failed — surface a distinct error
+        // so operators can tell this from a single-call failure. Without this,
+        // the outer catch reports only the second error and loses the retry
+        // context entirely.
+        console.error('[BugDrop] Both configured and default labels failed.', {
+          configured: labelResolution.labels,
+          fallback: fallbackLabels,
+          originalError: error,
+          fallbackError,
+        });
+        const fallbackMessage =
+          fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+        throw new Error(
+          `Failed to create issue with both configured labels (${formatLabelList(labelResolution.labels)}) and default labels (${formatLabelList(fallbackLabels)}): ${fallbackMessage}`
+        );
+      }
     }
 
     return c.json({
@@ -186,6 +214,9 @@ api.post('/feedback', async c => {
       issueNumber: issue.number,
       issueUrl: issue.html_url,
       isPublic,
+      ...(labelResolution.warnings.length > 0
+        ? { labelMappingWarnings: labelResolution.warnings }
+        : {}),
     });
   } catch (error) {
     console.error('Error creating feedback:', error);
@@ -204,7 +235,6 @@ type LabelResolution = {
   warnings: string[];
   usedCustomLabels: boolean;
 };
-type CategoryLabelMappingByRepo = Record<string, CategoryLabelConfig>;
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -258,37 +288,29 @@ function validateScreenshotDataUrl(dataUrl: string, maxSizeMB: number): Screensh
 
 function resolveCategoryLabels(payload: FeedbackPayload, env: Env, repo: string): LabelResolution {
   const selectedCategory = isFeedbackCategory(payload.category) ? payload.category : 'bug';
-  const labelsByCategory: Record<FeedbackCategory, string[]> = {
-    bug: [...DEFAULT_CATEGORY_LABELS.bug],
-    feature: [...DEFAULT_CATEGORY_LABELS.feature],
-    question: [...DEFAULT_CATEGORY_LABELS.question],
-  };
+  const labelsByCategory: Record<FeedbackCategory, string[]> = { ...DEFAULT_CATEGORY_LABELS };
   const warnings: string[] = [];
   const configuredLabels = getConfiguredCategoryLabels(payload, env, repo, warnings);
   let selectedCategoryWasCustomized = false;
 
   if (configuredLabels !== undefined) {
-    if (!isPlainObject(configuredLabels)) {
-      warnings.push('Invalid category label mapping: expected an object.');
-    } else {
-      for (const key of Object.keys(configuredLabels)) {
-        if (!isFeedbackCategory(key)) {
-          warnings.push(`Unknown category label mapping key ignored: \`${safeInlineCode(key)}\`.`);
-          continue;
-        }
+    for (const key of Object.keys(configuredLabels)) {
+      if (!isFeedbackCategory(key)) {
+        warnings.push(`Unknown category label mapping key ignored: \`${safeInlineCode(key)}\`.`);
+        continue;
+      }
 
-        const normalized = normalizeLabelValue(configuredLabels[key], key);
-        if (normalized.valid) {
-          labelsByCategory[key] = normalized.labels;
-          if (key === selectedCategory) {
-            selectedCategoryWasCustomized = !sameLabels(
-              normalized.labels,
-              DEFAULT_CATEGORY_LABELS[selectedCategory]
-            );
-          }
-        } else {
-          warnings.push(normalized.warning);
+      const normalized = normalizeLabelValue(configuredLabels[key], key);
+      if (normalized.valid) {
+        labelsByCategory[key] = normalized.labels;
+        if (key === selectedCategory) {
+          selectedCategoryWasCustomized = !sameLabels(
+            normalized.labels,
+            DEFAULT_CATEGORY_LABELS[selectedCategory]
+          );
         }
+      } else {
+        warnings.push(normalized.warning);
       }
     }
   }
@@ -300,48 +322,88 @@ function resolveCategoryLabels(payload: FeedbackPayload, env: Env, repo: string)
   };
 }
 
+// Discriminated result of parsing CATEGORY_LABELS so the caller cannot conflate
+// "env unset" with "env set but unusable" — the latter must fail closed even when
+// ALLOW_CLIENT_CATEGORY_LABELS is true.
+type EnvCategoryConfigResult =
+  | { kind: 'unset' }
+  | { kind: 'config'; value: Record<string, unknown> }
+  | { kind: 'malformed'; warning: string }
+  | { kind: 'invalid-shape'; warning: string }
+  | { kind: 'no-match'; warning: string };
+
 function getConfiguredCategoryLabels(
   payload: FeedbackPayload,
   env: Env,
   repo: string,
   warnings: string[]
-): unknown {
-  const envLabels = parseEnvCategoryLabels(env.CATEGORY_LABELS, repo, warnings);
-  if (envLabels !== undefined) {
-    return envLabels;
-  }
+): Record<string, unknown> | undefined {
+  const envResult = parseEnvCategoryLabels(env.CATEGORY_LABELS, repo);
 
-  if (env.ALLOW_CLIENT_CATEGORY_LABELS === 'true') {
-    return payload.categoryLabels;
+  switch (envResult.kind) {
+    case 'config':
+      return envResult.value;
+    case 'malformed':
+    case 'invalid-shape':
+    case 'no-match':
+      // Env was set but unusable — fail closed. Do NOT fall through to the
+      // client mapping even when ALLOW_CLIENT_CATEGORY_LABELS=true: the operator
+      // explicitly configured server authority, and a typo must not silently
+      // hand label control back to the browser.
+      warnings.push(envResult.warning);
+      return undefined;
+    case 'unset':
+      if (env.ALLOW_CLIENT_CATEGORY_LABELS !== 'true') return undefined;
+      if (payload.categoryLabels === undefined) return undefined;
+      if (!isPlainObject(payload.categoryLabels)) {
+        warnings.push('Invalid category label mapping: expected an object.');
+        return undefined;
+      }
+      return payload.categoryLabels;
   }
-
-  return undefined;
 }
 
 function parseEnvCategoryLabels(
   rawValue: string | undefined,
-  repo: string,
-  warnings: string[]
-): unknown {
-  if (!rawValue) return undefined;
+  repo: string
+): EnvCategoryConfigResult {
+  if (!rawValue) return { kind: 'unset' };
 
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(rawValue) as unknown;
-    if (!isPlainObject(parsed)) {
-      warnings.push('Invalid server category label config: expected a JSON object.');
-      return undefined;
-    }
-
-    if (hasAnyCategoryKey(parsed)) {
-      return parsed;
-    }
-
-    const byRepo = parsed as CategoryLabelMappingByRepo;
-    return byRepo[repo] ?? byRepo['*'];
+    parsed = JSON.parse(rawValue);
   } catch {
-    warnings.push('Invalid server category label config: malformed JSON.');
-    return undefined;
+    return { kind: 'malformed', warning: 'Invalid server category label config: malformed JSON.' };
   }
+
+  if (!isPlainObject(parsed)) {
+    return {
+      kind: 'invalid-shape',
+      warning: 'Invalid server category label config: expected a JSON object.',
+    };
+  }
+
+  // Disambiguate flat vs per-repo by syntax, not by guessing: per-repo keys are
+  // either the wildcard `*` or contain a `/` (owner/repo). Category keys never do.
+  const isPerRepoShape = Object.keys(parsed).some(k => k === '*' || k.includes('/'));
+  if (!isPerRepoShape) {
+    return { kind: 'config', value: parsed };
+  }
+
+  const match = parsed[repo] ?? parsed['*'];
+  if (match === undefined) {
+    return {
+      kind: 'no-match',
+      warning: `Server category label config has no mapping for \`${safeInlineCode(repo)}\` and no \`*\` fallback.`,
+    };
+  }
+  if (!isPlainObject(match)) {
+    return {
+      kind: 'invalid-shape',
+      warning: `Invalid server category label config for \`${safeInlineCode(repo)}\`: expected an object.`,
+    };
+  }
+  return { kind: 'config', value: match };
 }
 
 function getDefaultLabelsForCategory(category: FeedbackCategory | undefined): string[] {
@@ -405,18 +467,8 @@ function isFeedbackCategory(value: unknown): value is FeedbackCategory {
   return typeof value === 'string' && CATEGORY_KEYS.includes(value as FeedbackCategory);
 }
 
-function isPlainObject(value: unknown): value is CategoryLabelConfig {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function hasAnyCategoryKey(value: CategoryLabelConfig): boolean {
-  return CATEGORY_KEYS.some(key => Object.prototype.hasOwnProperty.call(value, key));
-}
-
-function isLikelyLabelError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  const normalized = message.toLowerCase();
-  return normalized.includes('label');
 }
 
 function formatLabelList(labels: string[]): string {

@@ -286,18 +286,47 @@ function rememberComplexScreenshotSkip(config: WidgetConfig, formResult: Feedbac
 function parseCategoryLabels(rawValue: string | undefined): CategoryLabelConfig | undefined {
   if (!rawValue) return undefined;
 
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(rawValue);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      console.warn('[BugDrop] Invalid data-category-labels JSON. Using default GitHub labels.');
-      return undefined;
-    }
-
-    return parsed as CategoryLabelConfig;
-  } catch {
-    console.warn('[BugDrop] Invalid data-category-labels JSON. Using default GitHub labels.');
+    parsed = JSON.parse(rawValue);
+  } catch (err) {
+    const detail = err instanceof Error ? `: ${err.message}` : '';
+    console.warn(
+      `[BugDrop] Invalid data-category-labels JSON${detail}. Using default GitHub labels.`
+    );
     return undefined;
   }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    console.warn(
+      '[BugDrop] Invalid data-category-labels: expected a JSON object. Using default GitHub labels.'
+    );
+    return undefined;
+  }
+
+  // Validate per-category shape so misconfig surfaces in browser DevTools rather
+  // than only inside the issue body the operator may never read. The server
+  // re-validates regardless — this layer exists for operator feedback.
+  const knownCategories: FeedbackCategory[] = ['bug', 'feature', 'question'];
+  const result: CategoryLabelConfig = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (!knownCategories.includes(key as FeedbackCategory)) {
+      console.warn(
+        `[BugDrop] Invalid data-category-labels: unknown category "${key}" (expected ${knownCategories.join(', ')}). Ignoring.`
+      );
+      continue;
+    }
+    if (typeof value === 'string') {
+      result[key as FeedbackCategory] = value;
+    } else if (Array.isArray(value) && value.every(v => typeof v === 'string')) {
+      result[key as FeedbackCategory] = value;
+    } else {
+      console.warn(
+        `[BugDrop] Invalid data-category-labels: value for "${key}" must be a string or string array. Ignoring.`
+      );
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 // Read config from script tag (fallback to src-based lookup for async/defer)

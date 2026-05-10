@@ -2458,10 +2458,7 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
     expect(payloads[0]?.category).toBe('bug');
     expect(payloads[0]?.categoryLabels).toBeUndefined();
-    expect(payloads[0]?.categoryLabelConfigError).toBeUndefined();
-    expect(warnings).toContain(
-      '[BugDrop] Invalid data-category-labels JSON. Using default GitHub labels.'
-    );
+    expect(warnings.some(w => w.startsWith('[BugDrop] Invalid data-category-labels'))).toBe(true);
   });
 
   async function countAnnotationPixels(canvas: ReturnType<Page['locator']>) {

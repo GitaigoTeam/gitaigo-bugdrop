@@ -177,6 +177,8 @@ CATEGORY_LABELS = '{"owner/repo":{"bug":["defect","frontend"],"feature":"product
 
 Self-hosted deployments can also opt into script-tag mappings by setting `ALLOW_CLIENT_CATEGORY_LABELS = "true"` and using `data-category-labels` on pages you control. Only enable this when your worker is locked down to trusted origins.
 
+When both are set, `CATEGORY_LABELS` takes precedence: the worker uses the server-side mapping and ignores `data-category-labels`. If `CATEGORY_LABELS` is set but unusable (malformed JSON, wrong shape, or a per-repo map with no entry for the current repo and no `"*"` fallback), the worker falls back to default GitHub labels and surfaces a warning in the issue body — it does **not** fall through to the browser-supplied mapping. This keeps a typo in your env config from silently handing label control back to the page.
+
 ### Locking Down Allowed Origins (Recommended)
 
 > **Security:** When self-hosting, you should always set `ALLOWED_ORIGINS` to only the domains where you embed the widget. The default `"*"` allows any website to submit requests to your worker — meaning anyone who discovers your worker URL could create issues on repos where your app is installed (subject to rate limits).

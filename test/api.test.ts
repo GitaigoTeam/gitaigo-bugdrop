@@ -8,11 +8,21 @@ const mockCreateIssue = vi.fn();
 const mockUploadScreenshotAsAsset = vi.fn();
 const mockIsRepoPublic = vi.fn();
 
+class TestGitHubLabelError extends Error {
+  readonly status: number;
+  constructor(message: string, status = 422) {
+    super(message);
+    this.name = 'GitHubLabelError';
+    this.status = status;
+  }
+}
+
 vi.mock('../src/lib/github', () => ({
   getInstallationToken: (...args: unknown[]) => mockGetInstallationToken(...args),
   createIssue: (...args: unknown[]) => mockCreateIssue(...args),
   uploadScreenshotAsAsset: (...args: unknown[]) => mockUploadScreenshotAsAsset(...args),
   isRepoPublic: (...args: unknown[]) => mockIsRepoPublic(...args),
+  GitHubLabelError: TestGitHubLabelError,
 }));
 
 // Import API routes after mocking
@@ -401,7 +411,7 @@ describe('API Routes', () => {
     it('should retry with default labels and issue warning when GitHub rejects configured labels', async () => {
       mockGetInstallationToken.mockResolvedValue('test-token');
       mockCreateIssue
-        .mockRejectedValueOnce(new Error('422 Validation Failed: label does not exist'))
+        .mockRejectedValueOnce(new TestGitHubLabelError('GitHub rejected labels'))
         .mockResolvedValueOnce({
           number: 42,
           html_url: 'https://github.com/testowner/testrepo/issues/42',
@@ -433,6 +443,32 @@ describe('API Routes', () => {
       expect(mockCreateIssue.mock.calls[1][4]).toContain('GitHub rejected the configured labels');
     });
 
+    it('should surface a distinctive error when both configured and default labels fail', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      mockCreateIssue
+        .mockRejectedValueOnce(new TestGitHubLabelError('GitHub rejected configured labels'))
+        .mockRejectedValueOnce(new Error('rate limit exceeded on retry'));
+
+      const envWithLabels = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({ feature: 'bad-label' }),
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validPayload, category: 'feature' }),
+      });
+      const res = await app.fetch(req, envWithLabels);
+      const data = (await res.json()) as { error: string };
+
+      expect(res.status).toBe(500);
+      expect(data.error).toContain('configured labels');
+      expect(data.error).toContain('default labels');
+      expect(data.error).toContain('rate limit exceeded on retry');
+      expect(mockCreateIssue).toHaveBeenCalledTimes(2);
+    });
+
     it('should not retry non-label GitHub validation errors', async () => {
       mockGetInstallationToken.mockResolvedValue('test-token');
       mockCreateIssue.mockRejectedValue(new Error('422 Validation Failed: title is invalid'));
@@ -452,6 +488,382 @@ describe('API Routes', () => {
 
       expect(res.status).toBe(500);
       expect(mockCreateIssue).toHaveBeenCalledTimes(1);
+    });
+
+    it('should honor client-provided category labels when ALLOW_CLIENT_CATEGORY_LABELS=true', async () => {
+      const envWithOptIn = {
+        ...mockEnv,
+        ALLOW_CLIENT_CATEGORY_LABELS: 'true',
+      };
+      const payload = {
+        ...validPayload,
+        category: 'bug' as const,
+        categoryLabels: { bug: 'security' },
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const res = await app.fetch(req, envWithOptIn);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue).toHaveBeenCalledWith(
+        'test-token',
+        'testowner',
+        'testrepo',
+        'Test feedback',
+        expect.any(String),
+        ['security', 'bugdrop']
+      );
+    });
+
+    it('should validate client category labels shape when opt-in is enabled', async () => {
+      const envWithOptIn = {
+        ...mockEnv,
+        ALLOW_CLIENT_CATEGORY_LABELS: 'true',
+      };
+      const payload = {
+        ...validPayload,
+        category: 'bug' as const,
+        // Array, not an object — must be rejected with a warning, defaults used.
+        categoryLabels: ['security'] as unknown as Record<string, string>,
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const res = await app.fetch(req, envWithOptIn);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][4]).toContain('## Label mapping warning');
+      expect(mockCreateIssue.mock.calls[0][4]).toContain('expected an object');
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['bug', 'bugdrop']);
+    });
+
+    it.each(['TRUE', 'True', '1', 'yes', ' true ', ''])(
+      'should reject ALLOW_CLIENT_CATEGORY_LABELS=%j (only the literal "true" opens the gate)',
+      async value => {
+        const envWithLooseFlag = {
+          ...mockEnv,
+          ALLOW_CLIENT_CATEGORY_LABELS: value,
+        };
+        const payload = {
+          ...validPayload,
+          category: 'bug' as const,
+          categoryLabels: { bug: 'security' },
+        };
+
+        const req = new Request('http://localhost/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const res = await app.fetch(req, envWithLooseFlag);
+
+        expect(res.status).toBe(200);
+        expect(mockCreateIssue.mock.calls[0][5]).toEqual(['bug', 'bugdrop']);
+      }
+    );
+
+    it('should prefer CATEGORY_LABELS over client categoryLabels even when ALLOW_CLIENT_CATEGORY_LABELS=true', async () => {
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({ bug: 'server-defect' }),
+        ALLOW_CLIENT_CATEGORY_LABELS: 'true',
+      };
+      const payload = {
+        ...validPayload,
+        category: 'bug' as const,
+        categoryLabels: { bug: 'client-injected' },
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const res = await app.fetch(req, env);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['server-defect', 'bugdrop']);
+    });
+
+    it('should fail closed (use defaults, not client labels) when CATEGORY_LABELS is malformed JSON', async () => {
+      // Self-hoster typo in env JSON must NOT silently delegate to the browser
+      // even when ALLOW_CLIENT_CATEGORY_LABELS=true. Otherwise, a single typo
+      // subverts the entire server-authoritative model.
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: '{"bug":"defect"', // missing closing brace
+        ALLOW_CLIENT_CATEGORY_LABELS: 'true',
+      };
+      const payload = {
+        ...validPayload,
+        category: 'bug' as const,
+        categoryLabels: { bug: 'client-injected' },
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const res = await app.fetch(req, env);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['bug', 'bugdrop']);
+      expect(mockCreateIssue.mock.calls[0][4]).toContain('malformed JSON');
+    });
+
+    it('should fail closed when CATEGORY_LABELS is valid JSON but not an object', async () => {
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: '["bug","feature"]',
+        ALLOW_CLIENT_CATEGORY_LABELS: 'true',
+      };
+      const payload = {
+        ...validPayload,
+        category: 'bug' as const,
+        categoryLabels: { bug: 'client-injected' },
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const res = await app.fetch(req, env);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['bug', 'bugdrop']);
+      expect(mockCreateIssue.mock.calls[0][4]).toContain('expected a JSON object');
+    });
+
+    it('should select labels from a per-repo CATEGORY_LABELS map', async () => {
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({
+          'testowner/testrepo': { feature: 'product-feedback' },
+          'other/repo': { feature: 'wrong-feedback' },
+        }),
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validPayload, category: 'feature' }),
+      });
+      const res = await app.fetch(req, env);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['product-feedback', 'bugdrop']);
+    });
+
+    it('should fall back to "*" entry when repo is not in per-repo CATEGORY_LABELS map', async () => {
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({
+          'other/repo': { feature: 'specific' },
+          '*': { feature: 'wildcard' },
+        }),
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validPayload, category: 'feature' }),
+      });
+      const res = await app.fetch(req, env);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['wildcard', 'bugdrop']);
+    });
+
+    it('should include labelMappingWarnings in the success response when warnings are present', async () => {
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({
+          bug: 'defect',
+          features: 'product-feedback', // typo — unknown key
+        }),
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validPayload, category: 'bug' }),
+      });
+      const res = await app.fetch(req, env);
+      const data = (await res.json()) as { labelMappingWarnings?: string[] };
+
+      expect(res.status).toBe(200);
+      expect(data.labelMappingWarnings).toBeDefined();
+      expect(data.labelMappingWarnings?.[0]).toMatch(/Unknown category label mapping key/);
+    });
+
+    it('should omit labelMappingWarnings from the success response when there are none', async () => {
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validPayload),
+      });
+      const res = await app.fetch(req, mockEnv);
+      const data = (await res.json()) as Record<string, unknown>;
+
+      expect(res.status).toBe(200);
+      expect(data).not.toHaveProperty('labelMappingWarnings');
+    });
+
+    it('should warn and fall back to defaults when CATEGORY_LABELS array contains a non-string', async () => {
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({ bug: ['ok', 123] }),
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validPayload),
+      });
+      const res = await app.fetch(req, env);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['bug', 'bugdrop']);
+      expect(mockCreateIssue.mock.calls[0][4]).toContain('all labels must be strings');
+    });
+
+    it('should reject CATEGORY_LABELS arrays exceeding 5 labels', async () => {
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({
+          bug: ['a', 'b', 'c', 'd', 'e', 'f'],
+        }),
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validPayload),
+      });
+      const res = await app.fetch(req, env);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['bug', 'bugdrop']);
+      expect(mockCreateIssue.mock.calls[0][4]).toContain('expected 1-5 labels');
+    });
+
+    it('should accept exactly 5 labels (boundary)', async () => {
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({
+          bug: ['a', 'b', 'c', 'd', 'e'],
+        }),
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validPayload),
+      });
+      const res = await app.fetch(req, env);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['a', 'b', 'c', 'd', 'e', 'bugdrop']);
+    });
+
+    it('should reject CATEGORY_LABELS labels longer than 100 characters', async () => {
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({
+          bug: 'x'.repeat(101),
+        }),
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validPayload),
+      });
+      const res = await app.fetch(req, env);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['bug', 'bugdrop']);
+      expect(mockCreateIssue.mock.calls[0][4]).toContain('1-100 characters');
+    });
+
+    it('should trim whitespace and reject whitespace-only labels', async () => {
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({
+          bug: '  defect  ',
+          feature: '   ',
+        }),
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validPayload, category: 'bug' }),
+      });
+      const res = await app.fetch(req, env);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['defect', 'bugdrop']);
+      // The whitespace-only feature mapping must produce a length warning.
+      expect(mockCreateIssue.mock.calls[0][4]).toContain('1-100 characters');
+    });
+
+    it('should ignore __proto__ and constructor keys in CATEGORY_LABELS', async () => {
+      // JSON.parse sets __proto__ as an own enumerable property (not the
+      // prototype), so Object.keys walks it. isFeedbackCategory then rejects
+      // it, producing a warning. Pin this behavior so a future refactor to
+      // for...in (which walks the prototype chain) gets caught.
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS:
+          '{"__proto__":{"bug":"pwn"},"constructor":{"bug":"also-pwn"},"bug":"defect"}',
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validPayload),
+      });
+      const res = await app.fetch(req, env);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['defect', 'bugdrop']);
+      expect(({} as Record<string, unknown>).bug).toBeUndefined();
+    });
+
+    it('should fail closed with a warning when per-repo CATEGORY_LABELS has no match and no wildcard', async () => {
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({
+          'other/repo': { feature: 'specific' },
+        }),
+        ALLOW_CLIENT_CATEGORY_LABELS: 'true',
+      };
+      const payload = {
+        ...validPayload,
+        category: 'feature' as const,
+        categoryLabels: { feature: 'client-injected' },
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const res = await app.fetch(req, env);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['enhancement', 'bugdrop']);
+      expect(mockCreateIssue.mock.calls[0][4]).toContain('no mapping for');
     });
 
     it('should return 400 when repo is missing', async () => {
