@@ -37,8 +37,16 @@ describe('API Routes', () => {
   };
 
   beforeEach(async () => {
-    vi.clearAllMocks();
+    mockGetInstallationToken.mockReset();
+    mockCreateIssue.mockReset();
+    mockUploadScreenshotAsAsset.mockReset();
+    mockIsRepoPublic.mockReset();
     // Set default mock return values
+    mockGetInstallationToken.mockResolvedValue('test-token');
+    mockCreateIssue.mockResolvedValue({
+      number: 42,
+      html_url: 'https://github.com/testowner/testrepo/issues/42',
+    });
     mockIsRepoPublic.mockResolvedValue(true);
     app = await createApiRoutes();
   });
@@ -184,6 +192,266 @@ describe('API Routes', () => {
         expect.stringContaining('This is a test feedback'),
         ['bug', 'bugdrop']
       );
+    });
+
+    it('should ignore client-provided category labels unless explicitly enabled', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      mockCreateIssue.mockResolvedValue({
+        number: 42,
+        html_url: 'https://github.com/testowner/testrepo/issues/42',
+      });
+
+      const payload = {
+        ...validPayload,
+        category: 'bug' as const,
+        categoryLabels: {
+          bug: 'security',
+        },
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const res = await app.fetch(req, mockEnv);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue).toHaveBeenCalledWith(
+        'test-token',
+        'testowner',
+        'testrepo',
+        'Test feedback',
+        expect.any(String),
+        ['bug', 'bugdrop']
+      );
+    });
+
+    it('should create issue with server-configured category label string mapping', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      mockCreateIssue.mockResolvedValue({
+        number: 42,
+        html_url: 'https://github.com/testowner/testrepo/issues/42',
+      });
+
+      const envWithLabels = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({
+          feature: 'product-feedback',
+        }),
+      };
+      const payload = {
+        ...validPayload,
+        category: 'feature' as const,
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const res = await app.fetch(req, envWithLabels);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue).toHaveBeenCalledWith(
+        'test-token',
+        'testowner',
+        'testrepo',
+        'Test feedback',
+        expect.any(String),
+        ['product-feedback', 'bugdrop']
+      );
+    });
+
+    it('should create issue with server-configured category label array mapping', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      mockCreateIssue.mockResolvedValue({
+        number: 42,
+        html_url: 'https://github.com/testowner/testrepo/issues/42',
+      });
+
+      const envWithLabels = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({
+          bug: ['defect', 'frontend', 'defect'],
+        }),
+      };
+      const payload = {
+        ...validPayload,
+        category: 'bug' as const,
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const res = await app.fetch(req, envWithLabels);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue).toHaveBeenCalledWith(
+        'test-token',
+        'testowner',
+        'testrepo',
+        'Test feedback',
+        expect.any(String),
+        ['defect', 'frontend', 'bugdrop']
+      );
+    });
+
+    it('should keep default labels for categories omitted from server mapping', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      mockCreateIssue.mockResolvedValue({
+        number: 42,
+        html_url: 'https://github.com/testowner/testrepo/issues/42',
+      });
+
+      const envWithLabels = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({
+          bug: 'defect',
+        }),
+      };
+      const payload = {
+        ...validPayload,
+        category: 'question' as const,
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      await app.fetch(req, envWithLabels);
+
+      expect(mockCreateIssue).toHaveBeenCalledWith(
+        'test-token',
+        'testowner',
+        'testrepo',
+        'Test feedback',
+        expect.any(String),
+        ['question', 'bugdrop']
+      );
+    });
+
+    it('should fallback to default labels and include issue warning for invalid server mapping', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      mockCreateIssue.mockResolvedValue({
+        number: 42,
+        html_url: 'https://github.com/testowner/testrepo/issues/42',
+      });
+
+      const envWithLabels = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({
+          bug: '',
+        }),
+      };
+      const payload = {
+        ...validPayload,
+        category: 'bug' as const,
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      await app.fetch(req, envWithLabels);
+
+      const issueBody = mockCreateIssue.mock.calls[0][4];
+      expect(issueBody).toContain('## Label mapping warning');
+      expect(issueBody).toContain('Invalid labels for category "bug"');
+      expect(mockCreateIssue).toHaveBeenCalledWith(
+        'test-token',
+        'testowner',
+        'testrepo',
+        'Test feedback',
+        expect.any(String),
+        ['bug', 'bugdrop']
+      );
+    });
+
+    it('should warn on unknown server mapping keys', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      mockCreateIssue.mockResolvedValue({
+        number: 42,
+        html_url: 'https://github.com/testowner/testrepo/issues/42',
+      });
+
+      const envWithLabels = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({
+          bug: 'defect',
+          features: 'product-feedback',
+        }),
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validPayload, category: 'feature' }),
+      });
+      await app.fetch(req, envWithLabels);
+
+      expect(mockCreateIssue.mock.calls[0][4]).toContain('Unknown category label mapping key');
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['enhancement', 'bugdrop']);
+    });
+
+    it('should retry with default labels and issue warning when GitHub rejects configured labels', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      mockCreateIssue
+        .mockRejectedValueOnce(new Error('422 Validation Failed: label does not exist'))
+        .mockResolvedValueOnce({
+          number: 42,
+          html_url: 'https://github.com/testowner/testrepo/issues/42',
+        });
+
+      const envWithLabels = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({
+          feature: 'bad-label',
+        }),
+      };
+      const payload = {
+        ...validPayload,
+        category: 'feature' as const,
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const res = await app.fetch(req, envWithLabels);
+
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue).toHaveBeenCalledTimes(2);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['bad-label', 'bugdrop']);
+      expect(mockCreateIssue.mock.calls[1][5]).toEqual(['enhancement', 'bugdrop']);
+      expect(mockCreateIssue.mock.calls[1][4]).toContain('## Label mapping warning');
+      expect(mockCreateIssue.mock.calls[1][4]).toContain('GitHub rejected the configured labels');
+    });
+
+    it('should not retry non-label GitHub validation errors', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      mockCreateIssue.mockRejectedValue(new Error('422 Validation Failed: title is invalid'));
+
+      const envWithLabels = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({
+          feature: 'product-feedback',
+        }),
+      };
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validPayload, category: 'feature' }),
+      });
+      const res = await app.fetch(req, envWithLabels);
+
+      expect(res.status).toBe(500);
+      expect(mockCreateIssue).toHaveBeenCalledTimes(1);
     });
 
     it('should return 400 when repo is missing', async () => {

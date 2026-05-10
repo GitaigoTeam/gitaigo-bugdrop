@@ -154,15 +154,28 @@ The release tag (e.g., `v1.2.0`) becomes the version number for the widget files
 
 ### Environment Variables
 
-| Variable                 | Required | Description                                                           |
-| ------------------------ | -------- | --------------------------------------------------------------------- |
-| `GITHUB_APP_ID`          | Yes      | Your GitHub App's numeric ID                                          |
-| `GITHUB_PRIVATE_KEY`     | Yes      | Private key from GitHub App settings                                  |
-| `ENVIRONMENT`            | No       | `development` disables rate limiting; `production` enables all checks |
-| `ALLOWED_ORIGINS`        | No       | Comma-separated allowed domains (default: `*`)                        |
-| `GITHUB_APP_NAME`        | No       | Your app's URL slug for install links                                 |
-| `MAX_SCREENSHOT_SIZE_MB` | No       | Max screenshot size in MB (default: `5`)                              |
-| `RATE_LIMIT`             | No       | KV namespace binding for rate limiting (see section 5)                |
+| Variable                       | Required | Description                                                           |
+| ------------------------------ | -------- | --------------------------------------------------------------------- |
+| `GITHUB_APP_ID`                | Yes      | Your GitHub App's numeric ID                                          |
+| `GITHUB_PRIVATE_KEY`           | Yes      | Private key from GitHub App settings                                  |
+| `ENVIRONMENT`                  | No       | `development` disables rate limiting; `production` enables all checks |
+| `ALLOWED_ORIGINS`              | No       | Comma-separated allowed domains (default: `*`)                        |
+| `GITHUB_APP_NAME`              | No       | Your app's URL slug for install links                                 |
+| `MAX_SCREENSHOT_SIZE_MB`       | No       | Max screenshot size in MB (default: `5`)                              |
+| `CATEGORY_LABELS`              | No       | JSON mapping from repos/categories to GitHub labels                   |
+| `ALLOW_CLIENT_CATEGORY_LABELS` | No       | Set to `true` to trust `data-category-labels` from your own pages     |
+| `RATE_LIMIT`                   | No       | KV namespace binding for rate limiting (see section 5)                |
+
+### Custom Category Labels
+
+For authoritative mappings, configure labels on the worker:
+
+```toml
+[vars]
+CATEGORY_LABELS = '{"owner/repo":{"bug":["defect","frontend"],"feature":"product-feedback","question":"support"}}'
+```
+
+Self-hosted deployments can also opt into script-tag mappings by setting `ALLOW_CLIENT_CATEGORY_LABELS = "true"` and using `data-category-labels` on pages you control. Only enable this when your worker is locked down to trusted origins.
 
 ### Locking Down Allowed Origins (Recommended)
 

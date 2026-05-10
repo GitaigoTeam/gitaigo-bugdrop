@@ -21,6 +21,9 @@ import {
   type ThemeMode,
 } from './theme';
 
+type FeedbackCategory = 'bug' | 'feature' | 'question';
+type CategoryLabelConfig = Partial<Record<FeedbackCategory, string | string[]>>;
+
 interface WidgetConfig {
   repo: string;
   apiUrl: string;
@@ -43,6 +46,8 @@ interface WidgetConfig {
   iconUrl?: string;
   // Custom trigger button label text (default: 'Feedback')
   label?: string;
+  // Optional mapping from built-in feedback categories to GitHub labels
+  categoryLabels?: CategoryLabelConfig;
   // Tier 1 styling customization
   font?: string; // 'inherit' to use host page font, or a custom font-family string
   radius?: string; // Border radius in px (e.g., '0', '8', '16')
@@ -278,6 +283,23 @@ function rememberComplexScreenshotSkip(config: WidgetConfig, formResult: Feedbac
   formResult.includeScreenshot = false;
 }
 
+function parseCategoryLabels(rawValue: string | undefined): CategoryLabelConfig | undefined {
+  if (!rawValue) return undefined;
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      console.warn('[BugDrop] Invalid data-category-labels JSON. Using default GitHub labels.');
+      return undefined;
+    }
+
+    return parsed as CategoryLabelConfig;
+  } catch {
+    console.warn('[BugDrop] Invalid data-category-labels JSON. Using default GitHub labels.');
+    return undefined;
+  }
+}
+
 // Read config from script tag (fallback to src-based lookup for async/defer)
 const script = (document.currentScript ||
   document.querySelector('script[src*="bugdrop"][src*="widget"]')) as HTMLScriptElement;
@@ -312,6 +334,7 @@ const config: WidgetConfig = {
   iconUrl: script?.dataset.icon || undefined,
   // Custom trigger label
   label: script?.dataset.label || undefined,
+  categoryLabels: parseCategoryLabels(script?.dataset.categoryLabels),
   // Tier 1 styling customization
   font: script?.dataset.font || undefined,
   radius: script?.dataset.radius || undefined,
@@ -1022,8 +1045,6 @@ function showWelcomeScreen(root: HTMLElement): Promise<boolean> {
   });
 }
 
-type FeedbackCategory = 'bug' | 'feature' | 'question';
-
 interface FeedbackFormResult {
   title: string;
   description: string;
@@ -1396,6 +1417,7 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
         title: data.title,
         description: data.description,
         category: data.category,
+        categoryLabels: config.categoryLabels,
         screenshot: data.screenshot,
         submitter,
         metadata: {

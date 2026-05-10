@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import type { Env, FeedbackPayload } from '../types';
+import type { CategoryLabelConfig, Env, FeedbackCategory, FeedbackPayload } from '../types';
 import {
   getInstallationToken,
   createIssue,
@@ -10,6 +10,16 @@ import {
 import { rateLimit, rateLimitByRepo } from '../middleware/rateLimit';
 
 const api = new Hono<{ Bindings: Env }>();
+
+const DEFAULT_CATEGORY_LABELS: Record<FeedbackCategory, string[]> = {
+  bug: ['bug'],
+  feature: ['enhancement'],
+  question: ['question'],
+};
+
+const CATEGORY_KEYS: FeedbackCategory[] = ['bug', 'feature', 'question'];
+const MAX_LABELS_PER_CATEGORY = 5;
+const MAX_LABEL_LENGTH = 100;
 
 // CORS middleware with origin whitelist
 api.use('*', async (c, next) => {
@@ -148,25 +158,28 @@ api.post('/feedback', async c => {
       }
     }
 
-    // Build issue body
-    const body = formatIssueBody(payload, screenshotUrl);
+    const labelResolution = resolveCategoryLabels(payload, c.env, payload.repo);
 
     // Check repo visibility (for UI to decide whether to show issue link)
     const isPublic = await isRepoPublic(token, owner, repo);
 
-    // Map category to GitHub label
-    const categoryLabels: Record<string, string> = {
-      bug: 'bug',
-      feature: 'enhancement',
-      question: 'question',
-    };
-    const categoryLabel = payload.category ? categoryLabels[payload.category] || 'bug' : 'bug';
+    let body = formatIssueBody(payload, screenshotUrl, labelResolution.warnings);
+    let issue;
+    try {
+      issue = await createIssue(token, owner, repo, payload.title, body, labelResolution.labels);
+    } catch (error) {
+      if (!labelResolution.usedCustomLabels || !isLikelyLabelError(error)) {
+        throw error;
+      }
 
-    // Create issue with category label
-    const issue = await createIssue(token, owner, repo, payload.title, body, [
-      categoryLabel,
-      'bugdrop',
-    ]);
+      const fallbackLabels = buildIssueLabels(getDefaultLabelsForCategory(payload.category));
+      const warning = [
+        ...labelResolution.warnings,
+        `GitHub rejected the configured labels (${formatLabelList(labelResolution.labels)}), so BugDrop retried with default labels (${formatLabelList(fallbackLabels)}).`,
+      ];
+      body = formatIssueBody(payload, screenshotUrl, warning);
+      issue = await createIssue(token, owner, repo, payload.title, body, fallbackLabels);
+    }
 
     return c.json({
       success: true,
@@ -186,6 +199,12 @@ api.post('/feedback', async c => {
 });
 
 type ScreenshotValidationResult = { valid: true } | { valid: false; error: string };
+type LabelResolution = {
+  labels: string[];
+  warnings: string[];
+  usedCustomLabels: boolean;
+};
+type CategoryLabelMappingByRepo = Record<string, CategoryLabelConfig>;
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -237,6 +256,177 @@ function validateScreenshotDataUrl(dataUrl: string, maxSizeMB: number): Screensh
   return { valid: true };
 }
 
+function resolveCategoryLabels(payload: FeedbackPayload, env: Env, repo: string): LabelResolution {
+  const selectedCategory = isFeedbackCategory(payload.category) ? payload.category : 'bug';
+  const labelsByCategory: Record<FeedbackCategory, string[]> = {
+    bug: [...DEFAULT_CATEGORY_LABELS.bug],
+    feature: [...DEFAULT_CATEGORY_LABELS.feature],
+    question: [...DEFAULT_CATEGORY_LABELS.question],
+  };
+  const warnings: string[] = [];
+  const configuredLabels = getConfiguredCategoryLabels(payload, env, repo, warnings);
+  let selectedCategoryWasCustomized = false;
+
+  if (configuredLabels !== undefined) {
+    if (!isPlainObject(configuredLabels)) {
+      warnings.push('Invalid category label mapping: expected an object.');
+    } else {
+      for (const key of Object.keys(configuredLabels)) {
+        if (!isFeedbackCategory(key)) {
+          warnings.push(`Unknown category label mapping key ignored: \`${safeInlineCode(key)}\`.`);
+          continue;
+        }
+
+        const normalized = normalizeLabelValue(configuredLabels[key], key);
+        if (normalized.valid) {
+          labelsByCategory[key] = normalized.labels;
+          if (key === selectedCategory) {
+            selectedCategoryWasCustomized = !sameLabels(
+              normalized.labels,
+              DEFAULT_CATEGORY_LABELS[selectedCategory]
+            );
+          }
+        } else {
+          warnings.push(normalized.warning);
+        }
+      }
+    }
+  }
+
+  return {
+    labels: buildIssueLabels(labelsByCategory[selectedCategory]),
+    warnings,
+    usedCustomLabels: selectedCategoryWasCustomized,
+  };
+}
+
+function getConfiguredCategoryLabels(
+  payload: FeedbackPayload,
+  env: Env,
+  repo: string,
+  warnings: string[]
+): unknown {
+  const envLabels = parseEnvCategoryLabels(env.CATEGORY_LABELS, repo, warnings);
+  if (envLabels !== undefined) {
+    return envLabels;
+  }
+
+  if (env.ALLOW_CLIENT_CATEGORY_LABELS === 'true') {
+    return payload.categoryLabels;
+  }
+
+  return undefined;
+}
+
+function parseEnvCategoryLabels(
+  rawValue: string | undefined,
+  repo: string,
+  warnings: string[]
+): unknown {
+  if (!rawValue) return undefined;
+
+  try {
+    const parsed = JSON.parse(rawValue) as unknown;
+    if (!isPlainObject(parsed)) {
+      warnings.push('Invalid server category label config: expected a JSON object.');
+      return undefined;
+    }
+
+    if (hasAnyCategoryKey(parsed)) {
+      return parsed;
+    }
+
+    const byRepo = parsed as CategoryLabelMappingByRepo;
+    return byRepo[repo] ?? byRepo['*'];
+  } catch {
+    warnings.push('Invalid server category label config: malformed JSON.');
+    return undefined;
+  }
+}
+
+function getDefaultLabelsForCategory(category: FeedbackCategory | undefined): string[] {
+  return DEFAULT_CATEGORY_LABELS[isFeedbackCategory(category) ? category : 'bug'];
+}
+
+function buildIssueLabels(categoryLabels: string[]): string[] {
+  return uniqueLabels([...categoryLabels, 'bugdrop']);
+}
+
+function normalizeLabelValue(
+  value: unknown,
+  category: FeedbackCategory
+): { valid: true; labels: string[] } | { valid: false; warning: string } {
+  const rawLabels = typeof value === 'string' ? [value] : Array.isArray(value) ? value : null;
+  if (!rawLabels) {
+    return {
+      valid: false,
+      warning: `Invalid labels for category "${category}": expected a string or string array.`,
+    };
+  }
+
+  if (rawLabels.length === 0 || rawLabels.length > MAX_LABELS_PER_CATEGORY) {
+    return {
+      valid: false,
+      warning: `Invalid labels for category "${category}": expected 1-${MAX_LABELS_PER_CATEGORY} labels.`,
+    };
+  }
+
+  const labels: string[] = [];
+  for (const rawLabel of rawLabels) {
+    if (typeof rawLabel !== 'string') {
+      return {
+        valid: false,
+        warning: `Invalid labels for category "${category}": all labels must be strings.`,
+      };
+    }
+
+    const label = rawLabel.trim();
+    if (!label || label.length > MAX_LABEL_LENGTH) {
+      return {
+        valid: false,
+        warning: `Invalid labels for category "${category}": labels must be 1-${MAX_LABEL_LENGTH} characters.`,
+      };
+    }
+    labels.push(label);
+  }
+
+  return { valid: true, labels: uniqueLabels(labels) };
+}
+
+function uniqueLabels(labels: string[]): string[] {
+  return Array.from(new Set(labels));
+}
+
+function sameLabels(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((label, index) => label === right[index]);
+}
+
+function isFeedbackCategory(value: unknown): value is FeedbackCategory {
+  return typeof value === 'string' && CATEGORY_KEYS.includes(value as FeedbackCategory);
+}
+
+function isPlainObject(value: unknown): value is CategoryLabelConfig {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasAnyCategoryKey(value: CategoryLabelConfig): boolean {
+  return CATEGORY_KEYS.some(key => Object.prototype.hasOwnProperty.call(value, key));
+}
+
+function isLikelyLabelError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return normalized.includes('label');
+}
+
+function formatLabelList(labels: string[]): string {
+  return labels.map(label => `\`${safeInlineCode(label)}\``).join(', ');
+}
+
+function safeInlineCode(value: string): string {
+  return value.replace(/[`\\]/g, '');
+}
+
 function base64ToBytes(base64: string): Uint8Array {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -254,7 +444,11 @@ function hasPngSignature(bytes: Uint8Array): boolean {
 /**
  * Format the issue body with markdown
  */
-function formatIssueBody(payload: FeedbackPayload, screenshotDataUrl?: string): string {
+function formatIssueBody(
+  payload: FeedbackPayload,
+  screenshotDataUrl?: string,
+  labelWarnings: string[] = []
+): string {
   const sections: string[] = [];
 
   // Submitter info (if provided)
@@ -282,6 +476,14 @@ function formatIssueBody(payload: FeedbackPayload, screenshotDataUrl?: string): 
   if (screenshotDataUrl) {
     sections.push('## Screenshot');
     sections.push(`![Screenshot](${screenshotDataUrl})`);
+    sections.push('');
+  }
+
+  if (labelWarnings.length > 0) {
+    sections.push('## Label mapping warning');
+    for (const warning of labelWarnings) {
+      sections.push(`- ${warning}`);
+    }
     sections.push('');
   }
 

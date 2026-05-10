@@ -14,6 +14,7 @@ These attributes control the fundamental behavior of the widget.
 | `data-color` | `"#7c3aed"` | Primary accent color (any CSS color value) |
 | `data-icon` | *(default bug icon)* | Custom icon: URL to an image, `"none"` to hide, or omit for default |
 | `data-label` | `""` | Text label displayed next to the button icon |
+| `data-category-labels` | built-in labels | Self-hosted JSON mapping from built-in categories to GitHub labels |
 | `data-button` | `"true"` | Show the floating button: `"true"` or `"false"` |
 | `data-welcome` | `"Report a bug or request a feature"` | Welcome message displayed at the top of the form |
 
@@ -112,7 +113,7 @@ When a user dismisses the button:
 
 ## Feedback Categories
 
-Users can choose from three feedback categories when submitting a report. Each category maps to a specific GitHub label:
+Users can choose from three feedback categories when submitting a report. By default, each category maps to a specific GitHub label:
 
 | Category | Emoji | GitHub Label | Description |
 |----------|-------|-------------|-------------|
@@ -120,7 +121,31 @@ Users can choose from three feedback categories when submitting a report. Each c
 | Feature | :sparkles: | `enhancement` | A new feature or improvement request |
 | Question | :question: | `question` | A question about the product or usage |
 
-These categories are built into the widget and cannot be customized at this time. The corresponding GitHub labels are created automatically in your repository if they do not already exist.
+These categories are built into the widget. Self-hosted deployments can customize the GitHub labels applied by each category with `data-category-labels` when `ALLOW_CLIENT_CATEGORY_LABELS` is set to `"true"`:
+
+```html
+<script
+  src="https://bugdrop.neonwatty.workers.dev/widget.js"
+  data-repo="acme-corp/my-app"
+  data-category-labels='{"bug":["defect","frontend"],"feature":"product-feedback","question":"support"}'
+></script>
+```
+
+Each category can map to a single label string or an array of labels. Omitted categories keep their default labels, and every issue still receives the `bugdrop` label.
+
+Hosted deployments do not trust label mappings from public browser requests. Use server-side `CATEGORY_LABELS` configuration for authoritative mappings:
+
+```json
+{
+  "acme-corp/my-app": {
+    "bug": ["defect", "frontend"],
+    "feature": "product-feedback",
+    "question": "support"
+  }
+}
+```
+
+Only the built-in keys `bug`, `feature`, and `question` are recognized. Each category can use 1-5 labels, and each label must be 1-100 characters. If GitHub rejects a configured label, BugDrop retries the issue with default labels and adds a label mapping warning to the issue body.
 
 ## Automatic System Information
 
