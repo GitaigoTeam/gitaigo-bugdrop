@@ -20,7 +20,10 @@ const DEFAULT_CATEGORY_LABELS: Record<FeedbackCategory, string[]> = {
 
 const CATEGORY_KEYS: FeedbackCategory[] = ['bug', 'feature', 'question'];
 const MAX_LABELS_PER_CATEGORY = 5;
-const MAX_LABEL_LENGTH = 100;
+// GitHub enforces a 50-char limit on label names; keep validation in lockstep
+// so over-long configured labels surface as a clear local warning rather than
+// going out, getting rejected, and triggering the GitHub-error fallback path.
+const MAX_LABEL_LENGTH = 50;
 
 // CORS middleware with origin whitelist
 api.use('*', async (c, next) => {
@@ -442,6 +445,16 @@ function normalizeLabelValue(
       };
     }
 
+    // Reject ASCII control characters (newlines, NUL, etc). A label like
+    // "foo\n## Compromised" passes length validation but breaks out of the
+    // inline-code span and injects markdown into the issue body.
+    if (hasControlChars(rawLabel)) {
+      return {
+        valid: false,
+        warning: `Invalid labels for category "${category}": labels cannot contain control characters.`,
+      };
+    }
+
     const label = rawLabel.trim();
     if (!label || label.length > MAX_LABEL_LENGTH) {
       return {
@@ -457,6 +470,14 @@ function normalizeLabelValue(
 
 function uniqueLabels(labels: string[]): string[] {
   return Array.from(new Set(labels));
+}
+
+function hasControlChars(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
 }
 
 function sameLabels(left: string[], right: string[]): boolean {

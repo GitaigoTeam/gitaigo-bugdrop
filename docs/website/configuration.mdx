@@ -173,7 +173,7 @@ Only enable this when your worker's `ALLOWED_ORIGINS` is locked down to trusted 
 ### Rules and behavior
 
 - Recognized keys: `bug`, `feature`, `question`. Other keys are ignored with a warning.
-- Each category accepts a single label string or an array of 1-5 strings; each label must be 1-100 characters after trimming.
+- Each category accepts a single label string or an array of 1-5 strings; each label must be 1-50 characters after trimming (GitHub's limit). Labels containing control characters are rejected.
 - Every issue also receives the `bugdrop` label (always added).
 - **Precedence**: when both server and client mappings are present, `CATEGORY_LABELS` wins.
 - **Fail-closed on misconfig**: if `CATEGORY_LABELS` is set but unusable (malformed JSON, wrong shape, or a per-repo map with no entry for the current repo and no `"*"` fallback), the worker uses default labels and emits a warning — it does **not** silently fall back to `data-category-labels`. This keeps a typo from handing label control back to the browser.

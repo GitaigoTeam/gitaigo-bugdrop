@@ -190,7 +190,7 @@ Validation rules:
 
 - Recognized categories: `bug`, `feature`, `question`. Unknown keys are dropped with a warning.
 - Each category accepts a single label or an array of **1-5** labels.
-- Each label must be **1-100 characters** after trimming. Whitespace-only labels are rejected.
+- Each label must be **1-50 characters** after trimming (matching GitHub's label-name limit). Whitespace-only labels and labels containing control characters (newlines, NUL, etc.) are rejected.
 - Every issue also receives the `bugdrop` label automatically.
 
 Self-hosted deployments can also opt into script-tag mappings by setting `ALLOW_CLIENT_CATEGORY_LABELS = "true"` (case-sensitive — values like `"True"`, `"1"`, or `"yes"` keep the gate closed) and using `data-category-labels` on pages you control. Only enable this when your worker is locked down to trusted origins.

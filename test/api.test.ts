@@ -775,11 +775,11 @@ describe('API Routes', () => {
       expect(mockCreateIssue.mock.calls[0][5]).toEqual(['a', 'b', 'c', 'd', 'e', 'bugdrop']);
     });
 
-    it('should reject CATEGORY_LABELS labels longer than 100 characters', async () => {
+    it('should reject CATEGORY_LABELS labels longer than 50 characters (GitHub limit)', async () => {
       const env = {
         ...mockEnv,
         CATEGORY_LABELS: JSON.stringify({
-          bug: 'x'.repeat(101),
+          bug: 'x'.repeat(51),
         }),
       };
 
@@ -792,7 +792,80 @@ describe('API Routes', () => {
 
       expect(res.status).toBe(200);
       expect(mockCreateIssue.mock.calls[0][5]).toEqual(['bug', 'bugdrop']);
-      expect(mockCreateIssue.mock.calls[0][4]).toContain('1-100 characters');
+      expect(mockCreateIssue.mock.calls[0][4]).toContain('1-50 characters');
+    });
+
+    it('should accept exactly 50-character labels (boundary)', async () => {
+      const exactly50 = 'x'.repeat(50);
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({ bug: exactly50 }),
+      };
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validPayload),
+      });
+      const res = await app.fetch(req, env);
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual([exactly50, 'bugdrop']);
+    });
+
+    it('should reject labels with embedded newlines (markdown injection guard)', async () => {
+      // Without the control-char guard, "foo\n## Compromised" would break out
+      // of the inline-code span when rendered into the issue body markdown
+      // and inject a heading into the maintainer's tracker.
+      const malicious = 'foo\n\n## Compromised\n\n- evil';
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({ bug: malicious }),
+      };
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validPayload),
+      });
+      const res = await app.fetch(req, env);
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['bug', 'bugdrop']);
+      const issueBody = mockCreateIssue.mock.calls[0][4];
+      expect(issueBody).toContain('cannot contain control characters');
+      // Defensive: confirm the malicious markdown didn't slip through anywhere.
+      expect(issueBody).not.toContain('## Compromised');
+    });
+
+    it('should reject labels containing NUL byte', async () => {
+      const malicious = 'foo' + String.fromCharCode(0) + 'bar';
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({ bug: malicious }),
+      };
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validPayload),
+      });
+      const res = await app.fetch(req, env);
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['bug', 'bugdrop']);
+      expect(mockCreateIssue.mock.calls[0][4]).toContain('cannot contain control characters');
+    });
+
+    it('should reject labels containing DEL (0x7f)', async () => {
+      const malicious = 'foo' + String.fromCharCode(0x7f) + 'bar';
+      const env = {
+        ...mockEnv,
+        CATEGORY_LABELS: JSON.stringify({ bug: malicious }),
+      };
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validPayload),
+      });
+      const res = await app.fetch(req, env);
+      expect(res.status).toBe(200);
+      expect(mockCreateIssue.mock.calls[0][5]).toEqual(['bug', 'bugdrop']);
+      expect(mockCreateIssue.mock.calls[0][4]).toContain('cannot contain control characters');
     });
 
     it('should trim whitespace and reject whitespace-only labels', async () => {
@@ -814,7 +887,7 @@ describe('API Routes', () => {
       expect(res.status).toBe(200);
       expect(mockCreateIssue.mock.calls[0][5]).toEqual(['defect', 'bugdrop']);
       // The whitespace-only feature mapping must produce a length warning.
-      expect(mockCreateIssue.mock.calls[0][4]).toContain('1-100 characters');
+      expect(mockCreateIssue.mock.calls[0][4]).toContain('1-50 characters');
     });
 
     it('should ignore __proto__ and constructor keys in CATEGORY_LABELS', async () => {
