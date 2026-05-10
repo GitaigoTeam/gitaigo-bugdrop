@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { collectMaskRects, applyMaskToImage } from '../src/widget/mask';
+import { collectMaskRects, applyMaskToImage, translateMaskRect } from '../src/widget/mask';
 
 describe('mask module exports', () => {
   it('exports collectMaskRects', () => {
@@ -215,5 +215,40 @@ describe('collectMaskRects — coordinates and visibility', () => {
     document.body.appendChild(div);
 
     expect(collectMaskRects(document.body)).toEqual([{ x: 10, y: 20, w: 100, h: 50 }]);
+  });
+});
+
+describe('translateMaskRect', () => {
+  it('scales a rect by pixelRatio with no origin offset', () => {
+    expect(
+      translateMaskRect({ x: 10, y: 20, w: 100, h: 50 }, 2, { x: 0, y: 0 }, 1000, 1000)
+    ).toEqual({ x: 20, y: 40, w: 200, h: 100 });
+  });
+
+  it('subtracts originOffset before scaling', () => {
+    expect(
+      translateMaskRect({ x: 110, y: 220, w: 100, h: 50 }, 2, { x: 100, y: 200 }, 1000, 1000)
+    ).toEqual({ x: 20, y: 40, w: 200, h: 100 });
+  });
+
+  it('clips a rect that overflows the canvas on the right and bottom', () => {
+    expect(translateMaskRect({ x: 90, y: 90, w: 30, h: 30 }, 1, { x: 0, y: 0 }, 100, 100)).toEqual({
+      x: 90,
+      y: 90,
+      w: 10,
+      h: 10,
+    });
+  });
+
+  it('clips a rect that starts to the left and above the canvas', () => {
+    expect(
+      translateMaskRect({ x: -10, y: -20, w: 30, h: 50 }, 1, { x: 0, y: 0 }, 100, 100)
+    ).toEqual({ x: 0, y: 0, w: 20, h: 30 });
+  });
+
+  it('returns a non-positive size when fully outside the canvas', () => {
+    const out = translateMaskRect({ x: 1000, y: 1000, w: 50, h: 50 }, 1, { x: 0, y: 0 }, 100, 100);
+    expect(out.w).toBeLessThanOrEqual(0);
+    expect(out.h).toBeLessThanOrEqual(0);
   });
 });

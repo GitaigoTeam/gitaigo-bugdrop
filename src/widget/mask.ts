@@ -47,11 +47,63 @@ function walk(node: Element, rects: MaskRect[]): void {
   }
 }
 
+export function translateMaskRect(
+  rect: MaskRect,
+  pixelRatio: number,
+  originOffset: { x: number; y: number },
+  canvasWidth: number,
+  canvasHeight: number
+): MaskRect {
+  const rawX = (rect.x - originOffset.x) * pixelRatio;
+  const rawY = (rect.y - originOffset.y) * pixelRatio;
+  const rawW = rect.w * pixelRatio;
+  const rawH = rect.h * pixelRatio;
+
+  const x = Math.max(0, rawX);
+  const y = Math.max(0, rawY);
+  const right = Math.min(canvasWidth, rawX + rawW);
+  const bottom = Math.min(canvasHeight, rawY + rawH);
+
+  return {
+    x,
+    y,
+    w: right - x,
+    h: bottom - y,
+  };
+}
+
 export async function applyMaskToImage(
   dataUrl: string,
-  _rects: MaskRect[],
-  _pixelRatio: number,
-  _originOffset?: { x: number; y: number }
+  rects: MaskRect[],
+  pixelRatio: number,
+  originOffset: { x: number; y: number } = { x: 0, y: 0 }
 ): Promise<string> {
-  return dataUrl;
+  if (rects.length === 0) return dataUrl;
+
+  const img = await loadImage(dataUrl);
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth || img.width;
+  canvas.height = img.naturalHeight || img.height;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Failed to get canvas context');
+
+  ctx.drawImage(img, 0, 0);
+  ctx.fillStyle = '#000';
+  for (const rect of rects) {
+    const t = translateMaskRect(rect, pixelRatio, originOffset, canvas.width, canvas.height);
+    if (t.w <= 0 || t.h <= 0) continue;
+    ctx.fillRect(t.x, t.y, t.w, t.h);
+  }
+
+  return canvas.toDataURL('image/png');
+}
+
+function loadImage(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to apply privacy masks'));
+    img.src = dataUrl;
+  });
 }
