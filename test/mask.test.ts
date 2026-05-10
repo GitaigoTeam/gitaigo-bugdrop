@@ -101,3 +101,74 @@ describe('collectMaskRects — built-in defaults', () => {
     expect(collectMaskRects(document.body)).toEqual([{ x: 0, y: 0, w: 200, h: 30 }]);
   });
 });
+
+describe('collectMaskRects — nesting and scoping', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('returns parent-only rect when a masked element is inside another masked element', () => {
+    const parent = withRect(document.createElement('div'), 0, 0, 200, 100);
+    parent.setAttribute('data-bugdrop-mask', '');
+    const child = withRect(document.createElement('div'), 10, 10, 50, 30);
+    child.setAttribute('data-bugdrop-mask', '');
+    parent.appendChild(child);
+    document.body.appendChild(parent);
+
+    expect(collectMaskRects(document.body)).toEqual([{ x: 0, y: 0, w: 200, h: 100 }]);
+  });
+
+  it('does not separately mask password input nested inside masked ancestor', () => {
+    const parent = withRect(document.createElement('div'), 0, 0, 200, 100);
+    parent.setAttribute('data-bugdrop-mask', '');
+    const password = withRect(document.createElement('input'), 10, 10, 100, 20);
+    password.type = 'password';
+    parent.appendChild(password);
+    document.body.appendChild(parent);
+
+    expect(collectMaskRects(document.body)).toEqual([{ x: 0, y: 0, w: 200, h: 100 }]);
+  });
+
+  it('returns rects for descendant masks of an unmasked parent', () => {
+    const parent = withRect(document.createElement('div'), 0, 0, 200, 100);
+    const a = withRect(document.createElement('span'), 10, 10, 50, 20);
+    a.setAttribute('data-bugdrop-mask', '');
+    const b = withRect(document.createElement('span'), 100, 10, 50, 20);
+    b.setAttribute('data-bugdrop-mask', '');
+    parent.append(a, b);
+    document.body.appendChild(parent);
+
+    expect(collectMaskRects(document.body)).toEqual([
+      { x: 10, y: 10, w: 50, h: 20 },
+      { x: 100, y: 10, w: 50, h: 20 },
+    ]);
+  });
+
+  it('scoped collection ignores siblings outside the root', () => {
+    const target = withRect(document.createElement('div'), 0, 0, 200, 100);
+    const inside = withRect(document.createElement('span'), 10, 10, 50, 20);
+    inside.setAttribute('data-bugdrop-mask', '');
+    target.appendChild(inside);
+    const outside = withRect(document.createElement('span'), 300, 0, 50, 20);
+    outside.setAttribute('data-bugdrop-mask', '');
+    document.body.append(target, outside);
+
+    expect(collectMaskRects(target)).toEqual([{ x: 10, y: 10, w: 50, h: 20 }]);
+  });
+
+  it('root inclusion: returns a rect when root itself is masked', () => {
+    const root = withRect(document.createElement('div'), 0, 0, 200, 100);
+    root.setAttribute('data-bugdrop-mask', '');
+    document.body.appendChild(root);
+
+    expect(collectMaskRects(root)).toEqual([{ x: 0, y: 0, w: 200, h: 100 }]);
+  });
+
+  it('root inclusion: returns a rect when root is a built-in default (password input)', () => {
+    const input = withRect(document.createElement('input'), 0, 0, 200, 30);
+    input.type = 'password';
+    document.body.appendChild(input);
+
+    expect(collectMaskRects(input)).toEqual([{ x: 0, y: 0, w: 200, h: 30 }]);
+  });
+});
