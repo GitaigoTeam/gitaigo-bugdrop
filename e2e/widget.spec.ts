@@ -3812,4 +3812,117 @@ test.describe('Screenshot Masking', () => {
     // Background of #public-note is light yellow; assert it's NOT solid black.
     expect(await pixelAt(page, screenshot, cx, cy)).not.toEqual([0, 0, 0, 255]);
   });
+
+  test('parent mask covers all descendants (inheritance)', async ({ page }) => {
+    const { screenshot, pixelRatio } = await submitFeedbackWithFullPageCapture(
+      page,
+      '/test/masking-nested.html'
+    );
+
+    // Sample inside the deeply-nested .inner-masked element — the OUTER mask
+    // should already cover it, so this pixel must be opaque black.
+    const innerRect = await docRectOf(page, '.inner-masked');
+    const ix = Math.floor((innerRect.x + innerRect.w / 2) * pixelRatio);
+    const iy = Math.floor((innerRect.y + innerRect.h / 2) * pixelRatio);
+    expect(await pixelAt(page, screenshot, ix, iy)).toEqual([0, 0, 0, 255]);
+
+    // Sibling area inside the masked outer container should also be covered.
+    // Sample 5px below the outer top edge — still inside the mask but outside
+    // any nested element.
+    const outerRect = await docRectOf(page, '#outer-masked');
+    const ox = Math.floor((outerRect.x + 10) * pixelRatio);
+    const oy = Math.floor((outerRect.y + 5) * pixelRatio);
+    expect(await pixelAt(page, screenshot, ox, oy)).toEqual([0, 0, 0, 255]);
+  });
+
+  test('masked child of unmasked parent is masked; siblings are not', async ({ page }) => {
+    const { screenshot, pixelRatio } = await submitFeedbackWithFullPageCapture(
+      page,
+      '/test/masking-nested.html'
+    );
+
+    const child = await docRectOf(page, '#masked-child');
+    const cx = Math.floor((child.x + child.w / 2) * pixelRatio);
+    const cy = Math.floor((child.y + child.h / 2) * pixelRatio);
+    expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
+
+    const sibling = await docRectOf(page, '#visible-sibling');
+    const sx = Math.floor((sibling.x + sibling.w / 2) * pixelRatio);
+    const sy = Math.floor((sibling.y + sibling.h / 2) * pixelRatio);
+    expect(await pixelAt(page, screenshot, sx, sy)).not.toEqual([0, 0, 0, 255]);
+  });
+
+  test('scrolled full-page capture masks an element below the initial viewport', async ({
+    page,
+  }) => {
+    // A scrolled variant of the helper — same flow, but scrolls AFTER goto so the page is
+    // captured while the user is offset from the top.
+    let payload: Record<string, unknown> | null = null;
+    await page.route('**/api/check/**', async route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      })
+    );
+    await page.route('**/feedback', async route => {
+      payload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, issueNumber: 1, issueUrl: '#', isPublic: false }),
+      });
+    });
+
+    // Inject a tall spacer + a masked target below the fold AT page load.
+    await page.addInitScript(() => {
+      window.addEventListener('DOMContentLoaded', () => {
+        const spacer = document.createElement('div');
+        spacer.style.height = '2000px';
+        spacer.id = 'spacer';
+        const target = document.createElement('div');
+        target.id = 'below-fold-mask';
+        target.setAttribute('data-bugdrop-mask', '');
+        target.style.cssText = 'width: 200px; height: 100px; background: #ccc;';
+        target.textContent = 'sensitive';
+        document.body.append(spacer, target);
+      });
+    });
+
+    await page.goto('/test/masking-basic.html');
+    await page.evaluate(() => window.scrollTo(0, 1500));
+
+    const host = page.locator('#bugdrop-host');
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+    await host.locator('css=#title').fill('Scroll mask');
+    // Note: in optional mode, the include-screenshot checkbox must be checked.
+    await host.locator('css=#include-screenshot').check();
+    await host.locator('css=#submit-btn').click();
+    await host.locator('css=[data-action="capture"]').click();
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 30000 });
+    await host.locator('css=[data-action="done"]').click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+
+    if (!payload) throw new Error('no payload');
+
+    const screenshot = payload.screenshot as string;
+    // Infer pixelRatio the same way the existing helper does (full-page capture):
+    // naturalWidth / window.innerWidth.
+    const pr = await page.evaluate(
+      dataUrl =>
+        new Promise<number>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img.naturalWidth / window.innerWidth);
+          img.onerror = () => reject(new Error('image load failed'));
+          img.src = dataUrl;
+        }),
+      screenshot
+    );
+
+    const rect = await docRectOf(page, '#below-fold-mask');
+    const cx = Math.floor((rect.x + rect.w / 2) * pr);
+    const cy = Math.floor((rect.y + rect.h / 2) * pr);
+    expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
+  });
 });
