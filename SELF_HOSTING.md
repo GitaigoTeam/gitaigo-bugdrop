@@ -168,16 +168,36 @@ The release tag (e.g., `v1.2.0`) becomes the version number for the widget files
 
 ### Custom Category Labels
 
-For authoritative mappings, configure labels on the worker:
+For authoritative mappings, configure labels on the worker. Two JSON shapes are supported.
+
+**Flat** — applies to every repo your worker serves:
 
 ```toml
 [vars]
-CATEGORY_LABELS = '{"owner/repo":{"bug":["defect","frontend"],"feature":"product-feedback","question":"support"}}'
+CATEGORY_LABELS = '{"bug":["defect","frontend"],"feature":"product-feedback","question":"support"}'
 ```
 
-Self-hosted deployments can also opt into script-tag mappings by setting `ALLOW_CLIENT_CATEGORY_LABELS = "true"` and using `data-category-labels` on pages you control. Only enable this when your worker is locked down to trusted origins.
+**Per-repo** with optional `"*"` wildcard fallback:
+
+```toml
+[vars]
+CATEGORY_LABELS = '{"owner/repo":{"bug":["defect","frontend"]},"*":{"bug":"triage"}}'
+```
+
+The shape is detected automatically: top-level keys containing `/` or equal to `*` are treated as repos; otherwise the object is treated as flat.
+
+Validation rules:
+
+- Recognized categories: `bug`, `feature`, `question`. Unknown keys are dropped with a warning.
+- Each category accepts a single label or an array of **1-5** labels.
+- Each label must be **1-100 characters** after trimming. Whitespace-only labels are rejected.
+- Every issue also receives the `bugdrop` label automatically.
+
+Self-hosted deployments can also opt into script-tag mappings by setting `ALLOW_CLIENT_CATEGORY_LABELS = "true"` (case-sensitive — values like `"True"`, `"1"`, or `"yes"` keep the gate closed) and using `data-category-labels` on pages you control. Only enable this when your worker is locked down to trusted origins.
 
 When both are set, `CATEGORY_LABELS` takes precedence: the worker uses the server-side mapping and ignores `data-category-labels`. If `CATEGORY_LABELS` is set but unusable (malformed JSON, wrong shape, or a per-repo map with no entry for the current repo and no `"*"` fallback), the worker falls back to default GitHub labels and surfaces a warning in the issue body — it does **not** fall through to the browser-supplied mapping. This keeps a typo in your env config from silently handing label control back to the page.
+
+Warnings emitted during label resolution are also written to worker logs (visible via `wrangler tail`) and returned in the `/feedback` success response under `labelMappingWarnings` so monitoring can detect misconfigurations without parsing issue bodies.
 
 ### Locking Down Allowed Origins (Recommended)
 
