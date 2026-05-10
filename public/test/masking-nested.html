@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>BugDrop — Masking Nested</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        font-family: system-ui, sans-serif;
+      }
+      .panel {
+        padding: 16px;
+        margin: 12px 0;
+        border-radius: 6px;
+      }
+      .outer {
+        background: #f0f4ff;
+        max-width: 480px;
+      }
+      .inner-masked {
+        background: #fffbe6;
+        padding: 12px;
+        margin-top: 8px;
+      }
+      .public-sibling {
+        background: #e6ffec;
+        padding: 12px;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Masking — Nested Fixture</h1>
+
+    <div id="outer-masked" class="panel outer" data-bugdrop-mask>
+      <p>Outer container is masked — every descendant should be covered.</p>
+      <div class="inner-masked" data-bugdrop-mask>Inner element also marked (parent rect wins).</div>
+      <p>Sibling text inside the masked outer container.</p>
+    </div>
+
+    <div id="unmasked-parent" class="panel outer" style="background: #fff;">
+      <p>This parent is NOT masked.</p>
+      <div id="masked-child" class="public-sibling" data-bugdrop-mask>
+        But this child IS masked — should appear black.
+      </div>
+      <p id="visible-sibling">This sibling text should appear in the screenshot.</p>
+    </div>
+
+    <script src="/widget.js" data-repo="test-org/test-repo" data-screenshot="optional"></script>
+  </body>
+</html>

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>BugDrop — Masking Basic</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        font-family: system-ui, sans-serif;
+      }
+      .field {
+        margin: 16px 0;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      input,
+      .panel {
+        padding: 8px 12px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+      input {
+        width: 280px;
+      }
+      .panel {
+        background: #fffbe6;
+        max-width: 320px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Masking — Basic Fixture</h1>
+
+    <div class="field">
+      <label for="username">Username</label>
+      <input id="username" type="text" value="alice" />
+    </div>
+
+    <div class="field">
+      <label for="password">Password (auto-masked)</label>
+      <input id="password" type="password" value="hunter2" />
+    </div>
+
+    <div class="field">
+      <label>Customer (explicit mask)</label>
+      <div id="customer-panel" class="panel" data-bugdrop-mask>
+        Jane Doe — jane@acme.com — 555-0100
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Public note (not masked)</label>
+      <div id="public-note" class="panel">This text should appear in the screenshot.</div>
+    </div>
+
+    <script src="/widget.js" data-repo="test-org/test-repo" data-screenshot="optional"></script>
+  </body>
+</html>

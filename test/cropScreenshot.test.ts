@@ -8,6 +8,7 @@ import {
   cropScreenshot,
   canCaptureViewportNatively,
   beginViewportCapture,
+  captureScreenshot,
 } from '../src/widget/screenshot';
 
 describe('getPixelRatio', () => {
@@ -162,5 +163,103 @@ describe('native viewport capture', () => {
 
     await expect(beginViewportCapture()).resolves.toBe('data:image/png;base64,test');
     expect(window.__bugdropMockViewportCapture).toHaveBeenCalledOnce();
+  });
+});
+
+describe('captureScreenshot integrates with mask pipeline', () => {
+  let OriginalImage: typeof Image;
+
+  beforeEach(() => {
+    document.body.replaceChildren();
+    Object.defineProperty(window, 'scrollX', { value: 0, configurable: true });
+    Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
+    Object.defineProperty(window, 'devicePixelRatio', { value: 1, configurable: true });
+
+    // jsdom does not fire Image onload for data URLs; replace with a stub that does.
+    OriginalImage = window.Image;
+    (window as unknown as { Image: unknown }).Image = class FakeImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      naturalWidth = 1;
+      naturalHeight = 1;
+      width = 1;
+      height = 1;
+      set src(_: string) {
+        // Fire onload asynchronously so callers can set it first.
+        Promise.resolve().then(() => this.onload?.());
+      }
+    };
+
+    // jsdom does not implement canvas 2D context; stub it to avoid "Failed to get canvas context".
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      fillRect: vi.fn(),
+      fillStyle: '',
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(
+      'data:image/png;base64,masked'
+    );
+  });
+
+  afterEach(() => {
+    (window as unknown as { Image: unknown }).Image = OriginalImage;
+    delete (window as unknown as { __bugdropMockToPng?: unknown }).__bugdropMockToPng;
+    vi.restoreAllMocks();
+  });
+
+  it('returns the toPng output unchanged when no masked elements exist', async () => {
+    const STUB =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+    (window as unknown as { __bugdropMockToPng: () => Promise<string> }).__bugdropMockToPng = () =>
+      Promise.resolve(STUB);
+
+    const result = await captureScreenshot();
+
+    // No masks → applyMaskToImage short-circuits and returns the input unchanged.
+    expect(result).toBe(STUB);
+  });
+
+  it('completes element-scoped capture when the picked element has a masked descendant', async () => {
+    const target = document.createElement('section');
+    target.getBoundingClientRect = () =>
+      ({
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 200,
+        top: 0,
+        left: 0,
+        bottom: 200,
+        right: 200,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+    const masked = document.createElement('div');
+    masked.setAttribute('data-bugdrop-mask', '');
+    masked.getBoundingClientRect = () =>
+      ({
+        x: 10,
+        y: 10,
+        width: 50,
+        height: 30,
+        top: 10,
+        left: 10,
+        bottom: 40,
+        right: 60,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+    target.appendChild(masked);
+    document.body.appendChild(target);
+
+    const STUB =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+    (window as unknown as { __bugdropMockToPng: () => Promise<string> }).__bugdropMockToPng = () =>
+      Promise.resolve(STUB);
+
+    // applyMaskToImage must have run: only it produces the masked sentinel.
+    await expect(captureScreenshot(target)).resolves.toBe('data:image/png;base64,masked');
   });
 });

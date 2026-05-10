@@ -37,6 +37,10 @@ That's it! Users can now click the bug button to submit feedback as GitHub Issue
 
 > **Security note:** BugDrop is not a spam or malware filtering service. Treat feedback and screenshots as unauthenticated user-generated content. Exclude `bugdrop-screenshots` from CI/deploy workflows, and self-host behind your own WAF/CAPTCHA/content controls for stricter environments.
 
+## Features
+
+- 🔒 **Privacy masking** — tag sensitive elements with `data-bugdrop-mask` and BugDrop covers them in the screenshot before it's submitted. Passwords and credit-card inputs are masked automatically.
+
 ## Widget Options
 
 | Attribute       | Values                                               | Default          |
