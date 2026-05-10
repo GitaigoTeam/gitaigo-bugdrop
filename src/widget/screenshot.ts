@@ -1,4 +1,5 @@
 import * as htmlToImage from 'html-to-image';
+import { collectMaskRects, applyMaskToImage } from './mask';
 
 const CAPTURE_TIMEOUT_MS = 15_000;
 const DOM_COMPLEXITY_THRESHOLD = 3_000;
@@ -197,9 +198,30 @@ export async function captureScreenshot(
     filter: (node: HTMLElement) => node.id !== 'bugdrop-host',
   };
 
+  const rects = collectMaskRects(target);
+  const originOffset = element
+    ? (() => {
+        const r = element.getBoundingClientRect();
+        return { x: r.left + window.scrollX, y: r.top + window.scrollY };
+      })()
+    : { x: 0, y: 0 };
+
   const capturePromise = toPng(target as HTMLElement, opts);
 
-  return withCaptureTimeout(capturePromise);
+  let timer: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error('Screenshot capture timed out — the page may be too complex')),
+      CAPTURE_TIMEOUT_MS
+    );
+  });
+
+  try {
+    const dataUrl = await Promise.race([capturePromise, timeoutPromise]);
+    return await applyMaskToImage(dataUrl, rects, pixelRatio, originOffset);
+  } finally {
+    clearTimeout(timer!);
+  }
 }
 
 export async function cropScreenshot(
