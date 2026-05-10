@@ -16,7 +16,12 @@ function shouldMask(el: Element): boolean {
 function pushRect(el: Element, rects: MaskRect[]): void {
   const rect = el.getBoundingClientRect();
   if (rect.width === 0 && rect.height === 0) return;
-  rects.push({ x: rect.left, y: rect.top, w: rect.width, h: rect.height });
+  rects.push({
+    x: rect.left + window.scrollX,
+    y: rect.top + window.scrollY,
+    w: rect.width,
+    h: rect.height,
+  });
 }
 
 export function collectMaskRects(root: Element): MaskRect[] {

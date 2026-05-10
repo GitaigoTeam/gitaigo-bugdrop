@@ -172,3 +172,48 @@ describe('collectMaskRects — nesting and scoping', () => {
     expect(collectMaskRects(input)).toEqual([{ x: 0, y: 0, w: 200, h: 30 }]);
   });
 });
+
+describe('collectMaskRects — coordinates and visibility', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+    Object.defineProperty(window, 'scrollX', { value: 0, configurable: true });
+    Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
+  });
+
+  it('returns document coordinates by adding window.scrollX / scrollY', () => {
+    Object.defineProperty(window, 'scrollX', { value: 50, configurable: true });
+    Object.defineProperty(window, 'scrollY', { value: 200, configurable: true });
+
+    const div = withRect(document.createElement('div'), 10, 20, 100, 50);
+    div.setAttribute('data-bugdrop-mask', '');
+    document.body.appendChild(div);
+
+    expect(collectMaskRects(document.body)).toEqual([{ x: 60, y: 220, w: 100, h: 50 }]);
+  });
+
+  it('skips elements with zero getBoundingClientRect()', () => {
+    const div = withRect(document.createElement('div'), 0, 0, 0, 0);
+    div.setAttribute('data-bugdrop-mask', '');
+    document.body.appendChild(div);
+
+    expect(collectMaskRects(document.body)).toEqual([]);
+  });
+
+  it('includes visibility:hidden elements (defense in depth)', () => {
+    const div = withRect(document.createElement('div'), 10, 20, 100, 50);
+    div.setAttribute('data-bugdrop-mask', '');
+    div.style.visibility = 'hidden';
+    document.body.appendChild(div);
+
+    expect(collectMaskRects(document.body)).toEqual([{ x: 10, y: 20, w: 100, h: 50 }]);
+  });
+
+  it('includes opacity:0 elements (defense in depth)', () => {
+    const div = withRect(document.createElement('div'), 10, 20, 100, 50);
+    div.setAttribute('data-bugdrop-mask', '');
+    div.style.opacity = '0';
+    document.body.appendChild(div);
+
+    expect(collectMaskRects(document.body)).toEqual([{ x: 10, y: 20, w: 100, h: 50 }]);
+  });
+});
