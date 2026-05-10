@@ -3656,3 +3656,160 @@ test.describe('Screenshot Mode Configuration', () => {
     expect(getPayload()?.screenshot).toEqual(expect.stringMatching(/^data:image\/png;base64,/));
   });
 });
+
+test.describe('Screenshot Masking', () => {
+  // Sample a single pixel from a base64 PNG payload via a page-side canvas.
+  async function pixelAt(
+    page: Page,
+    dataUrl: string,
+    x: number,
+    y: number
+  ): Promise<[number, number, number, number]> {
+    return page.evaluate(
+      ({ dataUrl, x, y }) =>
+        new Promise<[number, number, number, number]>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            const c = document.createElement('canvas');
+            c.width = img.naturalWidth;
+            c.height = img.naturalHeight;
+            const ctx = c.getContext('2d');
+            if (!ctx) {
+              reject(new Error('no ctx'));
+              return;
+            }
+            ctx.drawImage(img, 0, 0);
+            const px = ctx.getImageData(x, y, 1, 1).data;
+            resolve([px[0], px[1], px[2], px[3]]);
+          };
+          img.onerror = () => reject(new Error('image load failed'));
+          img.src = dataUrl;
+        }),
+      { dataUrl, x, y }
+    );
+  }
+
+  // Read an element's bounding rect in document coordinates from the live page.
+  async function docRectOf(page: Page, selector: string) {
+    return page.evaluate(sel => {
+      const el = document.querySelector(sel);
+      if (!el) throw new Error(`no element matches ${sel}`);
+      const r = el.getBoundingClientRect();
+      return {
+        x: r.left + window.scrollX,
+        y: r.top + window.scrollY,
+        w: r.width,
+        h: r.height,
+      };
+    }, selector);
+  }
+
+  // Walk the standard feedback flow up to a captured screenshot, returning the submitted payload.
+  async function submitFeedbackWithFullPageCapture(
+    page: Page,
+    fixturePath: string
+  ): Promise<{ screenshot: string; pixelRatio: number }> {
+    let payload: Record<string, unknown> | null = null;
+    await page.route('**/api/check/**', async route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      })
+    );
+    await page.route('**/feedback', async route => {
+      payload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, issueNumber: 1, issueUrl: '#', isPublic: false }),
+      });
+    });
+
+    await page.goto(fixturePath);
+    const host = page.locator('#bugdrop-host');
+
+    await host.locator('css=.bd-trigger').waitFor();
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+
+    await host.locator('css=#title').fill('Mask test');
+
+    // Opt in to screenshot capture.
+    await host.locator('css=#include-screenshot').check();
+    await host.locator('css=#submit-btn').click();
+
+    // Choose Full Page capture.
+    await expect(host.locator('css=[data-action="capture"]')).toBeVisible({ timeout: 5000 });
+    await host.locator('css=[data-action="capture"]').click();
+
+    // Wait for annotation step (proves capture+mask completed).
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 30000 });
+
+    // Submit annotated screenshot.
+    await host.locator('css=[data-action="done"]').click();
+
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+
+    if (!payload) throw new Error('no payload captured');
+
+    // Derive the actual pixel ratio from the image dimensions rather than
+    // window.devicePixelRatio, because the widget's getPixelRatio() enforces a
+    // minimum scale of 2 regardless of the browser's DPR.
+    const screenshotDataUrl = payload.screenshot as string;
+    const pr = await page.evaluate(
+      ({ dataUrl }) =>
+        new Promise<number>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            const vw = window.innerWidth;
+            resolve(vw > 0 ? img.naturalWidth / vw : 1);
+          };
+          img.onerror = () => reject(new Error('image load failed'));
+          img.src = dataUrl;
+        }),
+      { dataUrl: screenshotDataUrl }
+    );
+    return { screenshot: screenshotDataUrl, pixelRatio: pr };
+  }
+
+  test('masks input[type=password] by default', async ({ page }) => {
+    const { screenshot, pixelRatio } = await submitFeedbackWithFullPageCapture(
+      page,
+      '/test/masking-basic.html'
+    );
+
+    const rect = await docRectOf(page, '#password');
+    const cx = Math.floor((rect.x + rect.w / 2) * pixelRatio);
+    const cy = Math.floor((rect.y + rect.h / 2) * pixelRatio);
+
+    expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
+  });
+
+  test('masks elements tagged with data-bugdrop-mask', async ({ page }) => {
+    const { screenshot, pixelRatio } = await submitFeedbackWithFullPageCapture(
+      page,
+      '/test/masking-basic.html'
+    );
+
+    const rect = await docRectOf(page, '#customer-panel');
+    const cx = Math.floor((rect.x + rect.w / 2) * pixelRatio);
+    const cy = Math.floor((rect.y + rect.h / 2) * pixelRatio);
+
+    expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
+  });
+
+  test('does not mask unrelated elements', async ({ page }) => {
+    const { screenshot, pixelRatio } = await submitFeedbackWithFullPageCapture(
+      page,
+      '/test/masking-basic.html'
+    );
+
+    const rect = await docRectOf(page, '#public-note');
+    const cx = Math.floor((rect.x + rect.w / 2) * pixelRatio);
+    const cy = Math.floor((rect.y + rect.h / 2) * pixelRatio);
+
+    // Background of #public-note is light yellow; assert it's NOT solid black.
+    expect(await pixelAt(page, screenshot, cx, cy)).not.toEqual([0, 0, 0, 255]);
+  });
+});
