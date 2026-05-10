@@ -17,7 +17,7 @@ export interface Env {
 }
 
 export type FeedbackCategory = 'bug' | 'feature' | 'question';
-export type CategoryLabelConfig = Partial<Record<FeedbackCategory, string | string[]>>;
+type CategoryLabelConfig = Partial<Record<FeedbackCategory, string | string[]>>;
 
 export interface FeedbackPayload {
   repo: string; // "owner/repo" format
