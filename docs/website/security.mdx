@@ -73,6 +73,42 @@ BugDrop is built with a privacy-first approach:
 - **Client-side screenshots** -- Screenshots are rendered in the user's browser, not captured server-side
 - **Open source** -- The entire codebase is open source (MIT licensed) and auditable
 
+### Screenshot masking
+
+You can mark sensitive elements so they never appear in submitted screenshots. Add the
+`data-bugdrop-mask` attribute to any element you want covered:
+
+```html
+<input type="email" data-bugdrop-mask />
+
+<div data-bugdrop-mask>
+  <span>Customer name</span>
+  <span>customer@example.com</span>
+</div>
+```
+
+When a user submits feedback, BugDrop paints an opaque rectangle over each tagged
+element's bounding box on the captured PNG before showing the user the annotator
+preview. The user sees what is masked and can audit it before submitting.
+
+**Inheritance.** When an ancestor has `data-bugdrop-mask`, the entire ancestor box is
+masked as a single rectangle. Descendants do not get individual rectangles — this
+prevents gaps from CSS `gap` or non-masked siblings inside a masked container.
+
+**Built-in defaults.** These are always masked, with or without an explicit attribute:
+
+- `input[type="password"]`
+- Any input with `autocomplete="cc-number"`, `cc-csc`, or `cc-exp"`
+
+**Known limitations:**
+
+- Elements inside Shadow DOM and cross-origin iframes are not traversed in this
+  iteration.
+- Mask rectangles are collected at the start of capture. If the page reflows or reveals
+  sensitive elements between collection and the moment `html-to-image` finishes
+  rendering, the mask may not cover the final pixels. Keep masked content stable during
+  the brief capture window.
+
 The only network requests BugDrop makes are:
 
 1. Loading the widget script from Cloudflare Workers
