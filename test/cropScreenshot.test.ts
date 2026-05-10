@@ -259,7 +259,7 @@ describe('captureScreenshot integrates with mask pipeline', () => {
     (window as unknown as { __bugdropMockToPng: () => Promise<string> }).__bugdropMockToPng = () =>
       Promise.resolve(STUB);
 
-    // Should not throw — exercises the element-scoped wiring.
-    await expect(captureScreenshot(target)).resolves.toBeDefined();
+    // applyMaskToImage must have run: only it produces the masked sentinel.
+    await expect(captureScreenshot(target)).resolves.toBe('data:image/png;base64,masked');
   });
 });

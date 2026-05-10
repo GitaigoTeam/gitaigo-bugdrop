@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { collectMaskRects, applyMaskToImage, translateMaskRect } from '../src/widget/mask';
 
 describe('mask module exports', () => {
@@ -250,5 +250,115 @@ describe('translateMaskRect', () => {
     const out = translateMaskRect({ x: 1000, y: 1000, w: 50, h: 50 }, 1, { x: 0, y: 0 }, 100, 100);
     expect(out.w).toBeLessThanOrEqual(0);
     expect(out.h).toBeLessThanOrEqual(0);
+  });
+});
+
+describe('applyMaskToImage', () => {
+  let OriginalImage: typeof Image;
+  let ctx: {
+    drawImage: ReturnType<typeof vi.fn>;
+    fillRect: ReturnType<typeof vi.fn>;
+    fillStyle: string;
+  };
+
+  beforeEach(() => {
+    // Replace Image with a stub that fires onload synchronously (jsdom doesn't for data URLs).
+    OriginalImage = window.Image;
+    (window as unknown as { Image: unknown }).Image = class FakeImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      naturalWidth = 200;
+      naturalHeight = 100;
+      width = 200;
+      height = 100;
+      set src(_: string) {
+        Promise.resolve().then(() => this.onload?.());
+      }
+    };
+
+    ctx = {
+      drawImage: vi.fn(),
+      fillRect: vi.fn(),
+      fillStyle: '',
+    };
+
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      ctx as unknown as CanvasRenderingContext2D
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(
+      'data:image/png;base64,result'
+    );
+  });
+
+  afterEach(() => {
+    (window as unknown as { Image: unknown }).Image = OriginalImage;
+    vi.restoreAllMocks();
+  });
+
+  it('paints rects at translated coords (scales by pixelRatio)', async () => {
+    // FakeImage: naturalWidth=200, naturalHeight=100 → canvas is 200×100
+    // rect {x:5,y:5,w:20,h:10}, pixelRatio=2, originOffset={x:0,y:0}
+    // translateMaskRect: rawX=10, rawY=10, rawW=40, rawH=20
+    // right=min(200,10+40)=50, bottom=min(100,10+20)=30 → no clipping → fillRect(10,10,40,20)
+    await applyMaskToImage('data:image/png;base64,test', [{ x: 5, y: 5, w: 20, h: 10 }], 2, {
+      x: 0,
+      y: 0,
+    });
+    expect(ctx.fillRect).toHaveBeenCalledWith(10, 10, 40, 20);
+  });
+
+  it('returns the input dataUrl unchanged when rects is empty', async () => {
+    const input = 'data:image/png;base64,original';
+    const result = await applyMaskToImage(input, [], 2, { x: 0, y: 0 });
+    expect(result).toBe(input);
+    // No canvas operations needed — short-circuit before any image load.
+    expect(ctx.fillRect).not.toHaveBeenCalled();
+  });
+
+  it('subtracts originOffset before scaling', async () => {
+    // FakeImage: naturalWidth=200, naturalHeight=100 → canvas is 200×100
+    // rect {x:105,y:205,w:20,h:10}, pixelRatio=2, originOffset={x:100,y:200}
+    // translateMaskRect: rawX=(105-100)*2=10, rawY=(205-200)*2=10, rawW=40, rawH=20
+    // right=min(200,10+40)=50, bottom=min(100,10+20)=30 → no clipping → fillRect(10,10,40,20)
+    await applyMaskToImage('data:image/png;base64,test', [{ x: 105, y: 205, w: 20, h: 10 }], 2, {
+      x: 100,
+      y: 200,
+    });
+    expect(ctx.fillRect).toHaveBeenCalledWith(10, 10, 40, 20);
+  });
+
+  it('skips a rect that translates to non-positive dimensions', async () => {
+    // A rect fully outside the canvas → translateMaskRect returns w≤0 or h≤0 → skipped.
+    // naturalWidth=200, so a rect at x=1000 with w=50 is entirely off-canvas.
+    await applyMaskToImage('data:image/png;base64,test', [{ x: 1000, y: 1000, w: 50, h: 50 }], 1, {
+      x: 0,
+      y: 0,
+    });
+    expect(ctx.fillRect).not.toHaveBeenCalled();
+  });
+
+  it('throws when canvas context is null', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    await expect(
+      applyMaskToImage('data:image/png;base64,test', [{ x: 0, y: 0, w: 10, h: 10 }], 1)
+    ).rejects.toThrow('Failed to get canvas context');
+  });
+
+  it('throws when image fails to load', async () => {
+    // Override Image so it fires onerror instead of onload.
+    (window as unknown as { Image: unknown }).Image = class ErrorImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      naturalWidth = 0;
+      naturalHeight = 0;
+      width = 0;
+      height = 0;
+      set src(_: string) {
+        Promise.resolve().then(() => this.onerror?.());
+      }
+    };
+    await expect(
+      applyMaskToImage('data:image/png;base64,bad', [{ x: 0, y: 0, w: 10, h: 10 }], 1)
+    ).rejects.toThrow('Failed to apply privacy masks');
   });
 });

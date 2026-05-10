@@ -4156,6 +4156,98 @@ test.describe('Screenshot Masking', () => {
     expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
   });
 
+  test('scrolled area-cropped capture preserves masks at translated crop-local coordinates', async ({
+    page,
+  }) => {
+    // Inject a tall spacer + a masked target below the fold.
+    await page.addInitScript(() => {
+      window.addEventListener('DOMContentLoaded', () => {
+        const spacer = document.createElement('div');
+        spacer.style.height = '2000px';
+        const target = document.createElement('div');
+        target.id = 'scrolled-mask';
+        target.setAttribute('data-bugdrop-mask', '');
+        target.style.cssText = 'width: 200px; height: 100px; background: #ccc;';
+        target.textContent = 'sensitive';
+        document.body.append(spacer, target);
+      });
+    });
+
+    let payload: Record<string, unknown> | null = null;
+    await page.route('**/api/check/**', async route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      })
+    );
+    await page.route('**/feedback', async route => {
+      payload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, issueNumber: 1, issueUrl: '#', isPublic: false }),
+      });
+    });
+
+    await page.goto('/test/masking-basic.html');
+    await page.evaluate(() => window.scrollTo(0, 1900));
+
+    const host = page.locator('#bugdrop-host');
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+    await host.locator('css=#title').fill('Scrolled area test');
+    await host.locator('css=#include-screenshot').check();
+    await host.locator('css=#submit-btn').click();
+    await host.locator('css=[data-action="area"]').click();
+
+    // Wait for the area picker overlay (50ms initialization delay).
+    await expect(page.locator('#bugdrop-area-picker-overlay')).toBeVisible({ timeout: 5000 });
+
+    // Get viewport-coordinate rect of the masked element (it's now in the scrolled viewport).
+    const targetClient = await page.evaluate(() => {
+      const el = document.querySelector('#scrolled-mask') as HTMLElement;
+      const r = el.getBoundingClientRect();
+      return { x: r.left, y: r.top, w: r.width, h: r.height };
+    });
+
+    // Drag a rectangle around the masked target. Area picker uses CLIENT (viewport) coordinates.
+    const startX = targetClient.x - 10;
+    const startY = targetClient.y - 10;
+    const endX = targetClient.x + targetClient.w + 10;
+    const endY = targetClient.y + targetClient.h + 10;
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.waitForTimeout(50);
+    await page.mouse.move(endX, endY, { steps: 5 });
+    await page.mouse.up();
+
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 30000 });
+    await host.locator('css=[data-action="done"]').click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+
+    if (!payload) throw new Error('no payload');
+    const screenshot = payload.screenshot as string;
+
+    // Cropped image's geometric center should be inside the masked target.
+    const cropW = endX - startX;
+    const cropH = endY - startY;
+    const pr = await page.evaluate(
+      ({ dataUrl, w }) =>
+        new Promise<number>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img.naturalWidth / w);
+          img.onerror = () => reject(new Error('image load failed'));
+          img.src = dataUrl;
+        }),
+      { dataUrl: screenshot, w: cropW }
+    );
+    const cx = Math.floor((cropW / 2) * pr);
+    const cy = Math.floor((cropH / 2) * pr);
+    expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
+  });
+
   test('clean baseline: page with no masked elements has no opaque-black sample at unrelated points', async ({
     page,
   }) => {
