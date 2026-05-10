@@ -1,4 +1,5 @@
 import * as htmlToImage from 'html-to-image';
+import { collectMaskRects, applyMaskToImage } from './mask';
 
 const CAPTURE_TIMEOUT_MS = 15_000;
 const DOM_COMPLEXITY_THRESHOLD = 3_000;
@@ -197,9 +198,16 @@ export async function captureScreenshot(
     filter: (node: HTMLElement) => node.id !== 'bugdrop-host',
   };
 
-  const capturePromise = toPng(target as HTMLElement, opts);
+  const rects = collectMaskRects(target);
+  let originOffset = { x: 0, y: 0 };
+  if (element) {
+    const r = element.getBoundingClientRect();
+    originOffset = { x: r.left + window.scrollX, y: r.top + window.scrollY };
+  }
 
-  return withCaptureTimeout(capturePromise);
+  const capturePromise = toPng(target as HTMLElement, opts);
+  const dataUrl = await withCaptureTimeout(capturePromise);
+  return applyMaskToImage(dataUrl, rects, pixelRatio, originOffset);
 }
 
 export async function cropScreenshot(

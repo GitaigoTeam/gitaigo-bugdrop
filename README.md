@@ -5,8 +5,11 @@
 [![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./SECURITY.md)
 [![Live Demo](https://img.shields.io/badge/Demo-Try_It_Live-ff9e64)](https://bugdrop-widget-test.vercel.app)
 [![GitHub Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-Install-2ea44f?logo=github)](https://github.com/marketplace/bugdrop-in-app-feedback-to-github-issues)
+[![Product Hunt](https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1141615&theme=light&t=1778415221018)](https://www.producthunt.com/products/bugdrop-2?utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-bugdrop-2)
 
 In-app feedback → GitHub Issues. Screenshots, annotations, the works.
+
+Featured on Product Hunt and ranked #6 Product of the Day on May 9, 2026.
 
 ![bugdrop-demo-small](https://github.com/user-attachments/assets/22d234fa-aa0f-4d01-bc4f-4c3e8f107165)
 
@@ -33,6 +36,10 @@ That's it! Users can now click the bug button to submit feedback as GitHub Issue
 > **Branch protection:** BugDrop works with repos that have branch protection rules (required PRs, merge queues). Screenshots are stored on a dedicated `bugdrop-screenshots` branch that is auto-created on first use — no manual setup needed.
 
 > **Security note:** BugDrop is not a spam or malware filtering service. Treat feedback and screenshots as unauthenticated user-generated content. Exclude `bugdrop-screenshots` from CI/deploy workflows, and self-host behind your own WAF/CAPTCHA/content controls for stricter environments.
+
+## Features
+
+- 🔒 **Privacy masking** — tag sensitive elements with `data-bugdrop-mask` and BugDrop covers them in the screenshot before it's submitted. Passwords and credit-card inputs are masked automatically.
 
 ## Widget Options
 
