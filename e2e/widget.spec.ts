@@ -4076,4 +4076,108 @@ test.describe('Screenshot Masking', () => {
     const cy = Math.floor(imageSize.h / 2);
     expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
   });
+
+  test('area-cropped capture preserves masks inside the selected region', async ({ page }) => {
+    let payload: Record<string, unknown> | null = null;
+    await page.route('**/api/check/**', async route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      })
+    );
+    await page.route('**/feedback', async route => {
+      payload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, issueNumber: 1, issueUrl: '#', isPublic: false }),
+      });
+    });
+
+    await page.goto('/test/masking-basic.html');
+    const host = page.locator('#bugdrop-host');
+
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+    await host.locator('css=#title').fill('Area test');
+    await host.locator('css=#include-screenshot').check();
+    await host.locator('css=#submit-btn').click();
+
+    // Read the customer-panel's viewport (client) rect BEFORE clicking "Select Area",
+    // because the area picker overlay needs client coordinates (clientX/clientY).
+    const clientRect = await page.evaluate(() => {
+      const el = document.querySelector('#customer-panel');
+      if (!el) throw new Error('no #customer-panel');
+      const r = el.getBoundingClientRect();
+      return { x: r.left, y: r.top, w: r.width, h: r.height };
+    });
+    const startX = clientRect.x - 10;
+    const startY = clientRect.y - 10;
+    const endX = clientRect.x + clientRect.w + 10;
+    const endY = clientRect.y + clientRect.h + 10;
+    const cropW = endX - startX;
+    const cropH = endY - startY;
+
+    await host.locator('css=[data-action="area"]').click();
+
+    // Wait for the area picker overlay to appear (createAreaPicker has a 50ms delay).
+    await expect(page.locator('#bugdrop-area-picker-overlay')).toBeVisible({ timeout: 5000 });
+
+    // Drag a rectangle around the customer panel on the overlay.
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.waitForTimeout(50);
+    await page.mouse.move(endX, endY, { steps: 5 });
+    await page.mouse.up();
+
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 30000 });
+    await host.locator('css=[data-action="done"]').click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+
+    if (!payload) throw new Error('no payload');
+
+    // Infer pixelRatio from the cropped image. Cropped image width = cropW * pixelRatio.
+    const screenshot = payload.screenshot as string;
+    const pr = await page.evaluate(
+      ({ dataUrl, w }) =>
+        new Promise<number>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img.naturalWidth / w);
+          img.onerror = () => reject(new Error('image load failed'));
+          img.src = dataUrl;
+        }),
+      { dataUrl: screenshot, w: cropW }
+    );
+
+    // The cropped image's geometric center should land inside the masked panel.
+    const cx = Math.floor((cropW / 2) * pr);
+    const cy = Math.floor((cropH / 2) * pr);
+    expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
+  });
+
+  test('clean baseline: page with no masked elements has no opaque-black sample at unrelated points', async ({
+    page,
+  }) => {
+    const { screenshot, pixelRatio } = await submitFeedbackWithFullPageCapture(page, '/test/');
+
+    // Sample a handful of points; none should be exactly [0,0,0,255]. The standard fixture
+    // contains no masking attributes, so any solid-black 1px sample at these coordinates
+    // would be a regression.
+    const samplePoints: Array<[number, number]> = [
+      [10, 10],
+      [50, 50],
+      [200, 100],
+    ];
+
+    for (const [x, y] of samplePoints) {
+      const px = await pixelAt(
+        page,
+        screenshot,
+        Math.floor(x * pixelRatio),
+        Math.floor(y * pixelRatio)
+      );
+      expect(px).not.toEqual([0, 0, 0, 255]);
+    }
+  });
 });
