@@ -199,29 +199,15 @@ export async function captureScreenshot(
   };
 
   const rects = collectMaskRects(target);
-  const originOffset = element
-    ? (() => {
-        const r = element.getBoundingClientRect();
-        return { x: r.left + window.scrollX, y: r.top + window.scrollY };
-      })()
-    : { x: 0, y: 0 };
+  let originOffset = { x: 0, y: 0 };
+  if (element) {
+    const r = element.getBoundingClientRect();
+    originOffset = { x: r.left + window.scrollX, y: r.top + window.scrollY };
+  }
 
   const capturePromise = toPng(target as HTMLElement, opts);
-
-  let timer: ReturnType<typeof setTimeout>;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error('Screenshot capture timed out — the page may be too complex')),
-      CAPTURE_TIMEOUT_MS
-    );
-  });
-
-  try {
-    const dataUrl = await Promise.race([capturePromise, timeoutPromise]);
-    return await applyMaskToImage(dataUrl, rects, pixelRatio, originOffset);
-  } finally {
-    clearTimeout(timer!);
-  }
+  const dataUrl = await withCaptureTimeout(capturePromise);
+  return applyMaskToImage(dataUrl, rects, pixelRatio, originOffset);
 }
 
 export async function cropScreenshot(

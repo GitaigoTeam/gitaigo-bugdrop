@@ -15,7 +15,7 @@ function shouldMask(el: Element): boolean {
 
 function pushRect(el: Element, rects: MaskRect[]): void {
   const rect = el.getBoundingClientRect();
-  if (rect.width === 0 && rect.height === 0) return;
+  if (rect.width === 0 || rect.height === 0) return;
   rects.push({
     x: rect.left + window.scrollX,
     y: rect.top + window.scrollY,
@@ -92,7 +92,7 @@ export async function applyMaskToImage(
   ctx.fillStyle = '#000';
   for (const rect of rects) {
     const t = translateMaskRect(rect, pixelRatio, originOffset, canvas.width, canvas.height);
-    if (t.w <= 0 || t.h <= 0) continue;
+    if (!(t.w > 0 && t.h > 0)) continue;
     ctx.fillRect(t.x, t.y, t.w, t.h);
   }
 
