@@ -62,3 +62,42 @@ describe('collectMaskRects — explicit attribute', () => {
     ]);
   });
 });
+
+describe('collectMaskRects — built-in defaults', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('masks input[type="password"] without explicit attribute', () => {
+    const input = withRect(document.createElement('input'), 0, 0, 200, 30);
+    input.type = 'password';
+    document.body.appendChild(input);
+
+    expect(collectMaskRects(document.body)).toEqual([{ x: 0, y: 0, w: 200, h: 30 }]);
+  });
+
+  it('masks credit-card autocomplete inputs', () => {
+    const ccNumber = withRect(document.createElement('input'), 0, 0, 200, 30);
+    ccNumber.setAttribute('autocomplete', 'cc-number');
+    const ccCsc = withRect(document.createElement('input'), 0, 40, 80, 30);
+    ccCsc.setAttribute('autocomplete', 'cc-csc');
+    const ccExp = withRect(document.createElement('input'), 0, 80, 80, 30);
+    ccExp.setAttribute('autocomplete', 'cc-exp');
+    document.body.append(ccNumber, ccCsc, ccExp);
+
+    const rects = collectMaskRects(document.body);
+    expect(rects).toHaveLength(3);
+    expect(rects).toContainEqual({ x: 0, y: 0, w: 200, h: 30 });
+    expect(rects).toContainEqual({ x: 0, y: 40, w: 80, h: 30 });
+    expect(rects).toContainEqual({ x: 0, y: 80, w: 80, h: 30 });
+  });
+
+  it('does not double-count an element matching multiple criteria', () => {
+    const input = withRect(document.createElement('input'), 0, 0, 200, 30);
+    input.type = 'password';
+    input.setAttribute('data-bugdrop-mask', '');
+    document.body.appendChild(input);
+
+    expect(collectMaskRects(document.body)).toEqual([{ x: 0, y: 0, w: 200, h: 30 }]);
+  });
+});
