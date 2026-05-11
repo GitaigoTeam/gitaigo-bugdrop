@@ -2855,6 +2855,39 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     await expect(errorText).not.toBeVisible({ timeout: 3000 });
   });
 
+  test('privacy masking failure shows a dedicated modal and submits without a screenshot', async ({
+    page,
+  }) => {
+    const payloads = await trackFeedbackPayloads(page);
+    // toPng resolves with a data URL that fails Image.onload, so applyMaskToImage
+    // rejects with MaskApplicationError. Use /test/redaction.html so the page has
+    // a [data-bugdrop-redact] element — otherwise applyMaskToImage early-returns
+    // when rects.length === 0 and the failure path never fires.
+    await mockHtmlToImage(
+      page,
+      "function() { return Promise.resolve('data:image/png;base64,not-a-real-image'); }"
+    );
+    await page.goto('/test/redaction.html');
+    await navigateToFullPageCapture(page);
+
+    const host = page.locator('#bugdrop-host');
+    const modalTitle = host.locator('css=.bd-title');
+    await expect(modalTitle).toHaveText('Privacy masking failed', { timeout: 5000 });
+
+    await expect(host.locator('css=.bd-error-message__text')).toContainText(
+      'Automatic redaction of private fields could not be applied'
+    );
+    // Retry must NOT be offered for masking failures — retrying would fail the
+    // same way and a user might be tempted to send unredacted output.
+    await expect(host.locator('css=[data-action="retry"]')).not.toBeAttached();
+
+    await host.locator('css=[data-action="skip"]').click();
+
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0].screenshot).toBeNull();
+  });
+
   test('retry button on error modal re-attempts capture', async ({ page }) => {
     // First call fails, second call succeeds
     await mockHtmlToImage(
