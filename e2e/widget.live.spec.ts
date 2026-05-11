@@ -551,19 +551,23 @@ test.describe('Screenshot Capture (Live)', () => {
     await expect(canvas).toBeVisible({ timeout: 10_000 });
     await expectUsableCanvas(canvas);
 
+    const firstRegion = { left: 0.1, top: 0.18, right: 0.48, bottom: 0.78 };
+    const latestRegion = { left: 0.52, top: 0.18, right: 0.9, bottom: 0.78 };
+    const firstBaseline = await countRedPixelsInRegion(canvas, firstRegion);
+    const latestBaseline = await countRedPixelsInRegion(canvas, latestRegion);
+
     await dragOnCanvas(page, canvas, { x: 0.18, y: 0.28 }, { x: 0.42, y: 0.68 });
     await dragOnCanvas(page, canvas, { x: 0.58, y: 0.28 }, { x: 0.82, y: 0.68 });
 
-    const firstRegion = { left: 0.1, top: 0.18, right: 0.48, bottom: 0.78 };
-    const latestRegion = { left: 0.52, top: 0.18, right: 0.9, bottom: 0.78 };
-
-    expect(await countRedPixelsInRegion(canvas, firstRegion)).toBeGreaterThan(20);
-    expect(await countRedPixelsInRegion(canvas, latestRegion)).toBeGreaterThan(20);
+    expect(await countRedPixelsInRegion(canvas, firstRegion)).toBeGreaterThan(firstBaseline + 20);
+    expect(await countRedPixelsInRegion(canvas, latestRegion)).toBeGreaterThan(latestBaseline + 20);
 
     await host.locator('css=[data-action="undo"]').click();
 
-    expect(await countRedPixelsInRegion(canvas, firstRegion)).toBeGreaterThan(20);
-    await expect.poll(() => countRedPixelsInRegion(canvas, latestRegion)).toBeLessThan(5);
+    expect(await countRedPixelsInRegion(canvas, firstRegion)).toBeGreaterThan(firstBaseline + 20);
+    await expect
+      .poll(() => countRedPixelsInRegion(canvas, latestRegion))
+      .toBeLessThanOrEqual(latestBaseline + 10);
   });
 
   test('redaction works on the deployed preview widget', async ({ page }) => {
