@@ -1,0 +1,30 @@
+// Single source of truth for the widget's camelCase → data-* attribute mapping.
+// Imported by sandbox.js (config UI) and preview.html (iframe). Keep in sync
+// with the consumers in src/widget/index.ts (script.dataset.* reads).
+export const ATTRIBUTE_MAP = Object.freeze({
+  repo: 'data-repo',
+  theme: 'data-theme',
+  position: 'data-position',
+  color: 'data-color',
+  label: 'data-label',
+  icon: 'data-icon',
+  screenshot: 'data-screenshot',
+  welcome: 'data-welcome',
+  showName: 'data-show-name',
+  requireName: 'data-require-name',
+  showEmail: 'data-show-email',
+  requireEmail: 'data-require-email',
+  buttonDismissible: 'data-button-dismissible',
+  dismissDuration: 'data-dismiss-duration',
+  showRestore: 'data-show-restore',
+  showButton: 'data-button',
+  screenshotScale: 'data-screenshot-scale',
+  font: 'data-font',
+  radius: 'data-radius',
+  bg: 'data-bg',
+  text: 'data-text',
+  borderWidth: 'data-border-width',
+  borderColor: 'data-border-color',
+  shadow: 'data-shadow',
+  categoryLabels: 'data-category-labels',
+});

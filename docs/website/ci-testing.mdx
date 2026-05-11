@@ -118,10 +118,12 @@ test.describe("BugDrop Widget", () => {
     const btn = await shadowEl(page, "bug-drop-widget", ".floating-btn");
     await (btn as any).click();
 
+    // The welcome modal carries the `.bd-welcome` class; the feedback form does not.
+    // For `welcome: "once"`, the welcome modal only appears on the first open per repo;
+    // clear localStorage in `beforeEach` if you want this test to assert it deterministically.
     const welcomeVisible = await page.evaluate(() => {
       const host = document.querySelector("bug-drop-widget");
-      const welcome = host?.shadowRoot?.querySelector(".welcome-message, h2");
-      return Boolean(welcome);
+      return Boolean(host?.shadowRoot?.querySelector(".bd-welcome"));
     });
 
     expect(welcomeVisible).toBe(EXPECTED.welcome !== "never");

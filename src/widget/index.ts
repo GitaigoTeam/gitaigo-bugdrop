@@ -1057,7 +1057,8 @@ function showWelcomeScreen(root: HTMLElement): Promise<boolean> {
           <button class="bd-btn bd-btn-primary" data-action="continue">Get Started</button>
         </div>
       `,
-      true
+      true,
+      'bd-welcome'
     );
 
     const closeBtn = modal.querySelector('.bd-close') as HTMLElement;

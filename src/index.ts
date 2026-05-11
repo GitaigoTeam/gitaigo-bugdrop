@@ -35,35 +35,9 @@ app.use('*', logger());
 // Mount API routes
 app.route('/api', api);
 
-function fetchAsset(c: { req: { url: string; raw: Request }; env: Env }, pathname: string) {
-  const url = new URL(c.req.url);
-  url.pathname = pathname;
-  return c.env.ASSETS.fetch(new Request(url, c.req.raw));
-}
-
-app.get('/sandbox', c => {
-  return c.redirect('/sandbox/', 301);
-});
-
-app.get('/sandbox/', c => {
-  return fetchAsset(c, '/sandbox/index.html');
-});
-
-app.get('/sandbox/preview', c => {
-  return fetchAsset(c, '/sandbox/preview.html');
-});
-
-app.get('/sandbox/preview.html', c => {
-  return fetchAsset(c, '/sandbox/preview.html');
-});
-
-app.get('/sandbox/sandbox.css', c => {
-  return fetchAsset(c, '/sandbox/sandbox.css');
-});
-
-app.get('/sandbox/sandbox.js', c => {
-  return fetchAsset(c, '/sandbox/sandbox.js');
-});
+// /sandbox needs a trailing-slash redirect; everything under /sandbox/* is served
+// directly by Wrangler Assets (see [assets] in wrangler.toml) without invoking the Worker.
+app.get('/sandbox', c => c.redirect('/sandbox/', 301));
 
 // Redirect to landing page on Vercel
 app.get('/', c => {

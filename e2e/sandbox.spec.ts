@@ -2,15 +2,19 @@ import { test, expect } from '@playwright/test';
 
 test.describe('BugDrop Sandbox', () => {
   test('serves sandbox route assets from the Worker', async ({ request }) => {
-    for (const path of [
-      '/sandbox/',
-      '/sandbox/preview',
-      '/sandbox/sandbox.css',
-      '/sandbox/sandbox.js',
-      '/widget.js',
-    ]) {
+    const cases: Array<{ path: string; contentType: RegExp }> = [
+      { path: '/sandbox/', contentType: /html/ },
+      { path: '/sandbox/preview', contentType: /html/ },
+      { path: '/sandbox/attribute-map.js', contentType: /javascript/ },
+      { path: '/sandbox/sanitizers.js', contentType: /javascript/ },
+      { path: '/sandbox/sandbox.css', contentType: /css/ },
+      { path: '/sandbox/sandbox.js', contentType: /javascript/ },
+      { path: '/widget.js', contentType: /javascript/ },
+    ];
+    for (const { path, contentType } of cases) {
       const response = await request.get(path);
       expect(response.ok(), `${path} should resolve`).toBe(true);
+      expect(response.headers()['content-type'], `${path} content-type`).toMatch(contentType);
     }
   });
 
@@ -102,8 +106,12 @@ test.describe('BugDrop Sandbox', () => {
   });
 
   test('ignores stale installation checks when repo changes', async ({ page }) => {
+    let releaseSlow: (() => void) | undefined;
+    const slowReleased = new Promise<void>(resolve => {
+      releaseSlow = resolve;
+    });
     await page.route('**/api/check/slow/repo', async route => {
-      await new Promise(resolve => setTimeout(resolve, 250));
+      await slowReleased;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -121,16 +129,51 @@ test.describe('BugDrop Sandbox', () => {
     await page.goto('/sandbox/');
     await page.locator('#repo').fill('slow/repo');
     await page.locator('#check-installation').click();
+    await expect(page.locator('#repo-feedback')).toHaveText('Checking GitHub App installation...');
     await page.locator('#repo').fill('fast/repo');
     await page.locator('#check-installation').click();
+    await expect(page.locator('#repo-feedback')).toHaveText(
+      'BugDrop is not installed on fast/repo.'
+    );
 
-    await expect(page.locator('#repo-feedback')).toHaveText(
-      'BugDrop is not installed on fast/repo.'
-    );
-    await page.waitForTimeout(300);
-    await expect(page.locator('#repo-feedback')).toHaveText(
-      'BugDrop is not installed on fast/repo.'
-    );
+    // Now release the slow request; its callback must not clobber the fast result.
+    releaseSlow?.();
+    // Drive the deterministic guarantee: poll for stability rather than wall-clock wait.
+    await expect
+      .poll(() => page.locator('#repo-feedback').textContent(), { timeout: 2000 })
+      .toBe('BugDrop is not installed on fast/repo.');
+  });
+
+  test('discards stale check when repo input changes mid-flight (no second click)', async ({
+    page,
+  }) => {
+    let releaseSlow: (() => void) | undefined;
+    const slowReleased = new Promise<void>(resolve => {
+      releaseSlow = resolve;
+    });
+    await page.route('**/api/check/slow/repo', async route => {
+      await slowReleased;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true, repo: 'slow/repo' }),
+      });
+    });
+
+    await page.goto('/sandbox/');
+    await page.locator('#repo').fill('slow/repo');
+    await page.locator('#check-installation').click();
+    await expect(page.locator('#repo-feedback')).toHaveText('Checking GitHub App installation...');
+
+    // User edits the repo without clicking check again, then the slow response returns.
+    await page.locator('#repo').fill('other/repo');
+    releaseSlow?.();
+
+    // Validation feedback (from input handler) is fine; what must NOT happen is the
+    // stale "installed on slow/repo" text overwriting it.
+    await expect(page.locator('#repo-feedback')).not.toHaveText(/installed on slow\/repo/, {
+      timeout: 2000,
+    });
   });
 
   test('required contact fields imply visible contact fields in generated script', async ({
@@ -146,6 +189,25 @@ test.describe('BugDrop Sandbox', () => {
     await expect(scriptCode).toContainText('data-require-email="true"');
     await expect(scriptCode).toContainText('data-show-name="true"');
     await expect(scriptCode).toContainText('data-require-name="true"');
+  });
+
+  test('surfaces an "ignored invalid values" notice when sanitizers reject input', async ({
+    page,
+  }) => {
+    await page.goto('/sandbox/');
+    const notice = page.locator('#sanitize-feedback');
+    await expect(notice).toBeHidden();
+
+    // Inject a value the CSS-token sanitizer rejects.
+    await page.locator('#color').fill('red"; onerror="alert(1)');
+
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText(/Ignored invalid values for: .*Accent color/);
+    await expect(page.locator('#script-code')).not.toContainText('data-color');
+
+    // Restoring a valid value clears the notice.
+    await page.locator('#color').fill('#7c3aed');
+    await expect(notice).toBeHidden();
   });
 
   test('reports clipboard failures without throwing', async ({ page }) => {

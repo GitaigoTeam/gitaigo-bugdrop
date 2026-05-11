@@ -432,7 +432,11 @@
   </div>
 
   <script>
-    const attributeMap = {
+    // NOTE: This map duplicates ./attribute-map.js because this document runs in
+    // a same-origin iframe with sandbox="allow-scripts" (no allow-same-origin),
+    // which places it in an opaque origin and blocks ES module imports via CORS.
+    // Keep in sync with ./attribute-map.js and the consumers in src/widget/index.ts.
+    const ATTRIBUTE_MAP = {
       repo: 'data-repo',
       theme: 'data-theme',
       position: 'data-position',
@@ -459,16 +463,29 @@
       shadow: 'data-shadow',
       categoryLabels: 'data-category-labels',
     };
-    const allowedKeys = new Set(Object.keys(attributeMap));
+
+    const allowedKeys = new Set(Object.keys(ATTRIBUTE_MAP));
     const params = new URLSearchParams(window.location.search);
     const script = document.createElement('script');
     script.src = `${window.location.origin}/widget.js`;
     script.async = false;
 
+    script.addEventListener('error', () => {
+      const banner = document.createElement('div');
+      banner.setAttribute('role', 'alert');
+      banner.style.cssText =
+        'position:fixed;bottom:12px;left:12px;right:12px;padding:12px;' +
+        'background:#7f1d1d;color:#fff;border-radius:8px;font-family:system-ui;' +
+        'box-shadow:0 8px 24px rgba(0,0,0,0.2);z-index:9999;';
+      banner.textContent =
+        'BugDrop widget failed to load from /widget.js. Check the network tab and CSP.';
+      document.body.append(banner);
+    });
+
     for (const [key, value] of params.entries()) {
       if (key === 'v') continue;
       if (!allowedKeys.has(key)) continue;
-      script.setAttribute(attributeMap[key] || key, value);
+      script.setAttribute(ATTRIBUTE_MAP[key], value);
     }
 
     document.body.append(script);

@@ -152,6 +152,8 @@
           </div>
           <iframe id="sandbox-preview" title="BugDrop sandbox preview" sandbox="allow-scripts allow-forms allow-popups"></iframe>
 
+          <div id="sanitize-feedback" class="sanitize-feedback" role="status" hidden></div>
+
           <section class="script-output" aria-label="Generated script tag">
             <div class="script-header">
               <div>
@@ -164,13 +166,13 @@
           </section>
 
           <section class="safety-note">
-            <h2>Redaction Check</h2>
-            <p>The preview includes fields marked with <code>data-bugdrop-mask</code>. Screenshot masking is best-effort visual masking for elements developers mark; it is not automatic secret detection.</p>
+            <h2>Screenshot Masking</h2>
+            <p>The preview includes fields marked with <code>data-bugdrop-mask</code>. Masking also covers a small set of built-in defaults (<code>input[type="password"]</code> and credit-card autocomplete fields). It is best-effort visual masking, not automatic secret detection.</p>
           </section>
         </section>
       </div>
     </section>
   </main>
-  <script src="./sandbox.js"></script>
+  <script type="module" src="./sandbox.js"></script>
 </body>
 </html>

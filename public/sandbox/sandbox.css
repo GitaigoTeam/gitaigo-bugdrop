@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
   --bg: #f7f8fb;
   --panel: #ffffff;
   --panel-subtle: #f1f4f8;
@@ -212,6 +212,17 @@ select:focus {
 
 .repo-feedback.error {
   color: var(--danger);
+}
+
+.sanitize-feedback {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(180, 83, 9, 0.32);
+  border-radius: 8px;
+  background: rgba(180, 83, 9, 0.08);
+  color: var(--warning);
+  font-size: 0.84rem;
+  line-height: 1.4;
 }
 
 .checkbox-grid {
