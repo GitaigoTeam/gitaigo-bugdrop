@@ -1,16 +1,10 @@
 import {
-  beginViewportCapture,
-  canCaptureViewportNatively,
-  captureAreaScreenshot,
-  captureScreenshot,
   FULL_PAGE_DISABLE_THRESHOLD,
   getDomNodeCount,
   getRedactionCount,
   isFullPageDisabled,
 } from './screenshot';
-import { createElementPicker } from './picker';
-import { createAreaPicker } from './area-picker';
-import { createAnnotator, type Tool } from './annotator';
+import { runScreenshotCaptureFlow } from './capture-flow';
 import { injectStyles, createModal, showSuccessModal } from './ui';
 import {
   resolveTheme,
@@ -91,14 +85,6 @@ interface FeedbackData {
   name?: string;
   email?: string;
 }
-
-type ScreenshotChoice =
-  | 'skip'
-  | 'capture'
-  | 'element'
-  | 'area'
-  | 'cancel'
-  | { type: 'viewport'; capture: Promise<string> };
 
 // localStorage key for dismissed state
 const BUGDROP_DISMISSED_KEY = 'bugdrop_dismissed';
@@ -760,134 +746,15 @@ async function openFeedbackFlow(
       return;
     }
 
-    let screenshot: string | null = null;
-    let elementSelector: string | null = null;
-    let redactionCount = 0;
-    let redactionUnavailable = false;
-    let returnToForm = false;
+    const submittedFormResult = formResult;
+    const screenshotResult = await runScreenshotCaptureFlow(
+      root,
+      config,
+      submittedFormResult.includeScreenshot,
+      () => rememberComplexScreenshotSkip(config, submittedFormResult)
+    );
 
-    // Step 3: Screenshot flow (if configured/user opted in)
-    if (config.screenshotMode === 'auto') {
-      if (!isFullPageDisabled()) {
-        const result = await captureWithLoading(root, undefined, config.screenshotScale);
-        if (result === 'cancel') {
-          returnToForm = true;
-        } else {
-          screenshot = result;
-          redactionCount = screenshot ? getRedactionCount() : 0;
-        }
-      }
-    } else if (formResult.includeScreenshot) {
-      const screenshotRequired = config.screenshotMode === 'required';
-      while (true) {
-        screenshot = null;
-        elementSelector = null;
-        redactionCount = 0;
-        redactionUnavailable = false;
-
-        const screenshotChoice = await showScreenshotOptions(root, {
-          allowSkip: !screenshotRequired,
-        });
-        if (screenshotChoice === 'cancel') {
-          returnToForm = true;
-          break;
-        }
-        if (screenshotChoice === 'skip') {
-          rememberComplexScreenshotSkip(config, formResult);
-          break;
-        }
-
-        const pickerStyle = {
-          accentColor: config.accentColor,
-          font: config.font,
-          radius: config.radius,
-          borderWidth: config.borderWidth,
-          bgColor: config.bgColor,
-          textColor: config.textColor,
-          borderColor: config.borderColor,
-          theme: config.theme,
-        };
-
-        if (typeof screenshotChoice === 'object' && screenshotChoice.type === 'viewport') {
-          const result = await capturePromiseWithLoading(
-            root,
-            screenshotChoice.capture,
-            () => beginViewportCapture(),
-            {
-              allowSkip: !screenshotRequired,
-              showLoading: false,
-            }
-          );
-          if (result === 'cancel') {
-            returnToForm = true;
-            break;
-          }
-          if (!result && !screenshotRequired) rememberComplexScreenshotSkip(config, formResult);
-          screenshot = result;
-          redactionUnavailable = Boolean(screenshot);
-          redactionCount = 0;
-        } else if (screenshotChoice === 'capture') {
-          const result = await captureWithLoading(root, undefined, config.screenshotScale, {
-            allowSkip: !screenshotRequired,
-          });
-          if (result === 'cancel') {
-            returnToForm = true;
-            break;
-          }
-          if (!result) rememberComplexScreenshotSkip(config, formResult);
-          screenshot = result;
-          redactionCount = screenshot ? getRedactionCount() : 0;
-        } else if (screenshotChoice === 'element') {
-          const element = await createElementPicker(pickerStyle);
-          if (element) {
-            const result = await captureWithLoading(root, element, config.screenshotScale, {
-              allowSkip: !screenshotRequired,
-            });
-            if (result === 'cancel') {
-              returnToForm = true;
-              break;
-            }
-            if (!result) rememberComplexScreenshotSkip(config, formResult);
-            screenshot = result;
-            redactionCount = screenshot ? getRedactionCount(element) : 0;
-            elementSelector = getElementSelector(element);
-          }
-        } else if (screenshotChoice === 'area') {
-          const rect = await createAreaPicker(pickerStyle, {
-            redactionsAvailable: getRedactionCount() > 0,
-          });
-          if (rect) {
-            const result = await captureAreaWithLoading(root, rect, config.screenshotScale, {
-              allowSkip: !screenshotRequired,
-            });
-            if (result === 'cancel') {
-              returnToForm = true;
-              break;
-            }
-            if (!result) rememberComplexScreenshotSkip(config, formResult);
-            screenshot = result;
-            redactionCount = screenshot ? getRedactionCount(undefined, rect) : 0;
-          }
-        }
-
-        // Step 4: Annotate (if screenshot exists)
-        if (screenshot) {
-          const result = await showAnnotationStep(root, screenshot, redactionCount, {
-            redactionUnavailable,
-          });
-          if (result === 'retake') continue;
-          if (result === 'cancel') {
-            returnToForm = true;
-            break;
-          }
-          screenshot = result;
-        }
-        if (screenshotRequired && !screenshot) continue;
-        break;
-      }
-    }
-
-    if (returnToForm) continue;
+    if (screenshotResult.returnToForm) continue;
 
     // Submit
     await submitFeedback(root, config, {
@@ -896,115 +763,14 @@ async function openFeedbackFlow(
       category: formResult.category,
       name: formResult.name,
       email: formResult.email,
-      screenshot,
-      elementSelector,
+      screenshot: screenshotResult.screenshot,
+      elementSelector: screenshotResult.elementSelector,
     });
     break;
   }
 
   // Flow complete
   _isModalOpen = false;
-}
-
-async function captureWithLoading(
-  root: HTMLElement,
-  element?: Element,
-  screenshotScale?: number,
-  opts?: { allowSkip?: boolean }
-): Promise<string | null | 'cancel'> {
-  return capturePromiseWithLoading(
-    root,
-    captureScreenshot(element, screenshotScale),
-    () => captureScreenshot(element, screenshotScale),
-    opts
-  );
-}
-
-async function captureAreaWithLoading(
-  root: HTMLElement,
-  rect: DOMRect,
-  screenshotScale?: number,
-  opts?: { allowSkip?: boolean }
-): Promise<string | null | 'cancel'> {
-  return capturePromiseWithLoading(
-    root,
-    captureAreaScreenshot(rect, screenshotScale),
-    () => captureAreaScreenshot(rect, screenshotScale),
-    opts
-  );
-}
-
-async function capturePromiseWithLoading(
-  root: HTMLElement,
-  capturePromise: Promise<string>,
-  retryCapture: () => Promise<string>,
-  opts?: { allowSkip?: boolean; showLoading?: boolean }
-): Promise<string | null | 'cancel'> {
-  // Show a temporary loading indicator
-  const loadingModal =
-    opts?.showLoading === false
-      ? null
-      : createModal(
-          root,
-          'Capturing...',
-          `
-            <div style="display: flex; flex-direction: column; align-items: center; padding: 20px;">
-              <div class="bd-spinner bd-spinner--lg"></div>
-              <p class="bd-loading-text" style="margin-top: 12px;">Capturing screenshot...</p>
-            </div>
-          `
-        );
-
-  try {
-    const screenshot = await capturePromise;
-    loadingModal?.remove();
-    return screenshot;
-  } catch (error) {
-    console.warn('[BugDrop] Screenshot capture failed:', error);
-    loadingModal?.remove();
-    const allowSkip = opts?.allowSkip !== false;
-
-    // Show error with retry option
-    return new Promise(resolve => {
-      const errorModal = createModal(
-        root,
-        'Capture Failed',
-        `
-          <div class="bd-error-message">
-            <svg class="bd-error-message__icon" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0-9.5a.75.75 0 0 0-.75.75v2.5a.75.75 0 0 0 1.5 0v-2.5A.75.75 0 0 0 8 5.5zm0 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
-            </svg>
-            <span class="bd-error-message__text">Failed to capture screenshot. The page may be too complex or browser restrictions may apply.</span>
-          </div>
-          <div class="bd-actions">
-            <button class="bd-btn bd-btn-secondary" data-action="skip">${allowSkip ? 'Skip Screenshot' : 'Choose Another Method'}</button>
-            <button class="bd-btn bd-btn-primary" data-action="retry">Try Again</button>
-          </div>
-        `,
-        true
-      );
-
-      const closeBtn = errorModal.querySelector('.bd-close') as HTMLElement;
-      const skipBtn = errorModal.querySelector('[data-action="skip"]') as HTMLElement;
-      const retryBtn = errorModal.querySelector('[data-action="retry"]') as HTMLElement;
-
-      closeBtn?.addEventListener('click', () => {
-        errorModal.remove();
-        resolve('cancel');
-      });
-
-      skipBtn?.addEventListener('click', () => {
-        errorModal.remove();
-        resolve(null);
-      });
-
-      retryBtn?.addEventListener('click', async () => {
-        errorModal.remove();
-        const result = await capturePromiseWithLoading(root, retryCapture(), retryCapture, opts);
-        resolve(result);
-      });
-    });
-  }
 }
 
 async function checkInstallation(
@@ -1303,170 +1069,6 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function showScreenshotOptions(
-  root: HTMLElement,
-  opts?: { allowSkip?: boolean }
-): Promise<ScreenshotChoice> {
-  const fullPageDisabled = isFullPageDisabled();
-  const nativeViewportAvailable = fullPageDisabled && canCaptureViewportNatively();
-  const allowSkip = opts?.allowSkip !== false;
-  const redactionNote =
-    nativeViewportAvailable && fullPageDisabled
-      ? '<p class="bd-redaction-note" style="margin: 0 0 12px; padding: 8px 12px; background: var(--bd-warning-bg, #fff8e1); border-radius: 6px; font-size: 13px; color: var(--bd-text-secondary);">Browser viewport capture cannot apply automatic private-field masks. Select Element to preserve automatic masking, or review and cover sensitive areas before sending.</p>'
-      : getRedactionCount() > 0
-        ? '<p class="bd-redaction-note" style="margin: 0 0 12px; padding: 8px 12px; background: var(--bd-warning-bg, #fff8e1); border-radius: 6px; font-size: 13px; color: var(--bd-text-secondary);">This site marked some fields for redaction. Review the screenshot before sending.</p>'
-        : '';
-
-  return new Promise(resolve => {
-    const complexNote = fullPageDisabled
-      ? `<p style="margin: 0 0 12px; padding: 8px 12px; background: var(--bd-bg-secondary, #f5f5f5); border-radius: 6px; font-size: 13px; color: var(--bd-text-secondary);">${nativeViewportAvailable ? 'This page is too complex for full-page or area capture. Capture the visible viewport or select a specific element instead.' : 'This page is too complex for full-page or area capture. Select a specific element instead.'}</p>`
-      : '';
-    const primaryCaptureButton = fullPageDisabled
-      ? nativeViewportAvailable
-        ? '<button class="bd-btn bd-btn-primary" data-action="viewport">Capture Viewport</button>'
-        : ''
-      : '<button class="bd-btn bd-btn-primary" data-action="capture">Full Page</button>';
-
-    const modal = createModal(
-      root,
-      'Capture Screenshot',
-      `
-        <p style="margin: 0 0 16px; color: var(--bd-text-secondary);">Choose what to capture:</p>
-        ${complexNote}
-        ${redactionNote}
-        <div class="bd-actions bd-screenshot-actions">
-          ${primaryCaptureButton}
-          ${fullPageDisabled ? '' : '<button class="bd-btn bd-btn-secondary" data-action="area">Select Area</button>'}
-          <button class="bd-btn bd-btn-secondary" data-action="element">Select Element</button>
-          ${allowSkip ? '<button class="bd-btn bd-btn-quiet" data-action="skip">Skip Screenshot</button>' : ''}
-        </div>
-      `
-    );
-
-    const closeBtn = modal.querySelector('.bd-close') as HTMLElement;
-    const skipBtn = modal.querySelector('[data-action="skip"]') as HTMLElement | null;
-    const elementBtn = modal.querySelector('[data-action="element"]') as HTMLElement;
-    const areaBtn = modal.querySelector('[data-action="area"]') as HTMLElement;
-    const captureBtn = modal.querySelector('[data-action="capture"]') as HTMLElement;
-    const viewportBtn = modal.querySelector('[data-action="viewport"]') as HTMLElement;
-
-    closeBtn?.addEventListener('click', () => {
-      modal.remove();
-      resolve('cancel');
-    });
-
-    skipBtn?.addEventListener('click', () => {
-      modal.remove();
-      resolve('skip');
-    });
-
-    elementBtn?.addEventListener('click', () => {
-      modal.remove();
-      resolve('element');
-    });
-
-    areaBtn?.addEventListener('click', () => {
-      modal.remove();
-      resolve('area');
-    });
-
-    captureBtn?.addEventListener('click', () => {
-      modal.remove();
-      resolve('capture');
-    });
-
-    viewportBtn?.addEventListener('click', () => {
-      modal.remove();
-      const capture = beginViewportCapture();
-      resolve({ type: 'viewport', capture });
-    });
-  });
-}
-
-function showAnnotationStep(
-  root: HTMLElement,
-  screenshot: string,
-  redactionCount = 0,
-  opts?: { redactionUnavailable?: boolean }
-): Promise<string | 'retake' | 'cancel'> {
-  return new Promise(resolve => {
-    const redactionNote = opts?.redactionUnavailable
-      ? `<p class="bd-redaction-note" style="margin: 0 0 12px; padding: 8px 12px; background: var(--bd-warning-bg, #fff8e1); border-radius: 6px; font-size: 13px; color: var(--bd-text-secondary);">This browser viewport capture could not apply automatic private-field masks. Review and cover any sensitive areas before sending.</p>`
-      : redactionCount > 0
-        ? `<p class="bd-redaction-note" style="margin: 0 0 12px; padding: 8px 12px; background: var(--bd-warning-bg, #fff8e1); border-radius: 6px; font-size: 13px; color: var(--bd-text-secondary);">${redactionCount} private ${redactionCount === 1 ? 'item was' : 'items were'} marked for redaction in this screenshot. Review before sending.</p>`
-        : '';
-    const modal = createModal(
-      root,
-      'Review Screenshot',
-      `
-        ${redactionNote}
-        <p style="margin: 0 0 12px; color: var(--bd-text-secondary); font-size: 13px;">
-          Check that no sensitive information is visible before sending. Cover sensitive areas before submitting. Redactions are baked into the uploaded image.
-        </p>
-        <div class="bd-tools">
-          <button class="bd-tool active" data-tool="draw">✏️ Draw</button>
-          <button class="bd-tool" data-tool="arrow">➡️ Arrow</button>
-          <button class="bd-tool" data-tool="rect">▢ Rectangle</button>
-          <button class="bd-tool" data-tool="redact">Redact</button>
-          <button class="bd-tool" data-action="undo">↶ Undo</button>
-        </div>
-        <div id="annotation-canvas" class="bd-annotation-stage"></div>
-        <div class="bd-actions">
-          <button class="bd-btn bd-btn-secondary" data-action="retake">Retake</button>
-          <button class="bd-btn bd-btn-primary" data-action="done">Submit Feedback</button>
-        </div>
-      `,
-      false,
-      'bd-modal--annotator'
-    );
-
-    const canvasContainer = modal.querySelector('#annotation-canvas') as HTMLElement;
-    const annotator = createAnnotator(canvasContainer, screenshot);
-
-    // Tool buttons
-    const toolButtons = modal.querySelectorAll('[data-tool]');
-    toolButtons.forEach(btn => {
-      btn.addEventListener('click', e => {
-        const target = e.currentTarget as HTMLElement;
-        const tool = target.dataset.tool;
-
-        if (tool) {
-          toolButtons.forEach(b => b.classList.remove('active'));
-          target.classList.add('active');
-          annotator.setTool(tool as Tool);
-        }
-      });
-    });
-
-    const undoBtn = modal.querySelector('[data-action="undo"]') as HTMLElement | null;
-    undoBtn?.addEventListener('click', () => annotator.undo());
-
-    // Action buttons
-    const closeBtn = modal.querySelector('.bd-close') as HTMLElement;
-    const retakeBtn = modal.querySelector('[data-action="retake"]') as HTMLElement;
-    const doneBtn = modal.querySelector('[data-action="done"]') as HTMLElement;
-
-    closeBtn?.addEventListener('click', () => {
-      annotator.destroy();
-      modal.remove();
-      resolve('cancel');
-    });
-
-    retakeBtn?.addEventListener('click', () => {
-      annotator.destroy();
-      modal.remove();
-      resolve('retake');
-    });
-
-    doneBtn?.addEventListener('click', () => {
-      const annotated = annotator.getImageData();
-      annotator.destroy();
-      modal.remove();
-      resolve(annotated);
-    });
-  });
-}
-
 async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: FeedbackData) {
   // Show submitting modal with loading state
   const modal = createModal(
@@ -1581,39 +1183,4 @@ function showSubmitError(
     modal.remove();
     await submitFeedback(root, config, data);
   });
-}
-
-function getElementSelector(element: Element): string {
-  const path: string[] = [];
-  let current: Element | null = element;
-
-  while (current && current !== document.body) {
-    let selector = current.tagName.toLowerCase();
-
-    if (current.id) {
-      selector = `#${current.id}`;
-      path.unshift(selector);
-      break;
-    }
-
-    if (current.className) {
-      // Handle SVG elements where className is SVGAnimatedString, not a string
-      const classNameStr =
-        typeof current.className === 'string'
-          ? current.className
-          : (current.className as SVGAnimatedString).baseVal || '';
-      const classes = classNameStr
-        .split(' ')
-        .filter(c => c)
-        .slice(0, 2);
-      if (classes.length) {
-        selector += `.${classes.join('.')}`;
-      }
-    }
-
-    path.unshift(selector);
-    current = current.parentElement;
-  }
-
-  return path.join(' > ');
 }

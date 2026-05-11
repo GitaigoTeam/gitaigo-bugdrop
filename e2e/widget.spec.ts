@@ -3252,7 +3252,7 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
   });
 
   test('remembers complex-page skip after element capture failure skip', async ({ page }) => {
-    await trackFeedbackSubmissions(page);
+    const payloads = await trackFeedbackPayloads(page);
     await mockHtmlToImage(page, "function() { return Promise.reject(new Error('mock failure')); }");
     await page.goto('/test/complex-dom.html?nodes=12000');
 
@@ -3271,11 +3271,34 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     await expect(host.locator('css=.bd-error-message__text')).toBeVisible({ timeout: 5000 });
     await host.locator('css=[data-action="skip"]').click();
     await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
+    expect(payloads).toHaveLength(1);
+    expect((payloads[0].metadata as { elementSelector?: string }).elementSelector).toContain('h1');
 
     await host.locator('css=.bd-close').click();
     await host.locator('css=.bd-trigger').click();
     await expect(host.locator('css=#title')).toBeVisible({ timeout: 5000 });
     await expect(host.locator('css=#include-screenshot')).not.toBeChecked();
+  });
+
+  test('does not remember complex-page skip after element picker cancellation', async ({
+    page,
+  }) => {
+    const payloads = await trackFeedbackPayloads(page);
+    await page.goto('/test/complex-dom.html?nodes=12000');
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="element"]').click();
+    await expect(page.locator('#bugdrop-element-picker-tooltip')).toBeVisible({ timeout: 5000 });
+    await page.keyboard.press('Escape');
+
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0].screenshot).toBeNull();
+
+    await host.locator('css=.bd-close').click();
+    await host.locator('css=.bd-trigger').click();
+    await expect(host.locator('css=#title')).toBeVisible({ timeout: 5000 });
+    await expect(host.locator('css=#include-screenshot')).toBeChecked();
   });
 
   test('shows all buttons on pages below 10k nodes', async ({ page }) => {
@@ -4315,6 +4338,57 @@ test.describe('Screenshot Masking', () => {
     const rect = await docRectOf(page, '#below-fold-mask');
     const cx = Math.floor((rect.x + rect.w / 2) * pr);
     const cy = Math.floor((rect.y + rect.h / 2) * pr);
+    expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
+  });
+
+  test('full-page capture masks transformed redaction targets', async ({ page }) => {
+    const { screenshot, pixelRatio } = await submitFeedbackWithFullPageCapture(
+      page,
+      '/test/masking-layout-edge.html'
+    );
+
+    const rect = await docRectOf(page, '#transformed-mask');
+    const cx = Math.floor((rect.x + rect.w / 2) * pixelRatio);
+    const cy = Math.floor((rect.y + rect.h / 2) * pixelRatio);
+
+    expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
+  });
+
+  test('full-page capture masks sticky redaction targets after scrolling', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.addEventListener('DOMContentLoaded', () => {
+        requestAnimationFrame(() => window.scrollTo(0, 420));
+      });
+    });
+
+    const { screenshot, pixelRatio } = await submitFeedbackWithFullPageCapture(
+      page,
+      '/test/masking-layout-edge.html'
+    );
+
+    const rect = await docRectOf(page, '#sticky-mask');
+    const cx = Math.floor((rect.x + rect.w / 2) * pixelRatio);
+    const cy = Math.floor((rect.y + rect.h / 2) * pixelRatio);
+
+    expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
+  });
+
+  test('full-page capture masks fixed redaction targets after scrolling', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.addEventListener('DOMContentLoaded', () => {
+        requestAnimationFrame(() => window.scrollTo(0, 420));
+      });
+    });
+
+    const { screenshot, pixelRatio } = await submitFeedbackWithFullPageCapture(
+      page,
+      '/test/masking-layout-edge.html'
+    );
+
+    const rect = await docRectOf(page, '#fixed-mask');
+    const cx = Math.floor((rect.x + rect.w / 2) * pixelRatio);
+    const cy = Math.floor((rect.y + rect.h / 2) * pixelRatio);
+
     expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
   });
 

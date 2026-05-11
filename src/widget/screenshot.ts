@@ -1,6 +1,6 @@
 import * as htmlToImage from 'html-to-image';
 import type { Options as HtmlToImageOptions } from 'html-to-image/lib/types';
-import { applyMaskToImage, collectMaskRects, countMaskRects } from './mask';
+import { applyMaskToImage, countMaskRects, createRedactionPlan } from './mask';
 
 declare const __BUGDROP_ENABLE_TEST_HOOKS__: boolean;
 
@@ -202,7 +202,7 @@ export async function captureScreenshot(
     filter: (node: HTMLElement) => node.id !== 'bugdrop-host',
   };
 
-  const rects = collectMaskRects(target);
+  const redactionPlan = createRedactionPlan(target);
   let originOffset = { x: 0, y: 0 };
   if (element) {
     const r = element.getBoundingClientRect();
@@ -211,7 +211,12 @@ export async function captureScreenshot(
 
   const capturePromise = toPng(target as HTMLElement, opts);
   const dataUrl = await withCaptureTimeout(capturePromise);
-  return applyMaskToImage(dataUrl, rects, pixelRatio, originOffset);
+  return applyMaskToImage(
+    dataUrl,
+    redactionPlan.targets.map(target => target.rect),
+    pixelRatio,
+    originOffset
+  );
 }
 
 export async function captureAreaScreenshot(
@@ -236,10 +241,16 @@ export async function captureAreaScreenshot(
   };
 
   const dataUrl = await withCaptureTimeout(toPng(document.body, opts));
-  return applyMaskToImage(dataUrl, collectMaskRects(document.body), pixelRatio, {
-    x: rect.x,
-    y: rect.y,
-  });
+  const redactionPlan = createRedactionPlan(document.body);
+  return applyMaskToImage(
+    dataUrl,
+    redactionPlan.targets.map(target => target.rect),
+    pixelRatio,
+    {
+      x: rect.x,
+      y: rect.y,
+    }
+  );
 }
 
 export function getRedactionCount(element?: Element, rect?: DOMRect): number {
