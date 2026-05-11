@@ -4,6 +4,7 @@
 [![Version](https://img.shields.io/badge/version-1.11.0-14b8a6)](./CHANGELOG.md)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./SECURITY.md)
 [![Live Demo](https://img.shields.io/badge/Demo-Try_It_Live-ff9e64)](https://bugdrop-widget-test.vercel.app)
+[![Sandbox](https://img.shields.io/badge/Sandbox-Configure_Widget-7c3aed)](https://bugdrop.neonwatty.workers.dev/sandbox/)
 [![GitHub Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-Install-2ea44f?logo=github)](https://github.com/marketplace/bugdrop-in-app-feedback-to-github-issues)
 [![Product Hunt](https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1141615&theme=light&t=1778415221018)](https://www.producthunt.com/products/bugdrop-2?utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-bugdrop-2)
 
@@ -54,6 +55,8 @@ That's it! Users can now click the bug button to submit feedback as GitHub Issue
 | `data-button`          | `true`, `false`                                      | `true`           |
 
 See [full documentation](https://bugdrop.dev/docs/configuration) for all options including styling, submitter info, and dismissible button.
+
+Use the [BugDrop Sandbox](https://bugdrop.neonwatty.workers.dev/sandbox/) to preview settings, check GitHub App installation, test screenshot masking, and generate a script tag.
 
 ## Documentation
 

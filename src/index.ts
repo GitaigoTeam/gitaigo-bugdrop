@@ -35,6 +35,36 @@ app.use('*', logger());
 // Mount API routes
 app.route('/api', api);
 
+function fetchAsset(c: { req: { url: string; raw: Request }; env: Env }, pathname: string) {
+  const url = new URL(c.req.url);
+  url.pathname = pathname;
+  return c.env.ASSETS.fetch(new Request(url, c.req.raw));
+}
+
+app.get('/sandbox', c => {
+  return c.redirect('/sandbox/', 301);
+});
+
+app.get('/sandbox/', c => {
+  return fetchAsset(c, '/sandbox/index.html');
+});
+
+app.get('/sandbox/preview', c => {
+  return fetchAsset(c, '/sandbox/preview.html');
+});
+
+app.get('/sandbox/preview.html', c => {
+  return fetchAsset(c, '/sandbox/preview.html');
+});
+
+app.get('/sandbox/sandbox.css', c => {
+  return fetchAsset(c, '/sandbox/sandbox.css');
+});
+
+app.get('/sandbox/sandbox.js', c => {
+  return fetchAsset(c, '/sandbox/sandbox.js');
+});
+
 // Redirect to landing page on Vercel
 app.get('/', c => {
   return c.redirect('https://bugdrop.dev', 301);

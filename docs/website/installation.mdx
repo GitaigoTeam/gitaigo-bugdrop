@@ -65,11 +65,15 @@ You can add data attributes to customize the widget's appearance and behavior:
   data-theme="dark"
   data-position="bottom-left"
   data-color="#6366f1"
-  data-welcome="We'd love your feedback!"
+  data-welcome="always"
 ></script>
 ```
 
 See the [Configuration](/docs/configuration) and [Styling](/docs/styling) docs for all available attributes.
+
+### Try it in the Sandbox
+
+Use the [BugDrop Sandbox](https://bugdrop.neonwatty.workers.dev/sandbox/) to preview widget behavior, check GitHub App installation, test screenshot masking, and generate a script tag before adding BugDrop to your app.
 
 ## Protecting sensitive data
 
@@ -84,7 +88,7 @@ want to appear in submitted screenshots, mark those elements with `data-bugdrop-
 
 BugDrop covers each marked element with an opaque rectangle on the captured screenshot.
 Password inputs and credit-card autocomplete fields are masked automatically. See
-[Screenshot masking](/security#screenshot-masking) on the Security page for details.
+[Screenshot masking](/docs/security#screenshot-masking) on the Security page for details.
 
 ## Step 3: You Are Done
 
@@ -174,6 +178,7 @@ You can also test by clicking the bug button and submitting a test report. Check
 
 ## Next Steps
 
+- [Try the Sandbox](https://bugdrop.neonwatty.workers.dev/sandbox/) to generate and test your script tag
 - [Configure the widget](/docs/configuration) with custom attributes
 - [Style the widget](/docs/styling) to match your site's design
 - [Use the JavaScript API](/docs/javascript-api) for advanced integrations

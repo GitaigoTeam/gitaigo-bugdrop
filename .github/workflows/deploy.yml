@@ -64,3 +64,11 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Verify production sandbox assets
+        run: |
+          WORKER_ORIGIN="https://bugdrop.neonwatty.workers.dev"
+          for path in /sandbox/ /sandbox/preview /sandbox/sandbox.css /sandbox/sandbox.js /widget.js; do
+            echo "Checking ${WORKER_ORIGIN}${path}..."
+            curl -sfo /dev/null "${WORKER_ORIGIN}${path}" || (echo "Missing production asset: $path" && exit 1)
+          done

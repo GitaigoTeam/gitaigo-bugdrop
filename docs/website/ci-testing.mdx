@@ -45,7 +45,7 @@ const EXPECTED = {
   requireEmail: false,
   buttonDismissible: false,
   showRestore: true,
-  welcomeMessage: "Report a bug or request a feature",
+  welcome: "once",
 };
 
 const URL = "https://your-site.com"; // Replace with your site URL
@@ -114,17 +114,17 @@ test.describe("BugDrop Widget", () => {
     expect(bgColor).toBeTruthy();
   });
 
-  test("displays correct welcome message", async ({ page }) => {
+  test("uses expected welcome behavior", async ({ page }) => {
     const btn = await shadowEl(page, "bug-drop-widget", ".floating-btn");
     await (btn as any).click();
 
-    const welcomeText = await page.evaluate(() => {
+    const welcomeVisible = await page.evaluate(() => {
       const host = document.querySelector("bug-drop-widget");
       const welcome = host?.shadowRoot?.querySelector(".welcome-message, h2");
-      return welcome?.textContent?.trim();
+      return Boolean(welcome);
     });
 
-    expect(welcomeText).toContain(EXPECTED.welcomeMessage);
+    expect(welcomeVisible).toBe(EXPECTED.welcome !== "never");
   });
 
   test("shows/hides name field based on config", async ({ page }) => {
@@ -249,7 +249,7 @@ The test suite covers three areas:
 - **Opens and closes the form** -- Clicks the button, verifies the form appears, then closes it
 - **Correct position** -- Validates the button is in the expected corner (bottom-right or bottom-left)
 - **Correct accent color** -- Checks the button's background color
-- **Welcome message** -- Opens the form and verifies the correct welcome text is displayed
+- **Welcome screen** -- Opens the form and verifies the expected welcome behavior
 - **Name/email field visibility** -- Confirms fields show or hide based on your configuration
 
 ### Accessibility Tests (WCAG AA)
@@ -272,7 +272,7 @@ const EXPECTED = {
   requireEmail: false,      // data-require-email
   buttonDismissible: false, // data-button-dismissible
   showRestore: true,        // data-show-restore
-  welcomeMessage: "Report a bug or request a feature", // data-welcome
+  welcome: "once",           // data-welcome
 };
 ```
 

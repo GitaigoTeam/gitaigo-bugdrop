@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BugDrop Sandbox</title>
+  <link rel="stylesheet" href="./sandbox.css">
+</head>
+<body>
+  <main class="sandbox-shell">
+    <section class="workspace">
+      <header class="workspace-header">
+        <div>
+          <h1>BugDrop Sandbox</h1>
+          <p>Configure the widget, preview it on a realistic page, and generate the script tag.</p>
+        </div>
+        <a class="docs-link" href="https://bugdrop.dev/docs/installation">Installation docs</a>
+      </header>
+
+      <div class="layout-grid">
+        <aside class="controls-panel" aria-label="Widget configuration">
+          <form id="sandbox-form">
+            <section class="control-section">
+              <h2>Setup</h2>
+              <label class="field">
+                <span>GitHub repository</span>
+                <input id="repo" name="repo" value="mean-weasel/bugdrop" autocomplete="off" spellcheck="false">
+              </label>
+              <div id="repo-feedback" class="repo-feedback" role="status">Ready to check installation.</div>
+              <button class="secondary-button" id="check-installation" type="button">Check installation</button>
+            </section>
+
+            <section class="control-section">
+              <h2>Behavior</h2>
+              <label class="field">
+                <span>Screenshot mode</span>
+                <select id="screenshot" name="screenshot">
+                  <option value="optional">Optional</option>
+                  <option value="required">Required</option>
+                  <option value="auto">Auto</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Welcome screen behavior</span>
+                <select id="welcome" name="welcome">
+                  <option value="once">Once</option>
+                  <option value="always">Always</option>
+                  <option value="never">Never</option>
+                </select>
+              </label>
+              <div class="checkbox-grid">
+                <label><input id="showName" name="showName" type="checkbox"> Show name</label>
+                <label><input id="requireName" name="requireName" type="checkbox"> Require name</label>
+                <label><input id="showEmail" name="showEmail" type="checkbox"> Show email</label>
+                <label><input id="requireEmail" name="requireEmail" type="checkbox"> Require email</label>
+                <label><input id="buttonDismissible" name="buttonDismissible" type="checkbox"> Dismissible button</label>
+                <label><input id="showButton" name="showButton" type="checkbox" checked> Floating button</label>
+              </div>
+              <label class="field">
+                <span>Dismiss duration</span>
+                <input id="dismissDuration" name="dismissDuration" placeholder="session or minutes" autocomplete="off" spellcheck="false">
+              </label>
+              <div class="checkbox-grid">
+                <label><input id="showRestore" name="showRestore" type="checkbox" checked> Show restore tab</label>
+              </div>
+            </section>
+
+            <section class="control-section">
+              <h2>Screenshots</h2>
+              <label class="field">
+                <span>Screenshot scale</span>
+                <input id="screenshotScale" name="screenshotScale" value="2" inputmode="decimal" autocomplete="off">
+              </label>
+            </section>
+
+            <section class="control-section">
+              <h2>Style</h2>
+              <label class="field">
+                <span>Theme</span>
+                <select id="theme" name="theme">
+                  <option value="auto">Auto</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Position</span>
+                <select id="position" name="position">
+                  <option value="bottom-right">Bottom right</option>
+                  <option value="bottom-left">Bottom left</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Accent color</span>
+                <input id="color" name="color" value="#7c3aed" autocomplete="off" spellcheck="false">
+              </label>
+              <label class="field">
+                <span>Button label</span>
+                <input id="label" name="label" value="Feedback" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Icon</span>
+                <input id="icon" name="icon" placeholder="default, none, or https://..." autocomplete="off" spellcheck="false">
+              </label>
+              <label class="field">
+                <span>Font</span>
+                <input id="font" name="font" placeholder="inherit" autocomplete="off" spellcheck="false">
+              </label>
+              <label class="field">
+                <span>Radius</span>
+                <input id="radius" name="radius" placeholder="8px" autocomplete="off" spellcheck="false">
+              </label>
+              <label class="field">
+                <span>Background color</span>
+                <input id="bg" name="bg" placeholder="#ffffff" autocomplete="off" spellcheck="false">
+              </label>
+              <label class="field">
+                <span>Text color</span>
+                <input id="text" name="text" placeholder="#111827" autocomplete="off" spellcheck="false">
+              </label>
+              <label class="field">
+                <span>Border width</span>
+                <input id="borderWidth" name="borderWidth" placeholder="1px" autocomplete="off" spellcheck="false">
+              </label>
+              <label class="field">
+                <span>Border color</span>
+                <input id="borderColor" name="borderColor" placeholder="#e5e7eb" autocomplete="off" spellcheck="false">
+              </label>
+              <label class="field">
+                <span>Shadow</span>
+                <input id="shadow" name="shadow" placeholder="0 8px 30px rgba(0,0,0,0.12)" autocomplete="off" spellcheck="false">
+              </label>
+            </section>
+
+            <section class="control-section">
+              <h2>Advanced</h2>
+              <label class="field">
+                <span>Category labels JSON</span>
+                <textarea id="categoryLabels" name="categoryLabels" placeholder='{"bug":["defect"],"feature":"product-feedback"}' spellcheck="false"></textarea>
+              </label>
+            </section>
+          </form>
+        </aside>
+
+        <section class="preview-column">
+          <div class="preview-toolbar">
+            <div>
+              <h2>Preview</h2>
+              <p>Reloads with the selected script attributes.</p>
+            </div>
+            <button class="secondary-button" id="refresh-preview" type="button">Refresh preview</button>
+          </div>
+          <iframe id="sandbox-preview" title="BugDrop sandbox preview" sandbox="allow-scripts allow-forms allow-popups"></iframe>
+
+          <section class="script-output" aria-label="Generated script tag">
+            <div class="script-header">
+              <div>
+                <h2>Script Tag</h2>
+                <p>Paste this before the closing body tag in your app.</p>
+              </div>
+              <button id="copy-script" type="button" aria-live="polite">Copy</button>
+            </div>
+            <pre><code id="script-code"></code></pre>
+          </section>
+
+          <section class="safety-note">
+            <h2>Redaction Check</h2>
+            <p>The preview includes fields marked with <code>data-bugdrop-mask</code>. Screenshot masking is best-effort visual masking for elements developers mark; it is not automatic secret detection.</p>
+          </section>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script src="./sandbox.js"></script>
+</body>
+</html>

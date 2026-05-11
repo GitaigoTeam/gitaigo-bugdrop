@@ -184,6 +184,14 @@ jobs:
           echo "Preview worker not ready after 300s"
           exit 1
 
+      - name: Verify preview sandbox assets
+        run: |
+          WORKER_ORIGIN="https://bugdrop-preview.neonwatty.workers.dev"
+          for path in /sandbox/ /sandbox/preview /sandbox/sandbox.css /sandbox/sandbox.js /widget.js; do
+            echo "Checking ${WORKER_ORIGIN}${path}..."
+            curl -sfo /dev/null "${WORKER_ORIGIN}${path}" || (echo "Missing preview asset: $path" && exit 1)
+          done
+
       - name: Verify test venue is reachable
         run: |
           VENUE_URL="${PLAYWRIGHT_BASE_URL}"
