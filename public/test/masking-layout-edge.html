@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>BugDrop - Masking Layout Edge Cases</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 1800px;
+        padding: 24px;
+        font-family: system-ui, sans-serif;
+        background: #f8fafc;
+      }
+
+      .spacer {
+        height: 360px;
+      }
+
+      .panel {
+        width: 260px;
+        min-height: 56px;
+        margin: 24px 0;
+        padding: 18px;
+        border: 1px solid #94a3b8;
+        border-radius: 4px;
+        background: #fee2e2;
+        color: #7f1d1d;
+        font-weight: 700;
+      }
+
+      #transformed-mask {
+        transform: translate(48px, 24px) rotate(1deg);
+      }
+
+      #sticky-mask {
+        position: sticky;
+        top: 16px;
+        background: #fde68a;
+      }
+
+      #fixed-mask {
+        position: fixed;
+        right: 32px;
+        top: 96px;
+        width: 220px;
+        background: #bfdbfe;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Masking Layout Edge Cases</h1>
+    <p>Fixture used by Playwright for transformed and sticky redaction geometry.</p>
+
+    <div id="transformed-mask" class="panel" data-bugdrop-redact>
+      transformed private account id
+    </div>
+
+    <div class="spacer"></div>
+
+    <div id="sticky-mask" class="panel" data-bugdrop-redact>sticky private session id</div>
+
+    <div class="spacer"></div>
+
+    <div id="fixed-mask" class="panel" data-bugdrop-redact>fixed private token</div>
+
+    <script src="/widget.js" data-repo="test-org/test-repo" data-screenshot="optional"></script>
+  </body>
+</html>

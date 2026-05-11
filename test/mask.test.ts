@@ -1,10 +1,20 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { collectMaskRects, applyMaskToImage, translateMaskRect } from '../src/widget/mask';
+import {
+  applyMaskToImage,
+  collectMaskRects,
+  createRedactionPlan,
+  MaskApplicationError,
+  translateMaskRect,
+} from '../src/widget/mask';
 
 describe('mask module exports', () => {
   it('exports collectMaskRects', () => {
     expect(typeof collectMaskRects).toBe('function');
+  });
+
+  it('exports createRedactionPlan', () => {
+    expect(typeof createRedactionPlan).toBe('function');
   });
 
   it('exports applyMaskToImage', () => {
@@ -47,6 +57,14 @@ describe('collectMaskRects — explicit attribute', () => {
     document.body.appendChild(div);
 
     expect(collectMaskRects(document.body)).toEqual([{ x: 10, y: 20, w: 100, h: 50 }]);
+    expect(createRedactionPlan(document.body).targets).toMatchObject([
+      {
+        element: div,
+        rect: { x: 10, y: 20, w: 100, h: 50 },
+        reason: 'developer-marked',
+        strategy: 'canvas-mask',
+      },
+    ]);
   });
 
   it('returns rects for multiple sibling masked elements', () => {
@@ -74,6 +92,14 @@ describe('collectMaskRects — built-in defaults', () => {
     document.body.appendChild(input);
 
     expect(collectMaskRects(document.body)).toEqual([{ x: 0, y: 0, w: 200, h: 30 }]);
+    expect(createRedactionPlan(document.body).targets).toMatchObject([
+      {
+        element: input,
+        rect: { x: 0, y: 0, w: 200, h: 30 },
+        reason: 'sensitive-input',
+        strategy: 'canvas-mask',
+      },
+    ]);
   });
 
   it('masks credit-card autocomplete inputs', () => {
@@ -171,6 +197,78 @@ describe('collectMaskRects — nesting and scoping', () => {
 
     expect(collectMaskRects(input)).toEqual([{ x: 0, y: 0, w: 200, h: 30 }]);
   });
+
+  it('traverses open shadow DOM redaction targets from a host element', () => {
+    const host = withRect(document.createElement('div'), 0, 0, 200, 100);
+    const shadow = host.attachShadow({ mode: 'open' });
+    const privateField = withRect(document.createElement('div'), 10, 10, 50, 20);
+    privateField.setAttribute('data-bugdrop-mask', '');
+    shadow.appendChild(privateField);
+    document.body.appendChild(host);
+
+    expect(collectMaskRects(document.body)).toEqual([{ x: 10, y: 10, w: 50, h: 20 }]);
+    expect(createRedactionPlan(document.body).targets).toMatchObject([
+      {
+        element: privateField,
+        rect: { x: 10, y: 10, w: 50, h: 20 },
+        reason: 'developer-marked',
+        strategy: 'canvas-mask',
+      },
+    ]);
+  });
+
+  it('uses a marked shadow host as the top-most mask', () => {
+    const host = withRect(document.createElement('div'), 0, 0, 200, 100);
+    host.setAttribute('data-bugdrop-mask', '');
+    const shadow = host.attachShadow({ mode: 'open' });
+    const privateField = withRect(document.createElement('div'), 10, 10, 50, 20);
+    privateField.setAttribute('data-bugdrop-mask', '');
+    shadow.appendChild(privateField);
+    document.body.appendChild(host);
+
+    expect(collectMaskRects(document.body)).toEqual([{ x: 0, y: 0, w: 200, h: 100 }]);
+  });
+
+  it('does not traverse iframe document redaction targets', () => {
+    const iframe = withRect(document.createElement('iframe'), 0, 0, 200, 100);
+    const iframeBody = document.createElement('body');
+    const privateField = withRect(document.createElement('div'), 10, 10, 50, 20);
+    privateField.setAttribute('data-bugdrop-mask', '');
+    iframeBody.appendChild(privateField);
+    Object.defineProperty(iframe, 'contentDocument', {
+      value: { body: iframeBody },
+      configurable: true,
+    });
+    document.body.appendChild(iframe);
+
+    expect(createRedactionPlan(document.body).targets).toEqual([]);
+  });
+
+  it('masks a marked iframe container without inspecting iframe contents', () => {
+    const iframe = withRect(document.createElement('iframe'), 0, 0, 200, 100);
+    iframe.setAttribute('data-bugdrop-mask', '');
+    document.body.appendChild(iframe);
+
+    expect(collectMaskRects(document.body)).toEqual([{ x: 0, y: 0, w: 200, h: 100 }]);
+  });
+
+  it.each(['canvas', 'img', 'video'] as const)('masks a marked %s container', tagName => {
+    const media = withRect(document.createElement(tagName), 0, 0, 200, 100);
+    media.setAttribute('data-bugdrop-mask', '');
+    document.body.appendChild(media);
+
+    expect(collectMaskRects(document.body)).toEqual([{ x: 0, y: 0, w: 200, h: 100 }]);
+  });
+
+  it.each(['canvas', 'img', 'video'] as const)(
+    'does not treat unmarked %s pixels as redaction targets',
+    tagName => {
+      const media = withRect(document.createElement(tagName), 0, 0, 200, 100);
+      document.body.appendChild(media);
+
+      expect(collectMaskRects(document.body)).toEqual([]);
+    }
+  );
 });
 
 describe('collectMaskRects — coordinates and visibility', () => {
@@ -357,6 +455,6 @@ describe('applyMaskToImage', () => {
     };
     await expect(
       applyMaskToImage('data:image/png;base64,bad', [{ x: 0, y: 0, w: 10, h: 10 }], 1)
-    ).rejects.toThrow('Failed to apply privacy masks');
+    ).rejects.toThrow(MaskApplicationError);
   });
 });

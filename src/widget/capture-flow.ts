@@ -1,0 +1,314 @@
+import { createAreaPicker } from './area-picker';
+import { showAnnotationStep } from './annotation-flow';
+import {
+  captureAreaWithLoading,
+  capturePromiseWithLoading,
+  captureWithLoading,
+} from './capture-loading';
+import { createElementPicker } from './picker';
+import { beginViewportCapture, getRedactionCount, isFullPageDisabled } from './screenshot';
+import { showScreenshotOptions, type ScreenshotChoice } from './screenshot-options';
+
+export interface CaptureFlowConfig {
+  screenshotMode: 'optional' | 'auto' | 'required';
+  screenshotScale?: number;
+  accentColor?: string;
+  font?: string;
+  radius?: string;
+  borderWidth?: string;
+  bgColor?: string;
+  textColor?: string;
+  borderColor?: string;
+  theme: 'light' | 'dark' | 'auto';
+}
+
+export interface CaptureFlowResult {
+  screenshot: string | null;
+  elementSelector: string | null;
+  returnToForm: boolean;
+}
+
+export type EmptyCaptureReason =
+  | 'none'
+  | 'explicit-skip'
+  | 'capture-failure-skip'
+  | 'selection-cancelled';
+
+type ChosenCaptureResult =
+  | {
+      kind: 'captured';
+      screenshot: string;
+      elementSelector: string | null;
+      redactionCount: number;
+      redactionUnavailable: boolean;
+    }
+  | { kind: 'returnToForm' }
+  | { kind: 'empty'; reason: EmptyCaptureReason; elementSelector: string | null };
+
+export async function runScreenshotCaptureFlow(
+  root: HTMLElement,
+  config: CaptureFlowConfig,
+  includeScreenshot: boolean,
+  onComplexScreenshotSkipped: () => void
+): Promise<CaptureFlowResult> {
+  if (config.screenshotMode === 'auto') {
+    return captureAutomaticScreenshot(root, config);
+  }
+
+  if (!includeScreenshot) {
+    return emptyCaptureResult();
+  }
+
+  const screenshotRequired = config.screenshotMode === 'required';
+  while (true) {
+    const result = await captureChosenScreenshot(root, config, screenshotRequired);
+    if (result.kind === 'returnToForm') {
+      return { ...emptyCaptureResult(), returnToForm: true };
+    }
+
+    if (result.kind === 'empty') {
+      if (!screenshotRequired && shouldRememberComplexScreenshotSkip(result.reason)) {
+        onComplexScreenshotSkipped();
+      }
+      if (screenshotRequired) continue;
+      return {
+        screenshot: null,
+        elementSelector: result.elementSelector,
+        returnToForm: false,
+      };
+    }
+
+    const annotatedScreenshot = await showAnnotationStep(
+      root,
+      result.screenshot,
+      result.redactionCount,
+      {
+        redactionUnavailable: result.redactionUnavailable,
+      }
+    );
+
+    if (annotatedScreenshot === 'retake') continue;
+    if (annotatedScreenshot === 'cancel') {
+      return { ...emptyCaptureResult(), returnToForm: true };
+    }
+
+    return {
+      screenshot: annotatedScreenshot,
+      elementSelector: result.elementSelector,
+      returnToForm: false,
+    };
+  }
+}
+
+async function captureAutomaticScreenshot(
+  root: HTMLElement,
+  config: CaptureFlowConfig
+): Promise<CaptureFlowResult> {
+  if (isFullPageDisabled()) {
+    return emptyCaptureResult();
+  }
+
+  const result = await captureWithLoading(root, undefined, config.screenshotScale);
+  if (result.kind === 'cancelled') {
+    return { ...emptyCaptureResult(), returnToForm: true };
+  }
+
+  return {
+    screenshot: result.kind === 'ok' ? result.dataUrl : null,
+    elementSelector: null,
+    returnToForm: false,
+  };
+}
+
+export function shouldRememberComplexScreenshotSkip(reason: EmptyCaptureReason): boolean {
+  return reason === 'explicit-skip' || reason === 'capture-failure-skip';
+}
+
+async function captureChosenScreenshot(
+  root: HTMLElement,
+  config: CaptureFlowConfig,
+  screenshotRequired: boolean
+): Promise<ChosenCaptureResult> {
+  const screenshotChoice = await showScreenshotOptions(root, {
+    allowSkip: !screenshotRequired,
+  });
+
+  switch (screenshotChoice.kind) {
+    case 'cancel':
+      return { kind: 'returnToForm' };
+    case 'skip':
+      return { kind: 'empty', reason: 'explicit-skip', elementSelector: null };
+    case 'viewport':
+      return captureFromViewportChoice(root, screenshotChoice, screenshotRequired);
+    case 'capture':
+      return captureFromFullPageChoice(root, config, screenshotRequired);
+    case 'element':
+      return captureFromElementChoice(root, config, screenshotRequired);
+    case 'area':
+      return captureFromAreaChoice(root, config, screenshotRequired);
+    default:
+      return assertNever(screenshotChoice);
+  }
+}
+
+async function captureFromViewportChoice(
+  root: HTMLElement,
+  choice: Extract<ScreenshotChoice, { kind: 'viewport' }>,
+  screenshotRequired: boolean
+): Promise<ChosenCaptureResult> {
+  const result = await capturePromiseWithLoading(
+    root,
+    choice.capture,
+    () => beginViewportCapture(),
+    {
+      allowSkip: !screenshotRequired,
+      showLoading: false,
+    }
+  );
+  if (result.kind === 'cancelled') return { kind: 'returnToForm' };
+  if (result.kind === 'skipped') {
+    return { kind: 'empty', reason: 'capture-failure-skip', elementSelector: null };
+  }
+  return {
+    kind: 'captured',
+    screenshot: result.dataUrl,
+    elementSelector: null,
+    redactionCount: 0,
+    redactionUnavailable: true,
+  };
+}
+
+async function captureFromFullPageChoice(
+  root: HTMLElement,
+  config: CaptureFlowConfig,
+  screenshotRequired: boolean
+): Promise<ChosenCaptureResult> {
+  const result = await captureWithLoading(root, undefined, config.screenshotScale, {
+    allowSkip: !screenshotRequired,
+  });
+  if (result.kind === 'cancelled') return { kind: 'returnToForm' };
+  if (result.kind === 'skipped') {
+    return { kind: 'empty', reason: 'capture-failure-skip', elementSelector: null };
+  }
+  return {
+    kind: 'captured',
+    screenshot: result.dataUrl,
+    elementSelector: null,
+    redactionCount: getRedactionCount(),
+    redactionUnavailable: false,
+  };
+}
+
+async function captureFromElementChoice(
+  root: HTMLElement,
+  config: CaptureFlowConfig,
+  screenshotRequired: boolean
+): Promise<ChosenCaptureResult> {
+  const element = await createElementPicker(getPickerStyle(config));
+  if (!element) {
+    return { kind: 'empty', reason: 'selection-cancelled', elementSelector: null };
+  }
+
+  const elementSelector = getElementSelector(element);
+  const result = await captureWithLoading(root, element, config.screenshotScale, {
+    allowSkip: !screenshotRequired,
+  });
+  if (result.kind === 'cancelled') return { kind: 'returnToForm' };
+  if (result.kind === 'skipped') {
+    return { kind: 'empty', reason: 'capture-failure-skip', elementSelector };
+  }
+  return {
+    kind: 'captured',
+    screenshot: result.dataUrl,
+    elementSelector,
+    redactionCount: getRedactionCount(element),
+    redactionUnavailable: false,
+  };
+}
+
+async function captureFromAreaChoice(
+  root: HTMLElement,
+  config: CaptureFlowConfig,
+  screenshotRequired: boolean
+): Promise<ChosenCaptureResult> {
+  const rect = await createAreaPicker(getPickerStyle(config), {
+    redactionsAvailable: getRedactionCount() > 0,
+  });
+  if (!rect) {
+    return { kind: 'empty', reason: 'selection-cancelled', elementSelector: null };
+  }
+
+  const result = await captureAreaWithLoading(root, rect, config.screenshotScale, {
+    allowSkip: !screenshotRequired,
+  });
+  if (result.kind === 'cancelled') return { kind: 'returnToForm' };
+  if (result.kind === 'skipped') {
+    return { kind: 'empty', reason: 'capture-failure-skip', elementSelector: null };
+  }
+  return {
+    kind: 'captured',
+    screenshot: result.dataUrl,
+    elementSelector: null,
+    redactionCount: getRedactionCount(undefined, rect),
+    redactionUnavailable: false,
+  };
+}
+
+function getPickerStyle(config: CaptureFlowConfig) {
+  return {
+    accentColor: config.accentColor,
+    font: config.font,
+    radius: config.radius,
+    borderWidth: config.borderWidth,
+    bgColor: config.bgColor,
+    textColor: config.textColor,
+    borderColor: config.borderColor,
+    theme: config.theme,
+  };
+}
+
+function emptyCaptureResult(): CaptureFlowResult {
+  return {
+    screenshot: null,
+    elementSelector: null,
+    returnToForm: false,
+  };
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled screenshot choice: ${JSON.stringify(value)}`);
+}
+
+function getElementSelector(element: Element): string {
+  const path: string[] = [];
+  let current: Element | null = element;
+
+  while (current && current !== document.body) {
+    let selector = current.tagName.toLowerCase();
+
+    if (current.id) {
+      selector = `#${current.id}`;
+      path.unshift(selector);
+      break;
+    }
+
+    if (current.className) {
+      const classNameStr =
+        typeof current.className === 'string'
+          ? current.className
+          : (current.className as SVGAnimatedString).baseVal || '';
+      const classes = classNameStr
+        .split(' ')
+        .filter(c => c)
+        .slice(0, 2);
+      if (classes.length) {
+        selector += `.${classes.join('.')}`;
+      }
+    }
+
+    path.unshift(selector);
+    current = current.parentElement;
+  }
+
+  return path.join(' > ');
+}

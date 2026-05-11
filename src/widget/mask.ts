@@ -5,40 +5,74 @@ interface MaskRect {
   h: number;
 }
 
+type RedactionReason = 'developer-marked' | 'sensitive-input';
+type RedactionStrategy = 'canvas-mask';
+
+interface RedactionTarget {
+  element: Element;
+  rect: MaskRect;
+  reason: RedactionReason;
+  strategy: RedactionStrategy;
+}
+
+interface RedactionPlan {
+  targets: RedactionTarget[];
+}
+
+export class MaskApplicationError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'MaskApplicationError';
+  }
+}
+
 const EXPLICIT_SELECTOR =
   '[data-bugdrop-mask], [data-bugdrop-redact], [data-bd-redact], [data-bugdrop-redacted]';
 const DEFAULT_SELECTOR =
   'input[type="password"], input[autocomplete*="cc-number"], input[autocomplete*="cc-csc"], input[autocomplete*="cc-exp"]';
 
-function shouldMask(el: Element): boolean {
-  return el.matches(EXPLICIT_SELECTOR) || el.matches(DEFAULT_SELECTOR);
+function getRedactionReason(el: Element): RedactionReason | null {
+  if (el.matches(EXPLICIT_SELECTOR)) return 'developer-marked';
+  if (el.matches(DEFAULT_SELECTOR)) return 'sensitive-input';
+  return null;
 }
 
-function pushRect(el: Element, rects: MaskRect[]): void {
+function createTarget(el: Element, reason: RedactionReason): RedactionTarget | null {
   const rect = el.getBoundingClientRect();
-  if (rect.width === 0 || rect.height === 0) return;
-  rects.push({
-    x: rect.left + window.scrollX,
-    y: rect.top + window.scrollY,
-    w: rect.width,
-    h: rect.height,
-  });
+  if (rect.width === 0 || rect.height === 0) return null;
+  return {
+    element: el,
+    rect: {
+      x: rect.left + window.scrollX,
+      y: rect.top + window.scrollY,
+      w: rect.width,
+      h: rect.height,
+    },
+    reason,
+    strategy: 'canvas-mask',
+  };
+}
+
+export function createRedactionPlan(root: Element): RedactionPlan {
+  const targets: RedactionTarget[] = [];
+  const rootReason = getRedactionReason(root);
+
+  if (rootReason) {
+    const rootTarget = createTarget(root, rootReason);
+    return { targets: rootTarget ? [rootTarget] : [] };
+  }
+
+  walk(root, targets);
+  walkOpenShadowRoot(root, targets);
+  return { targets };
 }
 
 export function collectMaskRects(root: Element): MaskRect[] {
-  const rects: MaskRect[] = [];
-
-  if (shouldMask(root)) {
-    pushRect(root, rects);
-    return rects;
-  }
-
-  walk(root, rects);
-  return rects;
+  return createRedactionPlan(root).targets.map(target => target.rect);
 }
 
 export function countMaskRects(root: Element = document.body, area?: DOMRect): number {
-  const rects = collectMaskRects(root);
+  const rects = createRedactionPlan(root).targets.map(target => target.rect);
   if (!area) return rects.length;
   return rects.filter(rect => intersects(rect, area)).length;
 }
@@ -52,14 +86,33 @@ function intersects(rect: MaskRect, area: DOMRect): boolean {
   );
 }
 
-function walk(node: Element, rects: MaskRect[]): void {
+function walk(node: Element, targets: RedactionTarget[]): void {
   for (const child of Array.from(node.children)) {
-    if (shouldMask(child)) {
-      pushRect(child, rects);
+    const reason = getRedactionReason(child);
+    if (reason) {
+      const target = createTarget(child, reason);
+      if (target) targets.push(target);
       // Top-most-ancestor rule: do not descend into masked subtrees.
       continue;
     }
-    walk(child, rects);
+    walk(child, targets);
+    walkOpenShadowRoot(child, targets);
+  }
+}
+
+function walkOpenShadowRoot(node: Element, targets: RedactionTarget[]): void {
+  const shadowRoot = node.shadowRoot;
+  if (!shadowRoot) return;
+
+  for (const child of Array.from(shadowRoot.children)) {
+    const reason = getRedactionReason(child);
+    if (reason) {
+      const target = createTarget(child, reason);
+      if (target) targets.push(target);
+      continue;
+    }
+    walk(child, targets);
+    walkOpenShadowRoot(child, targets);
   }
 }
 
@@ -102,7 +155,7 @@ export async function applyMaskToImage(
   canvas.height = img.naturalHeight || img.height;
 
   const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Failed to get canvas context');
+  if (!ctx) throw new MaskApplicationError('Failed to get canvas context for privacy masking');
 
   ctx.drawImage(img, 0, 0);
   ctx.fillStyle = '#000';
@@ -119,7 +172,8 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Failed to apply privacy masks'));
+    img.onerror = () =>
+      reject(new MaskApplicationError('Failed to load image for privacy masking'));
     img.src = dataUrl;
   });
 }

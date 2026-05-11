@@ -1063,6 +1063,10 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
   return root;
 }
 
+export function redactionNoteHtml(message: string): string {
+  return `<p class="bd-redaction-note" style="margin: 0 0 12px; padding: 8px 12px; background: var(--bd-warning-bg, #fff8e1); border-radius: 6px; font-size: 13px; color: var(--bd-text-secondary);">${message}</p>`;
+}
+
 export function createModal(
   container: HTMLElement,
   title: string,

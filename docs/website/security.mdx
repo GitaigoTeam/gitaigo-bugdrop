@@ -78,10 +78,10 @@ BugDrop is built with a privacy-first approach:
 
 ### Screenshot masking
 
-You can mark sensitive elements so BugDrop visually covers them in supported screenshot modes. Add the `data-bugdrop-mask` attribute to any element you want covered:
+You can mark sensitive elements so BugDrop visually covers them in supported screenshot modes. Add `data-bugdrop-redact` or `data-bugdrop-mask` to any element you want covered:
 
 ```html
-<input type="email" data-bugdrop-mask />
+<input type="email" data-bugdrop-redact />
 
 <div data-bugdrop-mask>
   <span>Customer name</span>
@@ -89,9 +89,15 @@ You can mark sensitive elements so BugDrop visually covers them in supported scr
 </div>
 ```
 
-When a user submits feedback, BugDrop paints an opaque rectangle over each tagged
-element's bounding box on the captured PNG before showing the user the annotator
-preview. The user sees what is masked and can audit it before submitting.
+Supported explicit attributes are `data-bugdrop-redact`, `data-bd-redact`,
+`data-bugdrop-redacted`, and `data-bugdrop-mask`.
+
+When a user submits feedback, BugDrop plans redactions from matching DOM
+elements, then paints an opaque rectangle over each target's measured bounding
+box on supported captured PNGs. In manual screenshot flows, the masked image is
+shown in the annotator preview so the user can audit it before submitting. In
+automatic screenshot mode, BugDrop applies supported masks but submits without
+showing the preview step.
 
 Masking is best-effort visual coverage, not a data-loss-prevention or security
 boundary. Users should still review screenshots before submitting when the manual
@@ -108,8 +114,14 @@ prevents gaps from CSS `gap` or non-masked siblings inside a masked container.
 
 **Known limitations:**
 
-- Elements inside Shadow DOM and cross-origin iframes are not traversed in this
-  iteration.
+- Elements inside open Shadow DOM are traversed when the browser exposes the
+  shadow root. Closed Shadow DOM cannot be traversed; mark the host element if
+  the whole custom control should be covered.
+- Iframe contents are not traversed. Mark the iframe element itself if the whole
+  embedded frame should be visually covered.
+- BugDrop does not inspect pixels or text inside canvas, image, video, plugin,
+  or iframe content. Mark the containing DOM element if that entire region should
+  be visually covered.
 - Mask rectangles are collected at the start of capture. If the page reflows or reveals
   sensitive elements between collection and the moment `html-to-image` finishes
   rendering, the mask may not cover the final pixels. Keep masked content stable during
