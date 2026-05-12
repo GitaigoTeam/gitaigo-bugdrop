@@ -612,6 +612,46 @@ test.describe('Screenshot Capture (Live)', () => {
       await countBlackPixelsInDataUrl(page, submittedScreenshot as string, latestRegion)
     ).toBeLessThan(20);
   });
+
+  test('privacy masking failure UX works on the deployed production widget', async ({ page }) => {
+    test.skip(
+      process.env.LIVE_TARGET !== 'production',
+      'The production failure fixture is hosted on the production Vercel venue.'
+    );
+
+    await mockInstalledRepo(page);
+    const payloads = await trackLiveFeedbackPayloads(page);
+    await page.goto('/redaction-failure.html');
+
+    const host = page.locator('#bugdrop-host');
+    await expect(host.locator('css=.bd-trigger')).toBeVisible({ timeout: 10_000 });
+    await host.locator('css=.bd-trigger').click();
+
+    await expect(host.locator('css=[data-action="continue"]')).toBeVisible({ timeout: 5_000 });
+    await host.locator('css=[data-action="continue"]').click();
+
+    await expect(host.locator('css=#title')).toBeVisible({ timeout: 5_000 });
+    await host.locator('css=#title').fill('Live privacy masking failure');
+    await host.locator('css=#include-screenshot').check();
+    await host.locator('css=#submit-btn').click();
+
+    await expect(host.locator('css=[data-action="capture"]')).toBeVisible({ timeout: 5_000 });
+    await host.locator('css=[data-action="capture"]').click();
+
+    await expect(host.locator('css=.bd-title')).toHaveText('Privacy masking failed', {
+      timeout: 10_000,
+    });
+    await expect(host.locator('css=.bd-error-message__text')).toContainText(
+      'Automatic redaction of private fields could not be applied'
+    );
+    await expect(host.locator('css=button').filter({ hasText: 'Try Again' })).toHaveCount(0);
+
+    await host.locator('css=button').filter({ hasText: 'Continue without screenshot' }).click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10_000 });
+
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0].screenshot).toBeNull();
+  });
 });
 
 test.describe('Feedback Submission (Live)', () => {
