@@ -30,6 +30,12 @@ const BOOLEAN_FIELDS = new Set([
   'showButton',
 ]);
 
+// User-facing labels for fields whose sanitizer can reject input (coerce non-empty
+// input to ''). Used by describeRejectedFields to build the sanitize-feedback notice.
+// Enum-fallback fields (theme/position/screenshot/welcome) are intentionally absent
+// since they always return a non-empty default. Boolean fields are also absent.
+// IMPORTANT: when adding a new sanitizer in sanitizers.js whose output can be '',
+// add the matching key here so its rejection is surfaced to the user.
 const FIELD_LABELS = {
   repo: 'GitHub repository',
   color: 'Accent color',
@@ -52,6 +58,9 @@ function readConfig() {
   for (const key of Object.keys(ATTRIBUTE_MAP)) {
     const field = form[key];
     if (!field) {
+      // ATTRIBUTE_MAP drift: a config key has no matching form input. Surface
+      // this loudly so a regression is visible rather than silently sending '' .
+      console.warn(`[BugDrop sandbox] no form field for config key "${key}"`);
       config[key] = '';
       continue;
     }
@@ -191,7 +200,12 @@ async function checkInstallation() {
       const detail = await response.text().catch(() => '');
       throw new Error(`HTTP ${response.status}${detail ? `: ${detail.slice(0, 80)}` : ''}`);
     }
-    const result = await response.json();
+    let result;
+    try {
+      result = await response.json();
+    } catch (parseErr) {
+      throw new Error(`HTTP ${response.status}: invalid JSON response`, { cause: parseErr });
+    }
     if (requestId !== installationCheckId || readConfig().repo !== repo) return;
 
     repoFeedback.className = `repo-feedback ${result.installed ? 'ok' : 'warn'}`;

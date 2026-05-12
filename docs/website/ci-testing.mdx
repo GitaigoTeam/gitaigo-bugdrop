@@ -120,7 +120,9 @@ test.describe("BugDrop Widget", () => {
 
     // The welcome modal carries the `.bd-welcome` class; the feedback form does not.
     // For `welcome: "once"`, the welcome modal only appears on the first open per repo;
-    // clear localStorage in `beforeEach` if you want this test to assert it deterministically.
+    // the "seen" flag is stored under localStorage keys prefixed with `bugdrop_welcomed_`,
+    // so for a deterministic test add `await page.evaluate(() => localStorage.clear())`
+    // (or `localStorage.removeItem('bugdrop_welcomed_<owner>/<repo>')`) in beforeEach.
     const welcomeVisible = await page.evaluate(() => {
       const host = document.querySelector("bug-drop-widget");
       return Boolean(host?.shadowRoot?.querySelector(".bd-welcome"));

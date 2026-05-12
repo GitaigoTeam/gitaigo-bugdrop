@@ -233,6 +233,9 @@ test.describe('Widget Interaction', () => {
     await button.click();
     const getStartedBtn = page.locator('#bugdrop-host').locator('css=[data-action="continue"]');
     await expect(getStartedBtn).toBeVisible({ timeout: 5000 });
+    // The welcome modal carries the `bd-welcome` class — the docs example test in
+    // docs/website/ci-testing.mdx targets this selector, so lock it in here.
+    await expect(page.locator('#bugdrop-host').locator('css=.bd-welcome')).toBeVisible();
     await getStartedBtn.click();
 
     // Form should appear

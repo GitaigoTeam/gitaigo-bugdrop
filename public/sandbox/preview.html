@@ -432,10 +432,14 @@
   </div>
 
   <script>
-    // NOTE: This map duplicates ./attribute-map.js because this document runs in
-    // a same-origin iframe with sandbox="allow-scripts" (no allow-same-origin),
-    // which places it in an opaque origin and blocks ES module imports via CORS.
-    // Keep in sync with ./attribute-map.js and the consumers in src/widget/index.ts.
+    // NOTE: This map duplicates ./attribute-map.js. The iframe is loaded with
+    // sandbox="allow-scripts" (without allow-same-origin), which places its
+    // document in an opaque origin. From an opaque origin, even same-URL ES
+    // module fetches are treated as cross-origin and require CORS response
+    // headers from the asset server — Workers Assets does not emit those for
+    // static files, so the module import fails. Keeping a duplicate map here
+    // (with this comment) avoids weakening the iframe sandbox. Keep in sync
+    // with ./attribute-map.js and the consumers in src/widget/index.ts.
     const ATTRIBUTE_MAP = {
       repo: 'data-repo',
       theme: 'data-theme',
@@ -470,16 +474,33 @@
     script.src = `${window.location.origin}/widget.js`;
     script.async = false;
 
-    script.addEventListener('error', () => {
+    let bannerShown = false;
+    function showBanner(text) {
+      if (bannerShown) return;
+      bannerShown = true;
       const banner = document.createElement('div');
+      banner.id = 'bd-preview-error';
       banner.setAttribute('role', 'alert');
       banner.style.cssText =
         'position:fixed;bottom:12px;left:12px;right:12px;padding:12px;' +
         'background:#7f1d1d;color:#fff;border-radius:8px;font-family:system-ui;' +
         'box-shadow:0 8px 24px rgba(0,0,0,0.2);z-index:9999;';
-      banner.textContent =
-        'BugDrop widget failed to load from /widget.js. Check the network tab and CSP.';
+      banner.textContent = text;
       document.body.append(banner);
+    }
+
+    // Catches network-level script load failures (404, CSP, etc.). Runtime
+    // exceptions thrown inside the bundle land in window.onerror below.
+    script.addEventListener('error', () => {
+      showBanner('BugDrop widget failed to load from /widget.js. Check the network tab and CSP.');
+    });
+
+    // Catches uncaught runtime errors from the widget bundle so a broken
+    // widget.js doesn't silently render as the unmodified static template.
+    window.addEventListener('error', event => {
+      if (event?.filename && event.filename.includes('/widget.js')) {
+        showBanner('BugDrop widget threw during initialization. Check the browser console.');
+      }
     });
 
     for (const [key, value] of params.entries()) {

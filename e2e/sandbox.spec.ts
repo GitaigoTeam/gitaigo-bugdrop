@@ -167,13 +167,55 @@ test.describe('BugDrop Sandbox', () => {
 
     // User edits the repo without clicking check again, then the slow response returns.
     await page.locator('#repo').fill('other/repo');
+    const slowResponse = page.waitForResponse(r => r.url().includes('/api/check/slow/repo'));
     releaseSlow?.();
+    // Wait for the slow handler to actually fulfill so the stale-discard guard has
+    // run; without this the negative-match could pass trivially before the handler
+    // had any chance to write to repo-feedback.
+    await slowResponse;
 
     // Validation feedback (from input handler) is fine; what must NOT happen is the
     // stale "installed on slow/repo" text overwriting it.
-    await expect(page.locator('#repo-feedback')).not.toHaveText(/installed on slow\/repo/, {
-      timeout: 2000,
+    await expect(page.locator('#repo-feedback')).not.toHaveText(/installed on slow\/repo/);
+  });
+
+  test('surfaces HTTP detail when installation check returns 500', async ({ page }) => {
+    await page.route('**/api/check/**', async route => {
+      await route.fulfill({ status: 500, contentType: 'text/plain', body: 'boom' });
     });
+    await page.goto('/sandbox/');
+    await page.locator('#repo').fill('acme/app');
+    await page.locator('#check-installation').click();
+    await expect(page.locator('#repo-feedback')).toContainText(
+      /Installation check failed \(HTTP 500/
+    );
+    await expect(page.locator('#repo-feedback')).toHaveClass(/error/);
+  });
+
+  test('surfaces HTTP detail when API returns malformed JSON', async ({ page }) => {
+    await page.route('**/api/check/**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: '<html>not json</html>',
+      });
+    });
+    await page.goto('/sandbox/');
+    await page.locator('#repo').fill('acme/app');
+    await page.locator('#check-installation').click();
+    await expect(page.locator('#repo-feedback')).toContainText(
+      /Installation check failed \(HTTP 200: invalid JSON response/
+    );
+  });
+
+  test('preview shows error banner when widget.js fails to load', async ({ page }) => {
+    await page.route('**/widget.js', route => route.fulfill({ status: 404, body: '' }));
+    await page.goto('/sandbox/');
+    const frame = page.frameLocator('#sandbox-preview');
+    await expect(frame.locator('#bd-preview-error')).toBeVisible({ timeout: 10_000 });
+    await expect(frame.locator('#bd-preview-error')).toContainText(
+      'failed to load from /widget.js'
+    );
   });
 
   test('required contact fields imply visible contact fields in generated script', async ({

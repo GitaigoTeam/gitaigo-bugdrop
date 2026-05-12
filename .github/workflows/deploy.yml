@@ -75,9 +75,10 @@ jobs:
             body=$(curl -sSf "${WORKER_ORIGIN}${path}") || { echo "Fetch failed: $path"; exit 1; }
             grep -q -- "$expected" <<<"$body" || { echo "Wrong content for $path (expected: $expected)"; exit 1; }
           }
-          check /sandbox/             'BugDrop Sandbox'
-          check /sandbox/preview      'BugDrop Sandbox Preview'
-          check /sandbox/sandbox.css  'sandbox-shell'
-          check /sandbox/sandbox.js     'generateScriptTag'
+          check /sandbox/                 'id="sandbox-form"'
+          check /sandbox/preview          'BugDrop Sandbox Preview'
+          check /sandbox/sandbox.css      'sandbox-shell'
+          check /sandbox/sandbox.js       'generateScriptTag'
           check /sandbox/attribute-map.js 'data-repo'
-          check /widget.js            'bd-trigger'
+          check /sandbox/sanitizers.js    'sanitizeConfig'
+          check /widget.js                'bd-trigger'

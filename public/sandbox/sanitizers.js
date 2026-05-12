@@ -35,7 +35,11 @@ export function sanitizeIcon(value) {
   if (!trimmed || trimmed === 'none') return trimmed;
   try {
     const url = new URL(trimmed);
-    return ['https:', 'http:'].includes(url.protocol) ? url.toString() : '';
+    if (!['https:', 'http:'].includes(url.protocol)) return '';
+    // Reject embedded credentials (e.g. https://user:pass@host) — they would
+    // leak into the generated script's data-icon attribute.
+    if (url.username || url.password) return '';
+    return url.toString();
   } catch {
     return '';
   }
@@ -52,6 +56,8 @@ export function sanitizeScreenshotScale(value) {
   return Number.isFinite(parsed) && parsed >= 1 && parsed <= 4 ? String(parsed) : '';
 }
 
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 export function sanitizeCategoryLabels(value) {
   if (!value) return '';
   if (value.length > 1000) return '';
@@ -65,6 +71,9 @@ export function sanitizeCategoryLabels(value) {
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return '';
   }
+  // Reject prototype-pollution-style keys; downstream consumers may still
+  // process this JSON, so don't let those keys survive validation.
+  if (Object.keys(parsed).some(key => FORBIDDEN_KEYS.has(key))) return '';
   return value;
 }
 

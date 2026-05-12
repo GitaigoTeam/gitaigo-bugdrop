@@ -162,6 +162,12 @@ describe('sanitizeIcon', () => {
     expect(sanitizeIcon('htps://typo.com')).toBe('');
     expect(sanitizeIcon('//missing-scheme.com')).toBe('');
   });
+
+  it('rejects URLs with embedded credentials', () => {
+    expect(sanitizeIcon('https://user:pass@example.com/icon.svg')).toBe('');
+    expect(sanitizeIcon('https://user@example.com/icon.svg')).toBe('');
+    expect(sanitizeIcon('http://:pass@example.com/icon.svg')).toBe('');
+  });
 });
 
 describe('sanitizeDismissDuration', () => {
@@ -236,6 +242,12 @@ describe('sanitizeCategoryLabels', () => {
     const oversize = '{"a":"' + 'x'.repeat(995) + '"}';
     expect(oversize.length).toBeGreaterThan(1000);
     expect(sanitizeCategoryLabels(oversize)).toBe('');
+  });
+
+  it('rejects prototype-pollution-style keys', () => {
+    expect(sanitizeCategoryLabels('{"__proto__":{"polluted":true}}')).toBe('');
+    expect(sanitizeCategoryLabels('{"constructor":{"prototype":{}}}')).toBe('');
+    expect(sanitizeCategoryLabels('{"prototype":"x"}')).toBe('');
   });
 });
 
