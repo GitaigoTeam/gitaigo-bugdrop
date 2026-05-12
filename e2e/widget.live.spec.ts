@@ -22,6 +22,7 @@ const expectedWidgetOrigin =
       ? 'https://bugdrop.neonwatty.workers.dev'
       : undefined);
 const expectedWidgetSha256 = process.env.EXPECTED_WIDGET_SHA256;
+const venuePath = process.env.LIVE_VENUE_PATH || '/';
 
 if (bypassSecret) {
   test.beforeEach(async ({ context }) => {
@@ -70,7 +71,7 @@ async function addCorsBlockedImage(page: Page) {
 
 async function openScreenshotOptions(page: Page, title: string) {
   await mockInstalledRepo(page);
-  await page.goto(process.env.LIVE_TARGET === 'preview' ? '/' : '/test/');
+  await page.goto(venuePath);
 
   const host = page.locator('#bugdrop-host');
   const button = host.locator('css=.bd-trigger');
@@ -263,7 +264,7 @@ test.describe('Widget Loading (Live)', () => {
       }
     });
 
-    await page.goto(process.env.LIVE_TARGET === 'preview' ? '/' : '/test/');
+    await page.goto(venuePath);
     await page.waitForTimeout(2000);
 
     // Widget host element should exist
@@ -286,7 +287,7 @@ test.describe('Widget Loading (Live)', () => {
   });
 
   test('venue loads the expected deployed widget asset', async ({ page, request }) => {
-    await page.goto(process.env.LIVE_TARGET === 'preview' ? '/' : '/test/');
+    await page.goto(venuePath);
 
     const widgetSrc = await page.evaluate(() => {
       return (
@@ -312,7 +313,7 @@ test.describe('Widget Loading (Live)', () => {
 
 test.describe('Feedback Button (Live)', () => {
   test('feedback button is visible and clickable', async ({ page }) => {
-    await page.goto(process.env.LIVE_TARGET === 'preview' ? '/' : '/test/');
+    await page.goto(venuePath);
 
     const button = page.locator('#bugdrop-host').locator('css=.bd-trigger');
     await expect(button).toBeVisible({ timeout: 10_000 });
@@ -489,7 +490,7 @@ test.describe('Screenshot Capture (Live)', () => {
       });
     });
 
-    await page.goto(process.env.LIVE_TARGET === 'preview' ? '/' : '/test/');
+    await page.goto(venuePath);
 
     const host = page.locator('#bugdrop-host');
     const button = host.locator('css=.bd-trigger');
