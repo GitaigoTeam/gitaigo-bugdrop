@@ -25,11 +25,11 @@
 <body>
   <h1>Custom Icon Test</h1>
   <div class="info">
-    <p><strong>Test:</strong> This page loads BugDrop with <code>data-icon</code> set to a data URI image.</p>
+    <p><strong>Test:</strong> This page loads BugDrop with <code>data-icon</code> set to a same-origin SVG image.</p>
     <p>The feedback button should show a custom image instead of the default 🐛 emoji.</p>
   </div>
 
-  <!-- Load BugDrop WITH custom icon (1x1 green PNG as data URI) -->
-  <script src="/widget.js" data-repo="mean-weasel/bugdrop-widget-test" data-theme="dark" data-icon="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="></script>
+  <!-- Load BugDrop WITH custom icon -->
+  <script src="/widget.js" data-repo="mean-weasel/bugdrop-widget-test" data-theme="dark" data-icon="/test/bugdrop-icon.svg"></script>
 </body>
 </html>

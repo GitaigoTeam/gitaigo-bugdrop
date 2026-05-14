@@ -14,6 +14,16 @@ import {
   isValidTheme,
   type ThemeMode,
 } from './theme';
+import {
+  escapeHtml,
+  sanitizeCssColor,
+  sanitizeCssFontFamily,
+  sanitizeNonNegativeNumber,
+  sanitizeNonNegativePixelValue,
+  sanitizePositiveInteger,
+  sanitizeShadowPreset,
+  sanitizeUrl,
+} from './sanitize';
 
 type FeedbackCategory = 'bug' | 'feature' | 'question';
 type CategoryLabelConfig = Partial<Record<FeedbackCategory, string | string[]>>;
@@ -323,42 +333,68 @@ if (!document.currentScript) {
     '[BugDrop] document.currentScript is null — do not use async or defer on the BugDrop script tag.'
   );
 }
-const rawTheme = script?.dataset.theme as WidgetConfig['theme'] | undefined;
+const rawTheme = script?.dataset.theme;
+if (rawTheme && !isValidTheme(rawTheme)) {
+  console.warn(`[BugDrop] Invalid data-theme "${rawTheme}". Expected "light", "dark", or "auto".`);
+}
+const requireName = script?.dataset.requireName === 'true';
+const requireEmail = script?.dataset.requireEmail === 'true';
+const rawPosition = script?.dataset.position;
+if (rawPosition && rawPosition !== 'bottom-right' && rawPosition !== 'bottom-left') {
+  console.warn(
+    `[BugDrop] Invalid data-position "${rawPosition}". Expected "bottom-right" or "bottom-left".`
+  );
+}
+const rawDismissDuration = script?.dataset.dismissDuration;
+const dismissDuration = sanitizePositiveInteger(rawDismissDuration);
+if (rawDismissDuration && dismissDuration === undefined) {
+  console.warn(
+    '[BugDrop] Invalid data-dismiss-duration. Expected a positive whole number of days.'
+  );
+}
+const rawScreenshotScale = script?.dataset.screenshotScale;
+const screenshotScale = sanitizeNonNegativeNumber(rawScreenshotScale);
+if (rawScreenshotScale && screenshotScale === undefined) {
+  console.warn('[BugDrop] Invalid data-screenshot-scale. Expected a non-negative number.');
+}
+const rawShadow = script?.dataset.shadow;
+const shadow = sanitizeShadowPreset(rawShadow);
+if (rawShadow && !shadow) {
+  console.warn('[BugDrop] Invalid data-shadow. Expected "soft", "hard", or "none".');
+}
 const config: WidgetConfig = {
   repo: script?.dataset.repo || '',
   apiUrl: script?.src.replace(/\/widget(?:\.v[\d.]+)?\.js$/, '/api') || '',
-  position: (script?.dataset.position as WidgetConfig['position']) || 'bottom-right',
-  theme: rawTheme || 'auto', // Default to auto-detection
+  position: rawPosition === 'bottom-left' ? 'bottom-left' : 'bottom-right',
+  theme: isValidTheme(rawTheme) ? rawTheme : 'auto', // Default to auto-detection
   // Name/email field configuration (all default to false for backwards compatibility)
-  showName: script?.dataset.showName === 'true',
-  requireName: script?.dataset.requireName === 'true',
-  showEmail: script?.dataset.showEmail === 'true',
-  requireEmail: script?.dataset.requireEmail === 'true',
+  showName: script?.dataset.showName === 'true' || requireName,
+  requireName,
+  showEmail: script?.dataset.showEmail === 'true' || requireEmail,
+  requireEmail,
   // Dismissible button configuration
   buttonDismissible: script?.dataset.buttonDismissible === 'true',
-  dismissDuration: script?.dataset.dismissDuration
-    ? parseInt(script.dataset.dismissDuration, 10)
-    : undefined,
+  dismissDuration,
   // Show restore pill after dismissing (default true when dismissible, unless explicitly false)
   showRestore: script?.dataset.showRestore !== 'false',
   // Button visibility (default true, set to false for API-only mode)
   showButton: script?.dataset.button !== 'false',
   // Custom accent color (e.g., "#FF6B35")
-  accentColor: script?.dataset.color || undefined,
+  accentColor: sanitizeCssColor(script?.dataset.color),
   // Custom icon URL (or 'none' to hide)
-  iconUrl: script?.dataset.icon || undefined,
+  iconUrl: sanitizeUrl(script?.dataset.icon),
   // Custom trigger label
   label: script?.dataset.label || undefined,
   categoryLabels: parseCategoryLabels(script?.dataset.categoryLabels),
   // Tier 1 styling customization
-  font: script?.dataset.font || undefined,
-  radius: script?.dataset.radius || undefined,
-  bgColor: script?.dataset.bg || undefined,
-  textColor: script?.dataset.text || undefined,
+  font: sanitizeCssFontFamily(script?.dataset.font),
+  radius: sanitizeNonNegativePixelValue(script?.dataset.radius)?.toString(),
+  bgColor: sanitizeCssColor(script?.dataset.bg),
+  textColor: sanitizeCssColor(script?.dataset.text),
   // Tier 2 styling customization
-  borderWidth: script?.dataset.borderWidth || undefined,
-  borderColor: script?.dataset.borderColor || undefined,
-  shadow: script?.dataset.shadow || undefined,
+  borderWidth: sanitizeNonNegativePixelValue(script?.dataset.borderWidth)?.toString(),
+  borderColor: sanitizeCssColor(script?.dataset.borderColor),
+  shadow,
   // Welcome screen behavior (default: 'once')
   welcome: (() => {
     const val = script?.dataset.welcome;
@@ -377,9 +413,7 @@ const config: WidgetConfig = {
     }
     return 'optional' as const;
   })(),
-  screenshotScale: script?.dataset.screenshotScale
-    ? parseFloat(script.dataset.screenshotScale)
-    : undefined,
+  screenshotScale,
 };
 
 // Validate config
@@ -393,20 +427,39 @@ if (!config.repo) {
   initWidget(config);
 }
 
-// Build the trigger button icon HTML - custom image with emoji fallback, 'none' to hide, or default emoji
-function getTriggerIconHtml(config: WidgetConfig): string {
-  if (config.iconUrl === 'none') {
-    return '';
-  }
-  if (config.iconUrl) {
-    return `<img src="${config.iconUrl}" alt="" onerror="this.style.display='none';this.nextSibling.style.display=''"><span style="display:none">🐛</span>`;
-  }
-  return '🐛';
-}
-
 // Build the trigger button label text
 function getTriggerLabel(config: WidgetConfig): string {
   return config.label !== undefined ? config.label : 'Feedback';
+}
+
+function appendTriggerContent(trigger: HTMLElement, config: WidgetConfig): void {
+  if (config.iconUrl !== 'none') {
+    const icon = document.createElement('span');
+    icon.className = 'bd-trigger-icon';
+
+    if (config.iconUrl) {
+      const image = document.createElement('img');
+      image.src = config.iconUrl;
+      image.alt = '';
+      const fallback = document.createElement('span');
+      fallback.textContent = '🐛';
+      fallback.style.display = 'none';
+      image.addEventListener('error', () => {
+        image.style.display = 'none';
+        fallback.style.display = '';
+      });
+      icon.append(image, fallback);
+    } else {
+      icon.textContent = '🐛';
+    }
+
+    trigger.appendChild(icon);
+  }
+
+  const label = document.createElement('span');
+  label.className = 'bd-trigger-label';
+  label.textContent = getTriggerLabel(config);
+  trigger.appendChild(label);
 }
 
 // Create the pull tab shown after dismissing the button
@@ -490,15 +543,14 @@ function initWidget(config: WidgetConfig) {
   if (shouldShowButton) {
     const trigger = document.createElement('button');
     trigger.className = 'bd-trigger';
-    const iconHtml = getTriggerIconHtml(config);
-    trigger.innerHTML = `${iconHtml ? `<span class="bd-trigger-icon">${iconHtml}</span>` : ''}<span class="bd-trigger-label">${getTriggerLabel(config)}</span>`;
+    appendTriggerContent(trigger, config);
     trigger.setAttribute('aria-label', 'Report a bug or send feedback');
 
     // Add close button if dismissible
     if (config.buttonDismissible) {
       const closeBtn = document.createElement('button');
       closeBtn.className = 'bd-trigger-close';
-      closeBtn.innerHTML = '×';
+      closeBtn.textContent = '×';
       closeBtn.setAttribute('aria-label', 'Dismiss feedback button');
       trigger.appendChild(closeBtn);
 
@@ -651,14 +703,13 @@ function exposeBugDropAPI(root: HTMLElement, config: WidgetConfig) {
 function createTriggerButton(root: HTMLElement, config: WidgetConfig, isRestoring = false) {
   const trigger = document.createElement('button');
   trigger.className = isRestoring ? 'bd-trigger bd-trigger--restoring' : 'bd-trigger';
-  const iconHtml = getTriggerIconHtml(config);
-  trigger.innerHTML = `${iconHtml ? `<span class="bd-trigger-icon">${iconHtml}</span>` : ''}<span class="bd-trigger-label">${getTriggerLabel(config)}</span>`;
+  appendTriggerContent(trigger, config);
   trigger.setAttribute('aria-label', 'Report a bug or send feedback');
 
   if (config.buttonDismissible) {
     const closeBtn = document.createElement('button');
     closeBtn.className = 'bd-trigger-close';
-    closeBtn.innerHTML = '×';
+    closeBtn.textContent = '×';
     closeBtn.setAttribute('aria-label', 'Dismiss feedback button');
     trigger.appendChild(closeBtn);
 
@@ -1058,15 +1109,6 @@ function getCategoryChecked(
   category: FeedbackCategory
 ): string {
   return (initialValues?.category || 'bug') === category ? 'checked' : '';
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: FeedbackData) {

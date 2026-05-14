@@ -181,6 +181,12 @@ describe('applyCustomStyles', () => {
         rootDark.style.getPropertyValue('--bd-primary-hover')
       );
     });
+
+    it('ignores CSS-breaking accent values', () => {
+      const root = makeRoot();
+      applyCustomStyles(root, { accentColor: 'red; } .hostile { color: red }' }, 'light');
+      expect(root.getAttribute('style')).toBeFalsy();
+    });
   });
 
   describe('bgColor', () => {
@@ -257,6 +263,16 @@ describe('applyCustomStyles', () => {
       applyCustomStyles(root, { borderWidth: '2', borderColor: '#000' }, 'light');
       expect(root.style.getPropertyValue('--bd-border')).toBe('#000');
       expect(root.style.getPropertyValue('--bd-border-style')).toBe('2px solid #000');
+    });
+
+    it('ignores invalid border width and border color values', () => {
+      const root = makeRoot();
+      applyCustomStyles(
+        root,
+        { borderWidth: '2em', borderColor: '#000; } .hostile { color: red }' },
+        'light'
+      );
+      expect(root.getAttribute('style')).toBeFalsy();
     });
   });
 

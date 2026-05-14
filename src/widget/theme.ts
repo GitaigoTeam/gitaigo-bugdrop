@@ -1,3 +1,5 @@
+import { sanitizeCssColor, sanitizeNonNegativePixelValue, sanitizeShadowPreset } from './sanitize';
+
 // src/widget/theme.ts
 
 export type ThemeMode = 'light' | 'dark' | 'auto';
@@ -45,55 +47,42 @@ export function applyCustomStyles(
   const isDark = resolved === 'dark';
 
   // Apply custom accent color if provided
-  if (config.accentColor) {
-    const color = config.accentColor;
+  const accentColor = sanitizeCssColor(config.accentColor);
+  if (accentColor) {
+    const color = accentColor;
     root.style.setProperty('--bd-primary', color);
     root.style.setProperty('--bd-primary-hover', `color-mix(in srgb, ${color} 85%, black)`);
     root.style.setProperty('--bd-border-focus', color);
   }
 
   // Apply custom background color if provided
-  if (config.bgColor) {
-    root.style.setProperty('--bd-bg-primary', config.bgColor);
+  const bgColor = sanitizeCssColor(config.bgColor);
+  if (bgColor) {
+    root.style.setProperty('--bd-bg-primary', bgColor);
     if (isDark) {
-      root.style.setProperty(
-        '--bd-bg-secondary',
-        `color-mix(in srgb, ${config.bgColor} 85%, white)`
-      );
-      root.style.setProperty(
-        '--bd-bg-tertiary',
-        `color-mix(in srgb, ${config.bgColor} 70%, white)`
-      );
+      root.style.setProperty('--bd-bg-secondary', `color-mix(in srgb, ${bgColor} 85%, white)`);
+      root.style.setProperty('--bd-bg-tertiary', `color-mix(in srgb, ${bgColor} 70%, white)`);
     } else {
-      root.style.setProperty(
-        '--bd-bg-secondary',
-        `color-mix(in srgb, ${config.bgColor} 93%, black)`
-      );
-      root.style.setProperty(
-        '--bd-bg-tertiary',
-        `color-mix(in srgb, ${config.bgColor} 85%, black)`
-      );
+      root.style.setProperty('--bd-bg-secondary', `color-mix(in srgb, ${bgColor} 93%, black)`);
+      root.style.setProperty('--bd-bg-tertiary', `color-mix(in srgb, ${bgColor} 85%, black)`);
     }
   }
 
   // Apply custom text color if provided
-  if (config.textColor) {
-    root.style.setProperty('--bd-text-primary', config.textColor);
-    const bgBase = config.bgColor || (isDark ? '#0f172a' : '#fafaf9');
+  const textColor = sanitizeCssColor(config.textColor);
+  if (textColor) {
+    root.style.setProperty('--bd-text-primary', textColor);
+    const bgBase = bgColor || (isDark ? '#0f172a' : '#fafaf9');
     root.style.setProperty(
       '--bd-text-secondary',
-      `color-mix(in srgb, ${config.textColor} 65%, ${bgBase})`
+      `color-mix(in srgb, ${textColor} 65%, ${bgBase})`
     );
-    root.style.setProperty(
-      '--bd-text-muted',
-      `color-mix(in srgb, ${config.textColor} 40%, ${bgBase})`
-    );
+    root.style.setProperty('--bd-text-muted', `color-mix(in srgb, ${textColor} 40%, ${bgBase})`);
   }
 
   // Apply custom border styling if provided
-  const parsedBorderW = config.borderWidth ? parseInt(config.borderWidth, 10) : null;
-  const borderW = parsedBorderW !== null && Number.isFinite(parsedBorderW) ? parsedBorderW : null;
-  const borderC = config.borderColor || null;
+  const borderW = sanitizeNonNegativePixelValue(config.borderWidth) ?? null;
+  const borderC = sanitizeCssColor(config.borderColor) || null;
   if (borderW !== null || borderC !== null) {
     const bw = borderW !== null ? `${borderW}px` : '1px';
     const bc = borderC || 'var(--bd-border)';
@@ -102,7 +91,7 @@ export function applyCustomStyles(
   }
 
   // Apply shadow preset if provided
-  const shadowPreset = config.shadow || null;
+  const shadowPreset = sanitizeShadowPreset(config.shadow) || null;
   if (shadowPreset === 'none') {
     root.style.setProperty('--bd-shadow-sm', 'none');
     root.style.setProperty('--bd-shadow-md', 'none');

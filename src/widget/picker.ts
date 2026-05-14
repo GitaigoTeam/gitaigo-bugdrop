@@ -1,3 +1,5 @@
+import { sanitizeCssColor, sanitizeCssFontFamily, sanitizeNonNegativePixelValue } from './sanitize';
+
 export interface PickerStyle {
   accentColor?: string;
   font?: string;
@@ -21,17 +23,21 @@ interface ResolvedPickerStyle {
 
 export function resolvePickerStyle(style?: PickerStyle): ResolvedPickerStyle {
   const isDark = style?.theme === 'dark';
+  const radius = sanitizeNonNegativePixelValue(style?.radius);
+  const borderWidth = sanitizeNonNegativePixelValue(style?.borderWidth);
+  const fontFamily = sanitizeCssFontFamily(style?.font);
+
   return {
-    accent: style?.accentColor || '#14b8a6',
+    accent: sanitizeCssColor(style?.accentColor) || '#14b8a6',
     fontFamily:
       style?.font === 'inherit'
         ? 'system-ui, sans-serif'
-        : style?.font || "'Space Grotesk', system-ui, sans-serif",
-    radius: style?.radius !== undefined ? `${style.radius}px` : '6px',
-    bw: style?.borderWidth || '3',
-    tooltipBg: style?.bgColor || (isDark ? '#0f172a' : '#1a1a1a'),
-    tooltipText: style?.textColor || '#f1f5f9',
-    tooltipBorder: style?.borderColor || (isDark ? '#334155' : '#333'),
+        : fontFamily || "'Space Grotesk', system-ui, sans-serif",
+    radius: radius !== undefined ? `${radius}px` : '6px',
+    bw: borderWidth !== undefined ? String(borderWidth) : '3',
+    tooltipBg: sanitizeCssColor(style?.bgColor) || (isDark ? '#0f172a' : '#1a1a1a'),
+    tooltipText: sanitizeCssColor(style?.textColor) || '#f1f5f9',
+    tooltipBorder: sanitizeCssColor(style?.borderColor) || (isDark ? '#334155' : '#333'),
   };
 }
 
