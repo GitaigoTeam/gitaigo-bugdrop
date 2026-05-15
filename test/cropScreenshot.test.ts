@@ -3,8 +3,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   getPixelRatio,
   getDomNodeCount,
+  getFullPageDisableThreshold,
   isFullPageDisabled,
+  isSafariBrowser,
   FULL_PAGE_DISABLE_THRESHOLD,
+  SAFARI_FULL_PAGE_DISABLE_THRESHOLD,
   cropScreenshot,
   canCaptureViewportNatively,
   beginViewportCapture,
@@ -108,6 +111,62 @@ describe('isFullPageDisabled', () => {
       elements as unknown as NodeListOf<Element>
     );
     expect(isFullPageDisabled()).toBe(false);
+  });
+
+  it('uses the lower Safari threshold to avoid expensive full-page captures', () => {
+    const elements = new Array(SAFARI_FULL_PAGE_DISABLE_THRESHOLD).fill(
+      document.createElement('div')
+    );
+    vi.spyOn(document.body, 'querySelectorAll').mockReturnValue(
+      elements as unknown as NodeListOf<Element>
+    );
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/616.1.16 (KHTML, like Gecko) Version/26.4 Safari/616.1.16'
+    );
+
+    expect(isFullPageDisabled()).toBe(true);
+  });
+
+  it('keeps Chromium on the higher full-page threshold', () => {
+    const elements = new Array(SAFARI_FULL_PAGE_DISABLE_THRESHOLD).fill(
+      document.createElement('div')
+    );
+    vi.spyOn(document.body, 'querySelectorAll').mockReturnValue(
+      elements as unknown as NodeListOf<Element>
+    );
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+    );
+
+    expect(isFullPageDisabled()).toBe(false);
+  });
+});
+
+describe('browser-specific full-page thresholds', () => {
+  it('detects Safari without matching Chrome-style user agents', () => {
+    expect(
+      isSafariBrowser(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/616.1.16 (KHTML, like Gecko) Version/26.4 Safari/616.1.16'
+      )
+    ).toBe(true);
+    expect(
+      isSafariBrowser(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+      )
+    ).toBe(false);
+  });
+
+  it('returns the Safari complexity threshold for Safari only', () => {
+    expect(
+      getFullPageDisableThreshold(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/616.1.16 (KHTML, like Gecko) Version/26.4 Safari/616.1.16'
+      )
+    ).toBe(SAFARI_FULL_PAGE_DISABLE_THRESHOLD);
+    expect(
+      getFullPageDisableThreshold(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+      )
+    ).toBe(FULL_PAGE_DISABLE_THRESHOLD);
   });
 });
 

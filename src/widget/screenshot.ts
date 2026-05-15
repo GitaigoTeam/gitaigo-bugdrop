@@ -9,6 +9,7 @@ const DOM_COMPLEXITY_THRESHOLD = 3_000;
 const TRANSPARENT_IMAGE_PLACEHOLDER =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 export const FULL_PAGE_DISABLE_THRESHOLD = 10_000;
+export const SAFARI_FULL_PAGE_DISABLE_THRESHOLD = DOM_COMPLEXITY_THRESHOLD;
 
 type DisplayMediaOptionsWithCurrentTab = DisplayMediaStreamOptions & {
   preferCurrentTab?: boolean;
@@ -30,7 +31,20 @@ export function getDomNodeCount(): number {
 }
 
 export function isFullPageDisabled(): boolean {
-  return getDomNodeCount() >= FULL_PAGE_DISABLE_THRESHOLD;
+  return getDomNodeCount() >= getFullPageDisableThreshold();
+}
+
+export function getFullPageDisableThreshold(userAgent = navigator.userAgent): number {
+  return isSafariBrowser(userAgent)
+    ? SAFARI_FULL_PAGE_DISABLE_THRESHOLD
+    : FULL_PAGE_DISABLE_THRESHOLD;
+}
+
+export function isSafariBrowser(userAgent = navigator.userAgent): boolean {
+  return (
+    /Safari\//.test(userAgent) &&
+    !/(Chrome|Chromium|CriOS|FxiOS|Edg|EdgiOS|OPR|Opera)\//.test(userAgent)
+  );
 }
 
 export function getPixelRatio(isFullPage: boolean, screenshotScale?: number): number {

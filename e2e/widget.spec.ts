@@ -2991,6 +2991,36 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     await expect(notice).toBeVisible();
   });
 
+  test('hides full-page and area capture earlier for complex Safari pages', async ({ page }) => {
+    await mockHtmlToImage(
+      page,
+      "function() { throw new Error('html-to-image should not run for Safari complex-page options'); }"
+    );
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'mediaDevices', {
+        value: {},
+        configurable: true,
+      });
+      Object.defineProperty(navigator, 'userAgent', {
+        get: () =>
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/616.1.16 (KHTML, like Gecko) Version/26.4 Safari/616.1.16',
+        configurable: true,
+      });
+    });
+    await page.goto('/test/complex-dom.html?nodes=4000');
+
+    const nodeCount = await page.evaluate(() => document.body.querySelectorAll('*').length);
+    expect(nodeCount).toBeGreaterThanOrEqual(3000);
+    expect(nodeCount).toBeLessThan(10000);
+
+    const host = await navigateToScreenshotOptions(page);
+
+    await expect(host.locator('css=[data-action="element"]')).toBeVisible();
+    await expect(host.locator('css=[data-action="capture"]')).not.toBeAttached();
+    await expect(host.locator('css=[data-action="area"]')).not.toBeAttached();
+    await expect(host.locator('css=p >> text=too complex')).toBeVisible();
+  });
+
   test('offers native viewport capture on very complex secure-context pages', async ({ page }) => {
     const payloads = await trackFeedbackPayloads(page);
     await mockHtmlToImage(
