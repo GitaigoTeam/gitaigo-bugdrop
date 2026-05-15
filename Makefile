@@ -24,7 +24,7 @@ test-watch:
 	npm run test:watch
 
 test-e2e:
-	npm run test:e2e
+	npx playwright test --project=chromium
 
 test-e2e-ui:
 	npm run test:e2e:ui
@@ -40,6 +40,7 @@ test-live-cross-browser:
 	@if [ -z "$(BROWSER)" ] || [ -z "$(LIVE_TARGET)" ] || [ -z "$(PLAYWRIGHT_BASE_URL)" ]; then \
 		echo "Usage: LIVE_TARGET=preview PLAYWRIGHT_BASE_URL=https://example.com make test-live-cross-browser BROWSER=chromium|firefox|webkit"; \
 		echo "Required: BROWSER, LIVE_TARGET, PLAYWRIGHT_BASE_URL"; \
+		echo "Set VERCEL_AUTOMATION_BYPASS_SECRET when the Vercel venue is protected."; \
 		exit 1; \
 	fi
 	npx playwright test e2e/widget.cross-browser-live.spec.ts --project=$(BROWSER)-cross-browser-live --workers=1
@@ -102,6 +103,7 @@ help:
 	@echo "    make test-e2e-shard SHARD=1/2  - Run E2E test shard"
 	@echo "    LIVE_TARGET=preview PLAYWRIGHT_BASE_URL=<url> make test-live-cross-browser BROWSER=chromium|firefox|webkit"
 	@echo "                          - Run live cross-browser E2E tests"
+	@echo "                          - Set VERCEL_AUTOMATION_BYPASS_SECRET for protected Vercel venues"
 	@echo ""
 	@echo "  Code Quality:"
 	@echo "    make lint             - Run ESLint"

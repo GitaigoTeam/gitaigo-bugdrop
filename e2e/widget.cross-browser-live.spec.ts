@@ -68,6 +68,11 @@ async function padDom(page: Page, count: number) {
   }, count);
 }
 
+async function padDomToNodeCount(page: Page, targetNodeCount: number) {
+  const currentNodeCount = await page.evaluate(() => document.body.querySelectorAll('*').length);
+  await padDom(page, Math.max(0, targetNodeCount - currentNodeCount));
+}
+
 test.describe('Cross-Browser Live Preview Smoke', () => {
   test('loads the expected preview widget asset', async ({ page, request }) => {
     await page.goto(venuePath);
@@ -133,7 +138,7 @@ test.describe('Cross-Browser Live Preview Smoke', () => {
   }) => {
     await mockInstalledRepo(page);
     await page.goto(venuePath);
-    await padDom(page, 4000);
+    await padDomToNodeCount(page, 4000);
 
     const host = await openForm(page);
     await host.locator('css=#title').fill('Cross-browser complex screenshot smoke');
