@@ -17,7 +17,7 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: /.*\.live\.spec\.ts/,
+      testIgnore: /.*\.(?:live|cross-browser-live)\.spec\.ts$/,
     },
     {
       name: 'chromium-live',
@@ -26,6 +26,33 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
       },
       testMatch: /.*\.live\.spec\.ts/,
+      timeout: 60_000,
+    },
+    {
+      name: 'chromium-cross-browser-live',
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+      },
+      testMatch: /.*\.cross-browser-live\.spec\.ts/,
+      timeout: 60_000,
+    },
+    {
+      name: 'firefox-cross-browser-live',
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Firefox'],
+      },
+      testMatch: /.*\.cross-browser-live\.spec\.ts/,
+      timeout: 60_000,
+    },
+    {
+      name: 'webkit-cross-browser-live',
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Safari'],
+      },
+      testMatch: /.*\.cross-browser-live\.spec\.ts/,
       timeout: 60_000,
     },
   ],
