@@ -2136,9 +2136,41 @@ test.describe('Custom Icon', () => {
     const img = page.locator('#bugdrop-host').locator('css=.bd-trigger-icon img');
     await expect(img).toBeVisible();
 
-    // Img src should contain the data URI
+    // Img src should contain the same-origin icon URL
     const src = await img.getAttribute('src');
-    expect(src).toContain('data:image/png;base64,');
+    expect(src).toContain('/test/bugdrop-icon.svg');
+  });
+
+  test('hostile label and icon config cannot inject markup', async ({ page }) => {
+    await page.goto('/test/index.html');
+    await page.locator('#bugdrop-host').locator('css=.bd-trigger').waitFor();
+
+    await page.evaluate(() => {
+      document.getElementById('bugdrop-host')?.remove();
+
+      const script = document.createElement('script');
+      script.src = '/widget.js';
+      script.dataset.repo = 'mean-weasel/bugdrop-widget-test';
+      script.dataset.label = '<img src=x onerror="window.__bugdropLabelXss = true">';
+      script.dataset.icon = 'javascript:window.__bugdropIconXss = true';
+      document.body.appendChild(script);
+    });
+
+    const host = page.locator('#bugdrop-host');
+    const trigger = host.locator('css=.bd-trigger');
+    await expect(trigger).toBeVisible({ timeout: 5000 });
+
+    await expect(host.locator('css=.bd-trigger-label img')).not.toBeAttached();
+    await expect(host.locator('css=.bd-trigger-icon img')).not.toBeAttached();
+    await expect(host.locator('css=.bd-trigger-label')).toHaveText(
+      '<img src=x onerror="window.__bugdropLabelXss = true">'
+    );
+
+    const executed = await page.evaluate(() => ({
+      label: Boolean((window as typeof window & { __bugdropLabelXss?: boolean }).__bugdropLabelXss),
+      icon: Boolean((window as typeof window & { __bugdropIconXss?: boolean }).__bugdropIconXss),
+    }));
+    expect(executed).toEqual({ label: false, icon: false });
   });
 
   test('broken icon URL falls back to default emoji', async ({ page }) => {

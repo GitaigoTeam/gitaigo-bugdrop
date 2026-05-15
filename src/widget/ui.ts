@@ -1,4 +1,10 @@
 import { resolveTheme, applyThemeClass, applyCustomStyles } from './theme';
+import {
+  escapeHtml,
+  sanitizeCssFontFamily,
+  sanitizeNonNegativePixelValue,
+  sanitizeUrl,
+} from './sanitize';
 
 declare const __BUGDROP_VERSION__: string;
 
@@ -23,7 +29,8 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
 
   // Determine font settings
   const useInheritFont = config.font === 'inherit';
-  const customFont = config.font && config.font !== 'inherit' ? config.font : null;
+  const customFont =
+    config.font && config.font !== 'inherit' ? sanitizeCssFontFamily(config.font) : null;
   const fontImport =
     useInheritFont || customFont
       ? ''
@@ -35,13 +42,13 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       : `'Space Grotesk', system-ui, sans-serif`;
 
   // Determine radius settings
-  const radiusPx = config.radius !== undefined ? parseInt(config.radius, 10) : null;
+  const radiusPx = sanitizeNonNegativePixelValue(config.radius) ?? null;
   const radiusSm = radiusPx !== null ? `${radiusPx}px` : '6px';
   const radiusMd = radiusPx !== null ? `${Math.round(radiusPx * 1.4)}px` : '10px';
   const radiusLg = radiusPx !== null ? `${Math.round(radiusPx * 2)}px` : '14px';
 
   // Determine border width for CSS variable (still needed by the style block below)
-  const borderW = config.borderWidth ? parseInt(config.borderWidth, 10) : null;
+  const borderW = sanitizeNonNegativePixelValue(config.borderWidth) ?? null;
 
   const styles = document.createElement('style');
   styles.textContent = `
@@ -1085,7 +1092,7 @@ export function createModal(
   overlay.innerHTML = `
     <div class="${modalClasses}">
       <div class="bd-header">
-        <h2 class="bd-title">${title}</h2>
+        <h2 class="bd-title">${escapeHtml(title)}</h2>
         <button class="bd-close">&times;</button>
       </div>
       <div class="bd-body">
@@ -1106,15 +1113,20 @@ export function showSuccessModal(
   isPublic: boolean
 ): Promise<void> {
   return new Promise(resolve => {
+    const safeIssueUrl = sanitizeUrl(issueUrl);
     const issueInfo = isPublic
       ? `
         <p class="bd-success-issue">Issue <strong>#${issueNumber}</strong> has been created.</p>
-        <a href="${issueUrl}" target="_blank" rel="noopener noreferrer" class="bd-issue-link">
+        ${
+          safeIssueUrl
+            ? `<a href="${escapeHtml(safeIssueUrl)}" target="_blank" rel="noopener noreferrer" class="bd-issue-link">
           <svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16">
             <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
           </svg>
           View on GitHub
-        </a>
+        </a>`
+            : ''
+        }
       `
       : `<p class="bd-success-issue">Your feedback has been submitted successfully.</p>`;
 
