@@ -1,9 +1,4 @@
-import {
-  FULL_PAGE_DISABLE_THRESHOLD,
-  getDomNodeCount,
-  getRedactionCount,
-  isFullPageDisabled,
-} from './screenshot';
+import { getDomNodeCount, getRedactionCount, isFullPageDisabled } from './screenshot';
 import { runScreenshotCaptureFlow } from './capture-flow';
 import { injectStyles, createModal, showSuccessModal } from './ui';
 import {
@@ -1153,7 +1148,7 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
           timestamp: new Date().toISOString(),
           elementSelector: data.elementSelector,
           domNodeCount,
-          fullPageDisabled: domNodeCount >= FULL_PAGE_DISABLE_THRESHOLD,
+          fullPageDisabled: isFullPageDisabled(),
           // Parsed system info
           browser: systemInfo.browser,
           os: systemInfo.os,
