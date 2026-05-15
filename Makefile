@@ -1,4 +1,4 @@
-.PHONY: dev build build-widget build-all deploy test test-watch test-e2e test-e2e-ui test-e2e-shard lint lint-fix format format-check typecheck knip audit check ci clean install install-playwright help
+.PHONY: dev build build-widget build-all deploy test test-watch test-e2e test-e2e-ui test-e2e-shard test-live-cross-browser lint lint-fix format format-check typecheck knip audit check ci clean install install-playwright help
 
 # Development
 dev:
@@ -24,7 +24,7 @@ test-watch:
 	npm run test:watch
 
 test-e2e:
-	npm run test:e2e
+	npx playwright test --project=chromium
 
 test-e2e-ui:
 	npm run test:e2e:ui
@@ -35,6 +35,15 @@ test-e2e-shard:
 		exit 1; \
 	fi
 	npx playwright test --project=chromium --shard=$(SHARD)
+
+test-live-cross-browser:
+	@if [ -z "$(BROWSER)" ] || [ -z "$(LIVE_TARGET)" ] || [ -z "$(PLAYWRIGHT_BASE_URL)" ]; then \
+		echo "Usage: LIVE_TARGET=preview PLAYWRIGHT_BASE_URL=https://example.com make test-live-cross-browser BROWSER=chromium|firefox|webkit"; \
+		echo "Required: BROWSER, LIVE_TARGET, PLAYWRIGHT_BASE_URL"; \
+		echo "Set VERCEL_AUTOMATION_BYPASS_SECRET when the Vercel venue is protected."; \
+		exit 1; \
+	fi
+	npx playwright test e2e/widget.cross-browser-live.spec.ts --project=$(BROWSER)-cross-browser-live --workers=1
 
 # Code Quality
 lint:
@@ -92,6 +101,9 @@ help:
 	@echo "    make test-e2e         - Run E2E tests"
 	@echo "    make test-e2e-ui      - Run E2E tests with UI"
 	@echo "    make test-e2e-shard SHARD=1/2  - Run E2E test shard"
+	@echo "    LIVE_TARGET=preview PLAYWRIGHT_BASE_URL=<url> make test-live-cross-browser BROWSER=chromium|firefox|webkit"
+	@echo "                          - Run live cross-browser E2E tests"
+	@echo "                          - Set VERCEL_AUTOMATION_BYPASS_SECRET for protected Vercel venues"
 	@echo ""
 	@echo "  Code Quality:"
 	@echo "    make lint             - Run ESLint"
@@ -109,4 +121,5 @@ help:
 	@echo "  Utilities:"
 	@echo "    make clean            - Clean build artifacts"
 	@echo "    make install          - Install dependencies"
-	@echo "    make install-playwright - Install Playwright browsers"
+	@echo "    make install-playwright - Install Chromium Playwright browser"
+	@echo "    npx playwright install --with-deps firefox webkit - Install Firefox/WebKit Playwright browsers"

@@ -235,3 +235,96 @@ jobs:
           name: playwright-live-report
           path: playwright-report/
           retention-days: 7
+
+  # Cross-browser live smoke tests against real cross-origin deployment (merge queue only)
+  live-preview-cross-browser-tests:
+    name: Live Preview Cross-Browser (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    needs: [deploy-preview]
+    if: github.event_name == 'merge_group'
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    env:
+      LIVE_TARGET: preview
+      PLAYWRIGHT_BASE_URL: https://bugdrop-widget-test-git-preview-jermwatts-projects.vercel.app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: make install
+
+      - name: Get Playwright version
+        id: pw-version
+        run: echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browser
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ matrix.browser }}-${{ steps.pw-version.outputs.version }}
+
+      - name: Install Playwright browser
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Install Playwright system deps
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps ${{ matrix.browser }}
+
+      - name: Verify test venue is reachable
+        run: |
+          VENUE_URL="${PLAYWRIGHT_BASE_URL}"
+          echo "Checking test venue at $VENUE_URL..."
+          BYPASS_ARGS=""
+          if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            BYPASS_ARGS="-H x-vercel-protection-bypass:${VERCEL_AUTOMATION_BYPASS_SECRET}"
+          fi
+          curl -sfo /dev/null $BYPASS_ARGS "$VENUE_URL" || (echo "Test venue unreachable at $VENUE_URL" && exit 1)
+          echo "Test venue reachable"
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+
+      - name: Record expected preview widget asset
+        run: |
+          VERSION=$(git describe --tags --abbrev=0) npm run build:widget
+          echo "EXPECTED_WIDGET_ORIGIN=https://bugdrop-preview.neonwatty.workers.dev" >> "$GITHUB_ENV"
+          echo "EXPECTED_WIDGET_SHA256=$(shasum -a 256 public/widget.js | awk '{print $1}')" >> "$GITHUB_ENV"
+
+      - name: Wait for expected preview widget asset
+        run: |
+          WIDGET_URL="https://bugdrop-preview.neonwatty.workers.dev/widget.js"
+          echo "Waiting for $WIDGET_URL to serve $EXPECTED_WIDGET_SHA256..."
+          for i in $(seq 1 30); do
+            ACTUAL_SHA="$(curl -sSf "$WIDGET_URL" | shasum -a 256 | awk '{print $1}')"
+            if [ "$ACTUAL_SHA" = "$EXPECTED_WIDGET_SHA256" ]; then
+              echo "Preview widget asset matched after $((i * 5))s"
+              exit 0
+            fi
+            echo "Attempt $i/30 served $ACTUAL_SHA; waiting 5s..."
+            sleep 5
+          done
+          echo "Preview widget did not serve expected asset $EXPECTED_WIDGET_SHA256"
+          exit 1
+
+      - name: Run cross-browser live smoke tests
+        run: npx playwright test e2e/widget.cross-browser-live.spec.ts --project=${{ matrix.browser }}-cross-browser-live --workers=1
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+
+      - name: Upload cross-browser test report
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-cross-browser-report-${{ matrix.browser }}
+          path: playwright-report/
+          retention-days: 7
