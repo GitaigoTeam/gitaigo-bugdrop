@@ -42,15 +42,17 @@
       document.body.querySelectorAll('*').length;
   </script>
 
+  <script src="/test/load-widget.js"></script>
   <script>
-    const widgetScript = document.createElement('script');
-    widgetScript.src = '/widget.js';
-    widgetScript.dataset.repo = params.get('repo') || 'mean-weasel/bugdrop-widget-test';
-    widgetScript.dataset.theme = 'dark';
-    if (params.get('screenshot')) {
-      widgetScript.dataset.screenshot = params.get('screenshot');
-    }
-    document.body.appendChild(widgetScript);
+    window.loadBugDropTestWidget({
+      repo: params.get('repo'),
+      dataset: {
+        theme: 'dark',
+      },
+      queryDataset: {
+        screenshot: 'screenshot',
+      },
+    });
   </script>
 </body>
 </html>

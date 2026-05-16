@@ -29,6 +29,7 @@ YOUR_PRIVATE_KEY_CONTENT_HERE
 
 # Your GitHub App's URL slug (the name in lowercase with hyphens)
 # Find it at: https://github.com/apps/YOUR_APP_NAME
+# Local development should override the committed wrangler.toml default here instead of editing wrangler.toml.
 # GITHUB_APP_NAME=my-bugdrop-app
 
 # Allowed origins for CORS (comma-separated, or "*" for all)
@@ -37,3 +38,6 @@ YOUR_PRIVATE_KEY_CONTENT_HERE
 
 # Maximum screenshot size in MB
 # MAX_SCREENSHOT_SIZE_MB=5
+
+# RATE_LIMIT is intentionally not configured here.
+# Local development runs with ENVIRONMENT=development and can work without a KV namespace.

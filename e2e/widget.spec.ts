@@ -39,6 +39,56 @@ test.describe('Widget Loading', () => {
     const button = page.locator('#bugdrop-host').locator('css=.bd-trigger');
     await expect(button).toBeVisible();
   });
+
+  test('missing local test config returns an empty script', async ({ page }) => {
+    const response = await page.request.get('/test/local-config.js');
+
+    expect(response.status()).toBe(200);
+    expect(response.headers()['content-type']).toContain('application/javascript');
+    expect(await response.text()).toBe('');
+  });
+
+  test('test pages use upstream repo when no local override is present', async ({ page }) => {
+    await page.route('**/test/local-config.js', route => {
+      return route.fulfill({ status: 404 });
+    });
+
+    await page.goto('/test/');
+
+    const widgetScript = page.locator('script[src="/widget.js"]');
+    await expect(widgetScript).toBeAttached();
+
+    const repo = await widgetScript.evaluate(script => {
+      return (script as HTMLScriptElement).dataset.repo;
+    });
+
+    expect(repo).toBe('mean-weasel/bugdrop-widget-test');
+  });
+
+  test('test pages use local repo override when configured', async ({ page }) => {
+    await page.route('**/test/local-config.js', route => {
+      return route.fulfill({
+        contentType: 'application/javascript',
+        body: `
+          window.BugDropTestConfig = {
+            ...(window.BugDropTestConfig || {}),
+            repo: 'local-owner/local-repo',
+          };
+        `,
+      });
+    });
+
+    await page.goto('/test/');
+
+    const widgetScript = page.locator('script[src="/widget.js"]');
+    await expect(widgetScript).toBeAttached();
+
+    const repo = await widgetScript.evaluate(script => {
+      return (script as HTMLScriptElement).dataset.repo;
+    });
+
+    expect(repo).toBe('local-owner/local-repo');
+  });
 });
 
 test.describe('Widget Interaction', () => {

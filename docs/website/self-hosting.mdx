@@ -35,7 +35,8 @@ You need to create your own GitHub App to replace the hosted BugDrop app. The ap
 | **Webhook** | Not required (optional) |
 | **Installation scope** | Your repositories |
 
-You will need the App ID, private key, and installation ID to configure the Worker.
+You will need the App ID and private key to configure the Worker. BugDrop discovers the
+installation for each repository at request time.
 
 ## Architecture Overview
 
@@ -60,7 +61,7 @@ The Cloudflare Worker acts as a secure proxy between the user's browser and the 
 
 ## Setup Instructions
 
-Full self-hosting instructions, including environment variables, Wrangler configuration, and deployment steps, are available in the repository:
+Full self-hosting instructions, including environment variables, ignored local configuration, and deployment steps, are available in the repository:
 
 **[SELF_HOSTING.md on GitHub](https://github.com/mean-weasel/bugdrop/blob/main/SELF_HOSTING.md)**
 
@@ -68,7 +69,7 @@ The guide covers:
 
 1. **Forking the repository** -- Get your own copy of the BugDrop codebase
 2. **Creating a GitHub App** -- Step-by-step instructions for creating and configuring the app
-3. **Configuring Wrangler** -- Setting up `wrangler.toml` with your account details
+3. **Configuring local overrides** -- Using ignored `.dev.vars` and `public/test/local-config.js` files so your fork stays clean
 4. **Setting secrets** -- Storing your GitHub App credentials as Worker secrets
 5. **Deploying** -- Publishing the Worker to your Cloudflare account
 6. **Testing** -- Verifying the deployment works end-to-end

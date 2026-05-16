@@ -13,6 +13,9 @@ public/versions.json
 # Local secrets (NEVER commit)
 .dev.vars
 
+# Local self-hosting test page override
+public/test/local-config.js
+
 # Private keys (NEVER commit)
 *.pem
 private-key*.pem

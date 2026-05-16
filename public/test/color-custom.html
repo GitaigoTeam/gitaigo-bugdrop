@@ -39,6 +39,14 @@
   </div>
 
   <!-- Load BugDrop WITH custom purple color -->
-  <script src="/widget.js" data-repo="mean-weasel/bugdrop-widget-test" data-theme="dark" data-color="#9333EA"></script>
+  <script src="/test/load-widget.js"></script>
+  <script>
+    window.loadBugDropTestWidget({
+      dataset: {
+        theme: 'dark',
+        color: '#9333EA',
+      },
+    });
+  </script>
 </body>
 </html>

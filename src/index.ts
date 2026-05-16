@@ -45,4 +45,18 @@ app.get('/widget.js', async c => {
   return c.env.ASSETS.fetch(c.req.raw);
 });
 
+// Local self-hosting override. If the ignored file is absent, return an empty
+// script so test fixtures do not emit missing-resource console errors.
+app.get('/test/local-config.js', async c => {
+  const response = await c.env.ASSETS.fetch(c.req.raw);
+  if (response.ok) {
+    return response;
+  }
+  return new Response('', {
+    headers: {
+      'content-type': 'application/javascript; charset=utf-8',
+    },
+  });
+});
+
 export default app;

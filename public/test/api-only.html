@@ -197,7 +197,12 @@ window.addEventListener('bugdrop:ready', () => {
   </script>
 
   <!-- BugDrop widget in API-only mode (no floating button) -->
-  <script src="/widget.js" data-repo="test/repo" data-button="false"></script>
+  <script src="/test/load-widget.js"></script>
+  <script>
+    window.loadBugDropTestWidget({
+      dataset: { button: 'false' },
+    });
+  </script>
 
   <script>
     // Check if BugDrop already initialized (in case the event fired before our listener)
