@@ -25,6 +25,21 @@ interface WidgetConfig {
 
 export type IssueLinkVisibility = 'public' | 'always' | 'never';
 
+export function shouldRenderIssueLink(
+  issueUrl: string | undefined,
+  isPublic: boolean,
+  issueLinkVisibility: IssueLinkVisibility
+): boolean {
+  const safeIssueUrl = sanitizeUrl(issueUrl);
+  return Boolean(
+    safeIssueUrl &&
+    safeIssueUrl !== 'none' &&
+    safeIssueUrl !== '#' &&
+    issueLinkVisibility !== 'never' &&
+    (isPublic || issueLinkVisibility === 'always')
+  );
+}
+
 export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
   const pos = config.position === 'bottom-left' ? 'left: 20px' : 'right: 20px';
   const resolved = resolveTheme(config.theme);
@@ -1117,11 +1132,7 @@ export function showSuccessModal(
 ): Promise<void> {
   return new Promise(resolve => {
     const safeIssueUrl = sanitizeUrl(issueUrl);
-    const hasIssueUrl = Boolean(safeIssueUrl && safeIssueUrl !== 'none' && safeIssueUrl !== '#');
-    const shouldShowIssueLink =
-      hasIssueUrl &&
-      issueLinkVisibility !== 'never' &&
-      (isPublic || issueLinkVisibility === 'always');
+    const shouldShowIssueLink = shouldRenderIssueLink(issueUrl, isPublic, issueLinkVisibility);
     const issueLink =
       shouldShowIssueLink && safeIssueUrl
         ? `<a href="${escapeHtml(safeIssueUrl)}" target="_blank" rel="noopener noreferrer" class="bd-issue-link">
