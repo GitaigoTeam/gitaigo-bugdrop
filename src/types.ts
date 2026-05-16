@@ -10,6 +10,7 @@ export interface Env {
   MAX_SCREENSHOT_SIZE_MB: string; // Max screenshot size in MB (default: 5)
   CATEGORY_LABELS?: string; // Optional JSON category-label mapping keyed by repo or "*"
   ALLOW_CLIENT_CATEGORY_LABELS?: string; // Self-host escape hatch for script-tag mappings
+  ROOT_REDIRECT_URL?: string; // Optional landing page for self-hosted deployments
 
   // Bindings
   ASSETS: Fetcher;

@@ -35,9 +35,27 @@ app.use('*', logger());
 // Mount API routes
 app.route('/api', api);
 
+export function resolveRootRedirectUrl(rawUrl?: string): string {
+  if (!rawUrl) {
+    return 'https://bugdrop.dev';
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return rawUrl;
+    }
+  } catch {
+    // Fall through to the hosted default.
+  }
+
+  console.warn(`[BugDrop] Ignoring invalid ROOT_REDIRECT_URL: ${rawUrl}`);
+  return 'https://bugdrop.dev';
+}
+
 // Redirect to landing page on Vercel
 app.get('/', c => {
-  return c.redirect('https://bugdrop.dev', 301);
+  return c.redirect(resolveRootRedirectUrl(c.env.ROOT_REDIRECT_URL), 301);
 });
 
 // Serve widget.js from static assets

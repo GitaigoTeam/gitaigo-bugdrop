@@ -2,6 +2,21 @@ import { readdir, readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 
+type CaptureOptions = Record<string, unknown> & {
+  pixelRatio?: number;
+  cacheBust?: boolean;
+  imagePlaceholder?: string;
+  width?: number;
+  height?: number;
+};
+
+declare global {
+  interface Window {
+    __hostKeystrokeCount?: number;
+    __captureOpts?: CaptureOptions;
+  }
+}
+
 /**
  * E2E tests for BugDrop
  * Tests run against wrangler dev server at http://localhost:8787
@@ -430,11 +445,11 @@ test.describe('Widget Interaction', () => {
     await page.goto('/test/');
 
     // Wait for BugDrop API to be available, then open programmatically
-    await page.waitForFunction(() => typeof (window as any).BugDrop !== 'undefined', {
+    await page.waitForFunction(() => typeof window.BugDrop !== 'undefined', {
       timeout: 5000,
     });
     await page.evaluate(() => {
-      (window as any).BugDrop?.open();
+      window.BugDrop?.open();
     });
 
     // Form should appear directly (no welcome screen)
@@ -1345,10 +1360,10 @@ test.describe('Keyboard Event Isolation', () => {
 
     // Track host-page keydown events that fire while BugDrop is open
     await page.evaluate(() => {
-      (window as any).__hostKeystrokeCount = 0;
+      window.__hostKeystrokeCount = 0;
       document.addEventListener('keydown', () => {
         if (document.getElementById('bugdrop-host')) {
-          (window as any).__hostKeystrokeCount++;
+          window.__hostKeystrokeCount = (window.__hostKeystrokeCount ?? 0) + 1;
         }
       });
     });
@@ -1384,7 +1399,7 @@ test.describe('Keyboard Event Isolation', () => {
     await expect(descInput).toHaveValue('Also testing textarea');
 
     // Host page should NOT have received any keystrokes
-    const leakedCount = await page.evaluate(() => (window as any).__hostKeystrokeCount);
+    const leakedCount = await page.evaluate(() => window.__hostKeystrokeCount ?? 0);
     expect(leakedCount).toBe(0);
   });
 });
@@ -2939,7 +2954,11 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     await expect(annotationCanvas).toBeVisible({ timeout: 10000 });
 
     // Verify pixelRatio was reduced to 1 due to complex DOM
-    const captureOpts = await page.evaluate(() => (window as any).__captureOpts);
+    const captureOpts = await page.evaluate(() => window.__captureOpts);
+    expect(captureOpts).toBeDefined();
+    if (!captureOpts) {
+      throw new Error('Missing capture options');
+    }
     expect(captureOpts.pixelRatio).toBe(1);
     expect(captureOpts.cacheBust).toBe(false);
     expect(captureOpts.imagePlaceholder).toMatch(/^data:image\/gif;base64,/);
@@ -2960,7 +2979,11 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     await expect(annotationCanvas).toBeVisible({ timeout: 10000 });
 
     // pixelRatio should be >= 2 (default min scale)
-    const captureOpts = await page.evaluate(() => (window as any).__captureOpts);
+    const captureOpts = await page.evaluate(() => window.__captureOpts);
+    expect(captureOpts).toBeDefined();
+    if (!captureOpts) {
+      throw new Error('Missing capture options');
+    }
     expect(captureOpts.pixelRatio).toBeGreaterThanOrEqual(2);
   });
 
