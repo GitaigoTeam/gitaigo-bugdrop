@@ -17,6 +17,7 @@ These attributes control the fundamental behavior of the widget.
 | `data-category-labels` | built-in labels | Self-hosted JSON mapping from built-in categories to GitHub labels |
 | `data-button` | `"true"` | Show the floating button: `"true"` or `"false"` |
 | `data-welcome` | `"Report a bug or request a feature"` | Welcome message displayed at the top of the form |
+| `data-show-issue-link` | `"public"` | Show the GitHub issue link after submission: `"public"`, `"always"`, or `"never"` |
 
 ### Basic Example
 
@@ -54,6 +55,25 @@ The `data-position` attribute controls where the floating button appears:
 
 - **`bottom-right`** (default) -- Fixed to the bottom-right corner
 - **`bottom-left`** -- Fixed to the bottom-left corner
+
+## Issue Link Visibility
+
+Control whether the success confirmation links to the GitHub Issue that was created.
+
+| Value | Behavior |
+|-------|----------|
+| `"public"` | Default. Show the issue number and GitHub link for public repositories only. Private repository submissions use a generic success message. |
+| `"always"` | Show the issue number and GitHub link whenever the server returns an issue URL, including private repositories. Use this only for trusted internal users who already have GitHub access to the target repository. |
+| `"never"` | Show the issue number for public repositories, but do not show a GitHub link. Private repository submissions use a generic success message. |
+
+```html
+<!-- Show private repository issue links to trusted internal users -->
+<script
+  src="https://bugdrop.neonwatty.workers.dev/widget.js"
+  data-repo="owner/private-repo"
+  data-show-issue-link="always"
+></script>
+```
 
 ## Submitter Information
 

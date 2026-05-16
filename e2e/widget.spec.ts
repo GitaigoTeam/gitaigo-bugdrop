@@ -2580,6 +2580,77 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     });
   }
 
+  async function submitWithIssueResponse(page: Page, path: string, isPublic: boolean) {
+    const issueUrl = 'https://github.com/TheWebEng/ctle-theme/issues/496';
+
+    await page.route('**/feedback', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          issueNumber: 496,
+          issueUrl,
+          isPublic,
+        }),
+      });
+    });
+
+    await page.goto(path);
+    const host = await navigateToForm(page, 'Private repo link test');
+
+    await host.locator('css=#include-screenshot').uncheck();
+    await host.locator('css=#submit-btn').click();
+
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+    return { host, issueUrl };
+  }
+
+  test('keeps private repo issue links hidden by default', async ({ page }) => {
+    const { host } = await submitWithIssueResponse(page, '/test/', false);
+
+    await expect(host.locator('css=.bd-success-issue')).toContainText(
+      'Your feedback has been submitted successfully.'
+    );
+    await expect(host.locator('css=.bd-issue-link')).toHaveCount(0);
+  });
+
+  test('shows public repo issue links by default', async ({ page }) => {
+    const { host, issueUrl } = await submitWithIssueResponse(page, '/test/', true);
+
+    await expect(host.locator('css=.bd-success-issue')).toContainText('Issue #496');
+
+    const issueLink = host.locator('css=.bd-issue-link');
+    await expect(issueLink).toBeVisible();
+    await expect(issueLink).toHaveAttribute('href', issueUrl);
+  });
+
+  test('shows private repo issue link when configured to always show issue links', async ({
+    page,
+  }) => {
+    const { host, issueUrl } = await submitWithIssueResponse(
+      page,
+      '/test/?showIssueLink=always',
+      false
+    );
+
+    await expect(host.locator('css=.bd-success-issue')).toContainText('Issue #496');
+
+    const issueLink = host.locator('css=.bd-issue-link');
+    await expect(issueLink).toBeVisible();
+    await expect(issueLink).toHaveAttribute('href', issueUrl);
+    await expect(issueLink).toHaveAttribute('target', '_blank');
+  });
+
+  test('hides public repo issue link when configured to never show issue links', async ({
+    page,
+  }) => {
+    const { host } = await submitWithIssueResponse(page, '/test/?showIssueLink=never', true);
+
+    await expect(host.locator('css=.bd-success-issue')).toContainText('Issue #496');
+    await expect(host.locator('css=.bd-issue-link')).toHaveCount(0);
+  });
+
   test('sends custom category label mapping while keeping built-in category UI', async ({
     page,
   }) => {

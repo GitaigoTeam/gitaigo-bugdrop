@@ -1,6 +1,6 @@
 import { getDomNodeCount, getRedactionCount, isFullPageDisabled } from './screenshot';
 import { runScreenshotCaptureFlow } from './capture-flow';
-import { injectStyles, createModal, showSuccessModal } from './ui';
+import { injectStyles, createModal, showSuccessModal, type IssueLinkVisibility } from './ui';
 import {
   resolveTheme,
   applyThemeClass,
@@ -61,6 +61,7 @@ interface WidgetConfig {
   // Screenshot configuration
   screenshotMode: 'optional' | 'auto' | 'required';
   screenshotScale?: number; // Minimum pixel ratio for captures (default: 2)
+  issueLinkVisibility: IssueLinkVisibility;
 }
 
 // BugDrop JavaScript API interface
@@ -357,6 +358,14 @@ const shadow = sanitizeShadowPreset(rawShadow);
 if (rawShadow && !shadow) {
   console.warn('[BugDrop] Invalid data-shadow. Expected "soft", "hard", or "none".');
 }
+const rawShowIssueLink = script?.dataset.showIssueLink;
+const issueLinkVisibility: IssueLinkVisibility =
+  rawShowIssueLink === 'always' || rawShowIssueLink === 'never' ? rawShowIssueLink : 'public';
+if (rawShowIssueLink && rawShowIssueLink !== 'public' && rawShowIssueLink !== issueLinkVisibility) {
+  console.warn(
+    `[BugDrop] Invalid data-show-issue-link "${rawShowIssueLink}". Expected "public", "always", or "never".`
+  );
+}
 const config: WidgetConfig = {
   repo: script?.dataset.repo || '',
   apiUrl: script?.src.replace(/\/widget(?:\.v[\d.]+)?\.js$/, '/api') || '',
@@ -409,6 +418,7 @@ const config: WidgetConfig = {
     return 'optional' as const;
   })(),
   screenshotScale,
+  issueLinkVisibility,
 };
 
 // Validate config
@@ -1175,7 +1185,13 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
     const result = await response.json();
 
     if (result.success) {
-      await showSuccessModal(root, result.issueNumber, result.issueUrl, result.isPublic ?? false);
+      await showSuccessModal(
+        root,
+        result.issueNumber,
+        result.issueUrl,
+        result.isPublic ?? false,
+        config.issueLinkVisibility
+      );
     } else {
       showSubmitError(root, config, data, result.error || 'Failed to submit');
     }
