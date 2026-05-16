@@ -43,24 +43,32 @@ GITHUB_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----
 -----END RSA PRIVATE KEY-----"
 ```
 
-Next, update `wrangler.toml` with your app name and remove the upstream KV namespace IDs:
+Next, keep local configuration in ignored files so your fork does not accumulate noisy diffs.
 
-```toml
-[vars]
-GITHUB_APP_NAME = "your-app-name"  # Must match your GitHub App's URL slug
+In `.dev.vars`, uncomment and set your GitHub App slug:
 
-# Remove or replace the [[kv_namespaces]] section (and the
-# [[env.preview.kv_namespaces]] section) — the existing IDs belong
-# to the upstream deployment. See Step 5 to create your own,
-# or delete both sections entirely to disable rate limiting.
+```bash
+GITHUB_APP_NAME=your-app-name
 ```
 
-> **Note:** The test pages under `public/test/` have `data-repo` set to `mean-weasel/bugdrop-widget-test`. Change this in all test HTML files to a repo where your GitHub App is installed:
->
-> ```bash
-> # macOS / BSD sed
-> find public/test -name '*.html' -exec sed -i '' 's/mean-weasel\/bugdrop-widget-test/your-org\/your-repo/g' {} +
-> ```
+The committed `wrangler.toml` contains the upstream development defaults used by this repository. For local development, prefer `.dev.vars` overrides instead of editing `wrangler.toml`.
+
+If you want the local test pages under `/test/` to submit to a repository where your GitHub App is installed, copy the local test config example:
+
+```bash
+cp public/test/local-config.example.js public/test/local-config.js
+```
+
+Then edit `public/test/local-config.js`:
+
+```js
+window.BugDropTestConfig = {
+  ...(window.BugDropTestConfig || {}),
+  repo: 'your-org/your-repo',
+};
+```
+
+`public/test/local-config.js` is ignored by git. Without it, test pages keep using the upstream test repository `mean-weasel/bugdrop-widget-test`, which is what CI expects.
 
 ## 3. Build the Widget
 
@@ -83,7 +91,11 @@ Visit http://localhost:8787/test/ to try the widget.
 
 Rate limiting prevents spam and protects GitHub API quotas. It uses Cloudflare KV for distributed storage.
 
-> **Important:** The `[[kv_namespaces]]` IDs in `wrangler.toml` belong to the upstream deployment and will not work for your account. You must create your own namespaces below, or remove the section to disable rate limiting.
+> **Important:** The `[[kv_namespaces]]` IDs in `wrangler.toml` belong to the upstream deployment and will not work for your account.
+
+For local development, you can leave rate limiting unconfigured. BugDrop disables rate limiting when no `RATE_LIMIT` binding is present.
+
+For production, create your own KV namespaces and update your deployment configuration with the IDs from Wrangler. Do not reuse the upstream IDs committed in this repository.
 
 ```bash
 # Create KV namespaces
@@ -91,7 +103,7 @@ npx wrangler kv:namespace create RATE_LIMIT
 npx wrangler kv:namespace create RATE_LIMIT --preview
 ```
 
-Copy the IDs from the output and update `wrangler.toml`:
+Copy the IDs from the output and update your production deployment configuration:
 
 ```toml
 [[kv_namespaces]]

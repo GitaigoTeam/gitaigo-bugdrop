@@ -1,3 +1,5 @@
+import { readdir, readFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 
 /**
@@ -38,6 +40,109 @@ test.describe('Widget Loading', () => {
     // Access button inside shadow DOM
     const button = page.locator('#bugdrop-host').locator('css=.bd-trigger');
     await expect(button).toBeVisible();
+  });
+
+  test('missing local test config returns an empty script', async ({ page }) => {
+    const response = await page.request.get('/test/local-config.js');
+
+    expect(response.status()).toBe(200);
+    expect(response.headers()['content-type']).toContain('application/javascript');
+    expect(await response.text()).toBe('');
+  });
+
+  test('test pages use upstream repo when no local override is present', async ({ page }) => {
+    await page.route('**/test/local-config.js', route => {
+      return route.fulfill({ status: 404 });
+    });
+
+    await page.goto('/test/');
+
+    const widgetScript = page.locator('script[src="/widget.js"]');
+    await expect(widgetScript).toBeAttached();
+
+    const repo = await widgetScript.evaluate(script => {
+      return (script as HTMLScriptElement).dataset.repo;
+    });
+
+    expect(repo).toBe('mean-weasel/bugdrop-widget-test');
+  });
+
+  test('test pages use local repo override when configured', async ({ page }) => {
+    await page.route('**/test/local-config.js', route => {
+      return route.fulfill({
+        contentType: 'application/javascript',
+        body: `
+          window.BugDropTestConfig = {
+            ...(window.BugDropTestConfig || {}),
+            repo: 'local-owner/local-repo',
+          };
+        `,
+      });
+    });
+
+    await page.goto('/test/');
+
+    const widgetScript = page.locator('script[src="/widget.js"]');
+    await expect(widgetScript).toBeAttached();
+
+    const repo = await widgetScript.evaluate(script => {
+      return (script as HTMLScriptElement).dataset.repo;
+    });
+
+    expect(repo).toBe('local-owner/local-repo');
+  });
+
+  test('non-index test pages use local repo override when configured', async ({ page }) => {
+    await page.route('**/test/local-config.js', route => {
+      return route.fulfill({
+        contentType: 'application/javascript',
+        body: `
+          window.BugDropTestConfig = {
+            ...(window.BugDropTestConfig || {}),
+            repo: 'local-owner/local-repo',
+          };
+        `,
+      });
+    });
+
+    await page.goto('/test/color-default.html');
+
+    const widgetScript = page.locator('script[src="/widget.js"]');
+    await expect(widgetScript).toBeAttached();
+
+    const repo = await widgetScript.evaluate(script => {
+      return (script as HTMLScriptElement).dataset.repo;
+    });
+
+    expect(repo).toBe('local-owner/local-repo');
+  });
+
+  test('widget test fixtures use shared local config loader', async () => {
+    const fixtureDir = join(process.cwd(), 'public', 'test');
+    const fixtureNames = (await readdir(fixtureDir)).filter(name => name.endsWith('.html'));
+    const nonWidgetFixtures = new Set(['pull-tab-mock.html']);
+
+    for (const fixtureName of fixtureNames) {
+      const source = await readFile(join(fixtureDir, fixtureName), 'utf8');
+      const directWidgetScript = /<script\b(?=[^>]*\bsrc=["']\/widget\.js["'])/i.test(source);
+
+      expect(
+        directWidgetScript,
+        `${fixtureName} should load the widget through load-widget.js`
+      ).toBe(false);
+      expect(source, `${fixtureName} should not hard-code the upstream test repo`).not.toContain(
+        'data-repo="mean-weasel/bugdrop-widget-test"'
+      );
+
+      if (!nonWidgetFixtures.has(basename(fixtureName))) {
+        expect(source, `${fixtureName} should include the shared test loader`).toContain(
+          'src="/test/load-widget.js"'
+        );
+        expect(source, `${fixtureName} should call the shared test loader`).toContain(
+          'loadBugDropTestWidget'
+        );
+      }
+    }
   });
 });
 

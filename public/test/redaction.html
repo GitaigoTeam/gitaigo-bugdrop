@@ -98,22 +98,18 @@
     </section>
   </main>
 
-  <script id="bugdrop-script" defer src="/widget.js" data-repo="mean-weasel/bugdrop-widget-test" data-theme="dark" data-color="#ff9e64"></script>
+  <script src="/test/load-widget.js"></script>
   <script>
-    (function () {
-      try {
-        var script = document.getElementById('bugdrop-script');
-        if (!script) return;
-        var params = new URLSearchParams(location.search);
-        var mapping = { screenshot: 'data-screenshot' };
-        Object.keys(mapping).forEach(function (key) {
-          var v = params.get(key);
-          if (v != null) script.setAttribute(mapping[key], v);
-        });
-      } catch (e) {
-        // fixture must never break the page
-      }
-    })();
+    window.loadBugDropTestWidget({
+      id: 'bugdrop-script',
+      dataset: {
+        theme: 'dark',
+        color: '#ff9e64',
+      },
+      queryDataset: {
+        screenshot: 'screenshot',
+      },
+    });
   </script>
 </body>
 </html>

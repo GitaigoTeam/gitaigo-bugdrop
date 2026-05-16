@@ -47,6 +47,11 @@
       <p id="visible-sibling">This sibling text should appear in the screenshot.</p>
     </div>
 
-    <script src="/widget.js" data-repo="test-org/test-repo" data-screenshot="optional"></script>
+    <script src="/test/load-widget.js"></script>
+    <script>
+      window.loadBugDropTestWidget({
+        dataset: { screenshot: 'optional' },
+      });
+    </script>
   </body>
 </html>

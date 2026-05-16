@@ -30,6 +30,14 @@
   </div>
 
   <!-- Load BugDrop WITH custom icon -->
-  <script src="/widget.js" data-repo="mean-weasel/bugdrop-widget-test" data-theme="dark" data-icon="/test/bugdrop-icon.svg"></script>
+  <script src="/test/load-widget.js"></script>
+  <script>
+    window.loadBugDropTestWidget({
+      dataset: {
+        theme: 'dark',
+        icon: '/test/bugdrop-icon.svg',
+      },
+    });
+  </script>
 </body>
 </html>

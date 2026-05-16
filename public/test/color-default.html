@@ -29,6 +29,13 @@
   </div>
 
   <!-- Load BugDrop WITHOUT custom color -->
-  <script src="/widget.js" data-repo="mean-weasel/bugdrop-widget-test" data-theme="dark"></script>
+  <script src="/test/load-widget.js"></script>
+  <script>
+    window.loadBugDropTestWidget({
+      dataset: {
+        theme: 'dark',
+      },
+    });
+  </script>
 </body>
 </html>

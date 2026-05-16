@@ -61,6 +61,15 @@
     <div class="row">Object: example.company/feature/preview</div>
   </main>
 
-  <script id="bugdrop-script" defer src="/widget.js" data-repo="mean-weasel/bugdrop-widget-test" data-theme="dark" data-color="#ff9e64"></script>
+  <script src="/test/load-widget.js"></script>
+  <script>
+    window.loadBugDropTestWidget({
+      id: 'bugdrop-script',
+      dataset: {
+        theme: 'dark',
+        color: '#ff9e64',
+      },
+    });
+  </script>
 </body>
 </html>
