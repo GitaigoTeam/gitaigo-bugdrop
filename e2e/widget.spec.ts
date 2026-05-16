@@ -1,3 +1,5 @@
+import { readdir, readFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 
 /**
@@ -88,6 +90,59 @@ test.describe('Widget Loading', () => {
     });
 
     expect(repo).toBe('local-owner/local-repo');
+  });
+
+  test('non-index test pages use local repo override when configured', async ({ page }) => {
+    await page.route('**/test/local-config.js', route => {
+      return route.fulfill({
+        contentType: 'application/javascript',
+        body: `
+          window.BugDropTestConfig = {
+            ...(window.BugDropTestConfig || {}),
+            repo: 'local-owner/local-repo',
+          };
+        `,
+      });
+    });
+
+    await page.goto('/test/color-default.html');
+
+    const widgetScript = page.locator('script[src="/widget.js"]');
+    await expect(widgetScript).toBeAttached();
+
+    const repo = await widgetScript.evaluate(script => {
+      return (script as HTMLScriptElement).dataset.repo;
+    });
+
+    expect(repo).toBe('local-owner/local-repo');
+  });
+
+  test('widget test fixtures use shared local config loader', async () => {
+    const fixtureDir = join(process.cwd(), 'public', 'test');
+    const fixtureNames = (await readdir(fixtureDir)).filter(name => name.endsWith('.html'));
+    const nonWidgetFixtures = new Set(['pull-tab-mock.html']);
+
+    for (const fixtureName of fixtureNames) {
+      const source = await readFile(join(fixtureDir, fixtureName), 'utf8');
+      const directWidgetScript = /<script\b(?=[^>]*\bsrc=["']\/widget\.js["'])/i.test(source);
+
+      expect(
+        directWidgetScript,
+        `${fixtureName} should load the widget through load-widget.js`
+      ).toBe(false);
+      expect(source, `${fixtureName} should not hard-code the upstream test repo`).not.toContain(
+        'data-repo="mean-weasel/bugdrop-widget-test"'
+      );
+
+      if (!nonWidgetFixtures.has(basename(fixtureName))) {
+        expect(source, `${fixtureName} should include the shared test loader`).toContain(
+          'src="/test/load-widget.js"'
+        );
+        expect(source, `${fixtureName} should call the shared test loader`).toContain(
+          'loadBugDropTestWidget'
+        );
+      }
+    }
   });
 });
 

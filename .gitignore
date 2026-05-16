@@ -32,6 +32,7 @@ private-key*.pem
 .plans/
 .superpowers/
 .playwright-mcp/
+docs/superpowers/
 
 # OS files
 .DS_Store
