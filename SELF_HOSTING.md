@@ -176,6 +176,7 @@ The release tag (e.g., `v1.2.0`) becomes the version number for the widget files
 | `MAX_SCREENSHOT_SIZE_MB`       | No       | Max screenshot size in MB (default: `5`)                              |
 | `CATEGORY_LABELS`              | No       | JSON mapping from repos/categories to GitHub labels                   |
 | `ALLOW_CLIENT_CATEGORY_LABELS` | No       | Set to `true` to trust `data-category-labels` from your own pages     |
+| `ROOT_REDIRECT_URL`            | No       | Landing page URL for `/` redirects (default: `https://bugdrop.dev`)   |
 | `RATE_LIMIT`                   | No       | KV namespace binding for rate limiting (see section 5)                |
 
 ### Custom Category Labels
@@ -230,13 +231,21 @@ Only list the exact origins (scheme + host) of sites where you embed the BugDrop
 
 ### Root URL Redirect
 
-By default, the worker redirects `/` to `https://bugdrop.dev` (the upstream landing page). For your own deployment, edit `src/index.ts` and change the redirect URL to your own site, or replace it with a custom response:
+By default, the worker redirects `/` to `https://bugdrop.dev` (the upstream landing page). For self-hosted deployments, set `ROOT_REDIRECT_URL` instead of editing source code.
 
-```ts
-// src/index.ts — change this route handler:
-app.get('/', c => {
-  return c.redirect('https://your-site.com', 301);
-});
+`ROOT_REDIRECT_URL` must be an `http` or `https` URL. Invalid values are ignored with a worker log warning, and `/` falls back to `https://bugdrop.dev`.
+
+Local `.dev.vars`:
+
+```bash
+ROOT_REDIRECT_URL=https://example.com
+```
+
+Production `wrangler.toml`:
+
+```toml
+[vars]
+ROOT_REDIRECT_URL = "https://example.com"
 ```
 
 ## Commands

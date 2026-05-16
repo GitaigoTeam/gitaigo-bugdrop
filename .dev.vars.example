@@ -39,5 +39,8 @@ YOUR_PRIVATE_KEY_CONTENT_HERE
 # Maximum screenshot size in MB
 # MAX_SCREENSHOT_SIZE_MB=5
 
+# Optional: where "/" redirects for self-hosted deployments.
+# ROOT_REDIRECT_URL=https://example.com
+
 # RATE_LIMIT is intentionally not configured here.
 # Local development runs with ENVIRONMENT=development and can work without a KV namespace.
