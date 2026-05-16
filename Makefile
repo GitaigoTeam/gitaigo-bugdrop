@@ -1,4 +1,4 @@
-.PHONY: dev build build-widget build-all deploy test test-watch test-e2e test-e2e-ui test-e2e-shard test-live-cross-browser lint lint-fix format format-check typecheck knip audit check ci clean install install-playwright help
+.PHONY: dev build build-widget build-all deploy test test-watch test-e2e test-e2e-ui test-e2e-shard test-live-cross-browser lint lint-fix format format-check typecheck knip audit check-actions-node24 check ci clean install install-playwright help
 
 # Development
 dev:
@@ -67,8 +67,11 @@ typecheck:
 knip:
 	npx knip
 
+check-actions-node24:
+	npm run check:actions-node24
+
 # Combined Commands
-check: lint format-check typecheck knip audit
+check: lint format-check typecheck knip audit check-actions-node24
 	@echo "✓ All checks passed"
 
 ci: check test build-all test-e2e
@@ -113,9 +116,10 @@ help:
 	@echo "    make typecheck        - Run TypeScript type checking"
 	@echo "    make knip             - Check for dead code"
 	@echo "    make audit            - Run npm security audit"
+	@echo "    make check-actions-node24 - Verify GitHub Actions use Node 24-ready entries"
 	@echo ""
 	@echo "  Combined:"
-	@echo "    make check            - Run lint, typecheck, knip, and audit"
+	@echo "    make check            - Run lint, format check, typecheck, knip, audit, and Actions guard"
 	@echo "    make ci               - Run full CI pipeline locally"
 	@echo ""
 	@echo "  Utilities:"

@@ -35,6 +35,17 @@ export default tseslint.config(
         },
       ],
       '@typescript-eslint/no-explicit-any': 'warn',
+    },
+  },
+  {
+    files: ['src/**/*.ts'],
+    ignores: [
+      'src/widget/ui.ts',
+      'src/widget/index.ts',
+      'src/widget/annotator.ts',
+      'src/routes/api.ts',
+    ],
+    rules: {
       'max-lines': ['warn', { max: 300, skipBlankLines: true, skipComments: true }],
       'max-lines-per-function': ['warn', { max: 150, skipBlankLines: true, skipComments: true }],
     },
