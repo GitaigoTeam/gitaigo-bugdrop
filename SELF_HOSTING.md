@@ -4,7 +4,7 @@ Run your own instance of BugDrop with your own GitHub App.
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - Cloudflare account (free tier works)
 - GitHub account
 
