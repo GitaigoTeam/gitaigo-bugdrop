@@ -31,6 +31,7 @@
     "lint:fix": "eslint --fix .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "check:actions-node24": "node -e \"const {execSync}=require('node:child_process'); const out=execSync('rg -n \\\\\\\"actions/(checkout|setup-node|cache|upload-artifact)@v4\\\\\\\" .github/workflows || true',{encoding:'utf8'}); if(out.trim()){ console.error(out); process.exit(1); } console.log('GitHub first-party actions are Node 24-ready');\"",
     "validate": "npm run lint && npm run format:check && npm run typecheck && npm run test",
     "prepare": "husky"
   },
