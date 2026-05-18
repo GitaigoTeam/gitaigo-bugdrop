@@ -553,7 +553,7 @@ function formatIssueBody(
     if (payload.metadata.elementSelector) {
       sections.push('');
       sections.push(
-        `_Selected element is indicated by the rounded highlight border (${getSelectedElementHighlightColor(payload)})._`
+        `_Selected element is indicated by the rounded highlight border (${formatMarkdownInlineCode(getSelectedElementHighlightColor(payload))})._`
       );
     }
     sections.push('');
@@ -626,11 +626,11 @@ function formatIssueBody(
 function getSelectedElementHighlightColor(payload: FeedbackPayload): string {
   const color = payload.metadata.selectedElementHighlightColor;
   if (!color || hasControlChars(color)) return resolveAccentColor();
-  return safeInlineCode(color.trim()) || resolveAccentColor();
+  return normalizeMarkdownValue(color) || resolveAccentColor();
 }
 
 function formatMarkdownTableCode(value: string): string {
-  const tableSafeValue = value.replace(/\|/g, '\\|');
+  const tableSafeValue = normalizeMarkdownValue(value).replace(/\|/g, '\\|');
   if (!tableSafeValue.includes('`')) {
     return `\`${tableSafeValue}\``;
   }
@@ -638,6 +638,38 @@ function formatMarkdownTableCode(value: string): string {
   const longestBacktickRun = Math.max(...tableSafeValue.match(/`+/g)!.map(match => match.length));
   const fence = '`'.repeat(longestBacktickRun + 1);
   return `${fence} ${tableSafeValue} ${fence}`;
+}
+
+function formatMarkdownInlineCode(value: string): string {
+  const inlineSafeValue = normalizeMarkdownValue(value);
+  if (!inlineSafeValue.includes('`')) {
+    return `\`${inlineSafeValue}\``;
+  }
+
+  const longestBacktickRun = Math.max(...inlineSafeValue.match(/`+/g)!.map(match => match.length));
+  const fence = '`'.repeat(longestBacktickRun + 1);
+  return `${fence} ${inlineSafeValue} ${fence}`;
+}
+
+function normalizeMarkdownValue(value: string): string {
+  let normalized = '';
+  let previousWasControl = false;
+
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    const isControl = code < 0x20 || code === 0x7f;
+
+    if (isControl) {
+      if (!previousWasControl) normalized += ' ';
+      previousWasControl = true;
+      continue;
+    }
+
+    normalized += value[i];
+    previousWasControl = false;
+  }
+
+  return normalized.trim();
 }
 
 export default api;

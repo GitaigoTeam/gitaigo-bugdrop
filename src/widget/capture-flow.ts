@@ -342,7 +342,12 @@ function getElementContextCaptureTarget(element: Element, options: ElementContex
     const rect = current.getBoundingClientRect();
     const area = rect.width * rect.height;
 
-    if (isUsableRect(rect) && area <= maxContextArea && hasUsefulContext(rect, selectedRect)) {
+    if (
+      isUsableRect(rect) &&
+      area <= maxContextArea &&
+      containsRect(rect, selectedRect) &&
+      hasUsefulContext(rect, selectedRect)
+    ) {
       best = current;
     }
 
@@ -354,6 +359,15 @@ function getElementContextCaptureTarget(element: Element, options: ElementContex
 
 function isUsableRect(rect: DOMRect): boolean {
   return rect.width > 0 && rect.height > 0;
+}
+
+function containsRect(candidate: DOMRect, selected: DOMRect): boolean {
+  return (
+    candidate.left <= selected.left &&
+    candidate.top <= selected.top &&
+    candidate.right >= selected.right &&
+    candidate.bottom >= selected.bottom
+  );
 }
 
 function hasUsefulContext(candidate: DOMRect, selected: DOMRect): boolean {

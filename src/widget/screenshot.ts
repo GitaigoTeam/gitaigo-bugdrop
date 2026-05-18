@@ -331,27 +331,38 @@ async function applyHighlightToImage(
   if (rect.w <= 0 || rect.h <= 0) return dataUrl;
 
   const img = await loadImage(dataUrl);
+  const imageWidth = img.naturalWidth || img.width;
+  const imageHeight = img.naturalHeight || img.height;
+  const scaleX = imageWidth / Math.max(1, targetRect.w);
+  const scaleY = imageHeight / Math.max(1, targetRect.h);
+  const averageScale = Math.max(1, (scaleX + scaleY) / 2);
+  const borderWidth = getHighlightBorderWidth(style.borderWidth, averageScale);
+  const innerGap = 2 * averageScale;
+  const padding = innerGap + borderWidth / 2;
+  const rawX = (rect.x - targetRect.x) * scaleX - padding;
+  const rawY = (rect.y - targetRect.y) * scaleY - padding;
+  const rawW = rect.w * scaleX + padding * 2;
+  const rawH = rect.h * scaleY + padding * 2;
+  const overflowLeft = Math.max(0, Math.ceil(-rawX));
+  const overflowTop = Math.max(0, Math.ceil(-rawY));
+  const overflowRight = Math.max(0, Math.ceil(rawX + rawW - imageWidth));
+  const overflowBottom = Math.max(0, Math.ceil(rawY + rawH - imageHeight));
+
   const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth || img.width;
-  canvas.height = img.naturalHeight || img.height;
+  canvas.width = imageWidth + overflowLeft + overflowRight;
+  canvas.height = imageHeight + overflowTop + overflowBottom;
 
   const ctx = canvas.getContext('2d');
   if (!ctx) {
     throw new Error('Failed to get canvas context for selected element highlight');
   }
 
-  ctx.drawImage(img, 0, 0);
+  ctx.drawImage(img, overflowLeft, overflowTop);
 
-  const scaleX = canvas.width / Math.max(1, targetRect.w);
-  const scaleY = canvas.height / Math.max(1, targetRect.h);
-  const averageScale = Math.max(1, (scaleX + scaleY) / 2);
-  const borderWidth = getHighlightBorderWidth(style.borderWidth, averageScale);
-  const innerGap = 2 * averageScale;
-  const padding = innerGap + borderWidth / 2;
-  const x = Math.max(0, Math.round((rect.x - targetRect.x) * scaleX - padding));
-  const y = Math.max(0, Math.round((rect.y - targetRect.y) * scaleY - padding));
-  const w = Math.min(canvas.width - x, Math.round(rect.w * scaleX + padding * 2));
-  const h = Math.min(canvas.height - y, Math.round(rect.h * scaleY + padding * 2));
+  const x = Math.round(rawX + overflowLeft);
+  const y = Math.round(rawY + overflowTop);
+  const w = Math.round(rawW);
+  const h = Math.round(rawH);
   const radius = getHighlightRadius(style.radius, averageScale);
   const accent = resolveAccentColor(style.accentColor);
 

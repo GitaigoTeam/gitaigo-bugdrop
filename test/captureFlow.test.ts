@@ -263,6 +263,39 @@ describe('capture flow state decisions', () => {
     });
   });
 
+  it('does not choose a context ancestor that does not visually contain the selected element', async () => {
+    Object.defineProperty(window, 'innerWidth', { value: 1200, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+
+    const overflowParent = document.createElement('section');
+    overflowParent.className = 'overflow-parent';
+    overflowParent.getBoundingClientRect = () => rect(200, 200, 0, 0);
+
+    const target = document.createElement('button');
+    target.id = 'overflowed-target';
+    target.getBoundingClientRect = () => rect(80, 40, 300, 300);
+    overflowParent.appendChild(target);
+    document.body.appendChild(overflowParent);
+
+    const { runScreenshotCaptureFlow, captureWithLoadingMock } = await loadCaptureFlowWithMocks({
+      screenshotChoice: { kind: 'element' },
+      pickedElement: target,
+      captureResult: { kind: 'skipped' },
+    });
+
+    await runScreenshotCaptureFlow(
+      document.createElement('div'),
+      {
+        ...baseConfig,
+        elementContextMaxArea: 1.5,
+      },
+      true,
+      vi.fn()
+    );
+
+    expect(captureWithLoadingMock.mock.calls[0]?.[1]).toBe(target);
+  });
+
   it('uses the default selected element context settings when no overrides are provided', () => {
     expect(DEFAULT_SELECTED_ELEMENT_CONTEXT_MAX_VIEWPORT_AREA_MULTIPLIER).toBe(0);
   });

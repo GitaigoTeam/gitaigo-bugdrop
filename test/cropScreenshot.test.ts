@@ -401,4 +401,60 @@ describe('captureScreenshot integrates with mask pipeline', () => {
     expect(stroke).toHaveBeenCalledTimes(1);
     expect(strokeRect).not.toHaveBeenCalled();
   });
+
+  it('pads default selected-element captures so the highlight is not clipped', async () => {
+    const selected = document.createElement('button');
+    selected.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 30,
+        width: 200,
+        height: 150,
+        top: 30,
+        left: 20,
+        bottom: 180,
+        right: 220,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+    document.body.appendChild(selected);
+
+    const STUB =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+    const toPng = vi.fn(() => Promise.resolve(STUB));
+    (window as unknown as { __bugdropMockToPng: typeof toPng }).__bugdropMockToPng = toPng;
+
+    const drawImage = vi.fn();
+    const stroke = vi.fn();
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue({
+      beginPath: vi.fn(),
+      closePath: vi.fn(),
+      drawImage,
+      fillRect: vi.fn(),
+      fill: vi.fn(),
+      lineTo: vi.fn(),
+      moveTo: vi.fn(),
+      quadraticCurveTo: vi.fn(),
+      stroke,
+      strokeRect: vi.fn(),
+      fillStyle: '',
+      lineWidth: 0,
+      strokeStyle: '',
+    } as unknown as CanvasRenderingContext2D);
+
+    await expect(
+      captureScreenshot(selected, undefined, { highlightElement: selected })
+    ).resolves.toBe('data:image/png;base64,masked');
+
+    expect(toPng).toHaveBeenCalledWith(selected, expect.any(Object));
+    expect(drawImage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Number),
+      expect.any(Number)
+    );
+    expect(drawImage.mock.calls[0][1]).toBeGreaterThan(0);
+    expect(drawImage.mock.calls[0][2]).toBeGreaterThan(0);
+    expect(stroke).toHaveBeenCalledTimes(1);
+  });
 });
