@@ -41,7 +41,7 @@ export function shouldRenderIssueLink(
 }
 
 export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
-  const pos = config.position === 'bottom-left' ? 'left: 20px' : 'right: 20px';
+  const pos = config.position === 'bottom-left' ? 'left: 0' : 'right: 0';
   const resolved = resolveTheme(config.theme);
 
   // Determine font settings
@@ -143,14 +143,15 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       font-family: inherit;
     }
 
-    /* Trigger Button (Pill) */
+    /* Trigger Button (edge label) */
     .bd-trigger {
       position: fixed;
       bottom: 20px;
       ${pos};
       height: 44px;
-      padding: 0 16px;
-      border-radius: ${radiusPx !== null ? `${radiusPx * 2}px` : '22px'};
+      min-width: 0;
+      padding: 0 0 0 16px;
+      border-radius: ${radiusPx !== null ? `${radiusPx * 2}px 0 0 ${radiusPx * 2}px` : '22px 0 0 22px'};
       border: ${borderW !== null ? 'var(--bd-border-style)' : 'none'};
       background: var(--bd-primary);
       color: var(--bd-primary-text);
@@ -163,7 +164,20 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       display: flex;
       align-items: center;
       gap: 8px;
+      overflow: visible;
       animation: bd-triggerSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .bd-trigger--left {
+      padding: 0 16px 0 0;
+      border-radius: ${radiusPx !== null ? `0 ${radiusPx * 2}px ${radiusPx * 2}px 0` : '0 22px 22px 0'};
+    }
+
+    .bd-trigger--positioned {
+      animation: none;
     }
 
     .bd-trigger:hover {
@@ -192,7 +206,51 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
     .bd-trigger-label {
       font-size: 14px;
       font-weight: 600;
-      letter-spacing: -0.01em;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .bd-trigger-drag-handle {
+      align-self: center;
+      width: 30px;
+      height: calc(100% - 8px);
+      margin: 4px;
+      border-radius: 7px;
+      background: transparent;
+      cursor: grab;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--bd-primary-text);
+      opacity: 0.95;
+      touch-action: none;
+    }
+
+    .bd-trigger--left .bd-trigger-drag-handle {
+      order: -1;
+    }
+
+    .bd-trigger-drag-handle:hover,
+    .bd-trigger-drag-handle:active,
+    .bd-trigger--dragging .bd-trigger-drag-handle {
+      background: color-mix(in srgb, var(--bd-primary-text) 18%, transparent);
+      opacity: 1;
+    }
+
+    .bd-trigger-drag-handle:hover {
+      cursor: grab;
+    }
+
+    .bd-trigger-drag-handle:active,
+    .bd-trigger--dragging .bd-trigger-drag-handle {
+      cursor: grabbing;
+    }
+
+    .bd-trigger-drag-handle svg {
+      display: block;
+      width: 14px;
+      height: 22px;
+      pointer-events: none;
     }
 
     @keyframes bd-triggerSlideIn {
@@ -289,7 +347,7 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
     .bd-trigger-close {
       position: absolute;
       top: -4px;
-      right: -4px;
+      right: 4px;
       width: 20px;
       height: 20px;
       border-radius: 50%;
@@ -308,6 +366,11 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       justify-content: center;
       padding: 0;
       box-shadow: var(--bd-shadow-sm);
+    }
+
+    .bd-trigger--left .bd-trigger-close {
+      right: auto;
+      left: 4px;
     }
 
     .bd-trigger:hover .bd-trigger-close {
@@ -891,9 +954,17 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
     @media (max-width: 640px) {
       .bd-trigger {
         height: 40px;
-        padding: 0 14px;
+        padding: 0 0 0 14px;
         bottom: 16px;
         gap: 6px;
+      }
+
+      .bd-trigger--left {
+        padding: 0 14px 0 0;
+      }
+
+      .bd-trigger-drag-handle {
+        width: 28px;
       }
 
       .bd-trigger-icon {

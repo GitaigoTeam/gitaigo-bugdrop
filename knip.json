@@ -3,5 +3,6 @@
   "entry": ["src/index.ts", "src/widget/index.ts", "scripts/build-widget.js"],
   "project": ["src/**/*.ts", "scripts/**/*.js"],
   "ignore": [],
-  "ignoreDependencies": ["esbuild"]
+  "ignoreBinaries": ["semantic-release"],
+  "ignoreDependencies": ["esbuild", "semantic-release"]
 }

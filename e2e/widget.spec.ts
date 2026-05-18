@@ -57,6 +57,73 @@ test.describe('Widget Loading', () => {
     await expect(button).toBeVisible();
   });
 
+  test('feedback button is an edge label with a drag handle', async ({ page }) => {
+    await page.goto('/test/');
+    const host = page.locator('#bugdrop-host');
+    const trigger = host.locator('css=.bd-trigger');
+    await expect(trigger).toBeVisible({ timeout: 5000 });
+    await trigger.evaluate(async el => {
+      await Promise.all(el.getAnimations().map(animation => animation.finished));
+    });
+
+    const viewport = page.viewportSize();
+    expect(viewport).not.toBeNull();
+
+    const triggerBox = await trigger.boundingBox();
+    expect(triggerBox).not.toBeNull();
+    expect(Math.round(triggerBox!.x + triggerBox!.width)).toBe(viewport!.width);
+
+    await expect(trigger).toHaveCSS('border-top-right-radius', '0px');
+    await expect(trigger).toHaveCSS('border-bottom-right-radius', '0px');
+    await expect(host.locator('css=.bd-trigger-drag-handle')).toBeVisible();
+    await expect(host.locator('css=.bd-trigger-drag-handle')).toHaveCSS('cursor', 'grab');
+  });
+
+  test('dragging the feedback button persists after reload', async ({ page }) => {
+    await page.goto('/test/');
+    await page.evaluate(() => {
+      Object.keys(localStorage)
+        .filter(key => key.startsWith('bugdrop_trigger_position_'))
+        .forEach(key => localStorage.removeItem(key));
+    });
+    await page.reload();
+
+    const host = page.locator('#bugdrop-host');
+    const trigger = host.locator('css=.bd-trigger');
+    const handle = host.locator('css=.bd-trigger-drag-handle');
+    await expect(trigger).toBeVisible({ timeout: 5000 });
+    await expect(handle).toBeVisible();
+
+    const handleBox = await handle.boundingBox();
+    expect(handleBox).not.toBeNull();
+
+    await page.mouse.move(
+      handleBox!.x + handleBox!.width / 2,
+      handleBox!.y + handleBox!.height / 2
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      handleBox!.x + handleBox!.width / 2,
+      handleBox!.y + handleBox!.height / 2 - 160,
+      { steps: 8 }
+    );
+    await page.mouse.up();
+
+    const draggedTop = await trigger.evaluate(el => el.getBoundingClientRect().top);
+    const storedPosition = await page.evaluate(() => {
+      const key = Object.keys(localStorage).find(k => k.startsWith('bugdrop_trigger_position_'));
+      return key ? localStorage.getItem(key) : null;
+    });
+    expect(storedPosition).not.toBeNull();
+
+    await expect(host.locator('css=.bd-modal')).not.toBeVisible();
+    await page.reload();
+    await expect(trigger).toBeVisible({ timeout: 5000 });
+
+    const restoredTop = await trigger.evaluate(el => el.getBoundingClientRect().top);
+    expect(Math.abs(restoredTop - draggedTop)).toBeLessThanOrEqual(2);
+  });
+
   test('missing local test config returns an empty script', async ({ page }) => {
     const response = await page.request.get('/test/local-config.js');
 

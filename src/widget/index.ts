@@ -94,9 +94,11 @@ interface FeedbackData {
 
 // localStorage key for dismissed state
 const BUGDROP_DISMISSED_KEY = 'bugdrop_dismissed';
+const BUGDROP_TRIGGER_POSITION_PREFIX = 'bugdrop_trigger_position_';
 const BUGDROP_WELCOMED_PREFIX = 'bugdrop_welcomed_';
 const BUGDROP_COMPLEX_SCREENSHOT_SKIPPED_PREFIX = 'bugdrop_complex_screenshot_skipped_';
 const COMPLEX_SCREENSHOT_SKIP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const TRIGGER_VIEWPORT_MARGIN_PX = 8;
 
 // Parse user agent to extract browser info
 function parseBrowser(ua: string): { name: string; version: string } {
@@ -181,6 +183,7 @@ let _triggerButton: HTMLElement | null = null;
 let _pullTab: HTMLElement | null = null;
 let _isModalOpen = false;
 let _widgetConfig: WidgetConfig | null = null;
+let _triggerDragMoved = false;
 
 // Helper to check if button was dismissed
 function isButtonDismissed(dismissDuration?: number): boolean {
@@ -438,6 +441,10 @@ function getTriggerLabel(config: WidgetConfig): string {
 }
 
 function appendTriggerContent(trigger: HTMLElement, config: WidgetConfig): void {
+  if (config.position === 'bottom-left') {
+    trigger.appendChild(createTriggerDragHandle());
+  }
+
   if (config.iconUrl !== 'none') {
     const icon = document.createElement('span');
     icon.className = 'bd-trigger-icon';
@@ -465,6 +472,152 @@ function appendTriggerContent(trigger: HTMLElement, config: WidgetConfig): void 
   label.className = 'bd-trigger-label';
   label.textContent = getTriggerLabel(config);
   trigger.appendChild(label);
+
+  if (config.position !== 'bottom-left') {
+    trigger.appendChild(createTriggerDragHandle());
+  }
+}
+
+function createTriggerDragHandle(): HTMLElement {
+  const handle = document.createElement('span');
+  handle.className = 'bd-trigger-drag-handle';
+  handle.setAttribute('aria-hidden', 'true');
+  handle.title = 'Drag feedback button';
+  handle.innerHTML = `
+    <svg viewBox="0 0 12 24" aria-hidden="true" focusable="false">
+      <circle cx="4" cy="5" r="1.5" fill="currentColor"></circle>
+      <circle cx="8" cy="5" r="1.5" fill="currentColor"></circle>
+      <circle cx="4" cy="9.5" r="1.5" fill="currentColor"></circle>
+      <circle cx="8" cy="9.5" r="1.5" fill="currentColor"></circle>
+      <circle cx="4" cy="14" r="1.5" fill="currentColor"></circle>
+      <circle cx="8" cy="14" r="1.5" fill="currentColor"></circle>
+      <circle cx="4" cy="18.5" r="1.5" fill="currentColor"></circle>
+      <circle cx="8" cy="18.5" r="1.5" fill="currentColor"></circle>
+    </svg>
+  `;
+  return handle;
+}
+
+function getTriggerClassName(config: WidgetConfig, isRestoring = false): string {
+  const classes = [
+    'bd-trigger',
+    `bd-trigger--${config.position === 'bottom-left' ? 'left' : 'right'}`,
+  ];
+  if (isRestoring) classes.push('bd-trigger--restoring');
+  return classes.join(' ');
+}
+
+function getTriggerPositionKey(config: WidgetConfig): string {
+  return `${BUGDROP_TRIGGER_POSITION_PREFIX}${config.repo}_${config.position}`;
+}
+
+function getStoredTriggerTop(config: WidgetConfig): number | null {
+  try {
+    const raw = localStorage.getItem(getTriggerPositionKey(config));
+    if (!raw) return null;
+
+    const top = Number(raw);
+    return Number.isFinite(top) ? top : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveTriggerTop(config: WidgetConfig, top: number): void {
+  try {
+    localStorage.setItem(getTriggerPositionKey(config), String(Math.round(top)));
+  } catch {
+    // localStorage may be blocked
+  }
+}
+
+function clampTriggerTop(trigger: HTMLElement, top: number): number {
+  const rect = trigger.getBoundingClientRect();
+  const maxTop = Math.max(
+    TRIGGER_VIEWPORT_MARGIN_PX,
+    window.innerHeight - rect.height - TRIGGER_VIEWPORT_MARGIN_PX
+  );
+  return Math.min(Math.max(top, TRIGGER_VIEWPORT_MARGIN_PX), maxTop);
+}
+
+function setTriggerTop(trigger: HTMLElement, top: number): void {
+  trigger.style.top = `${clampTriggerTop(trigger, top)}px`;
+  trigger.style.bottom = 'auto';
+}
+
+function applyStoredTriggerPosition(trigger: HTMLElement, config: WidgetConfig): void {
+  const top = getStoredTriggerTop(config);
+  if (top === null) return;
+  trigger.classList.add('bd-trigger--positioned');
+  setTriggerTop(trigger, top);
+}
+
+function attachTriggerDragBehavior(trigger: HTMLElement, config: WidgetConfig): void {
+  const handle = trigger.querySelector<HTMLElement>('.bd-trigger-drag-handle');
+  if (!handle) return;
+
+  let pointerId: number | null = null;
+  let startPointerY = 0;
+  let startTop = 0;
+  let moved = false;
+
+  const endDrag = () => {
+    if (pointerId === null) return;
+    pointerId = null;
+    trigger.classList.remove('bd-trigger--dragging');
+    window.removeEventListener('pointermove', handlePointerMove);
+    window.removeEventListener('pointerup', handlePointerUp);
+    window.removeEventListener('pointercancel', handlePointerCancel);
+
+    if (moved) {
+      saveTriggerTop(config, trigger.getBoundingClientRect().top);
+      window.setTimeout(() => {
+        _triggerDragMoved = false;
+      }, 0);
+    }
+  };
+
+  function handlePointerMove(e: PointerEvent): void {
+    if (pointerId !== e.pointerId) return;
+    const nextTop = startTop + e.clientY - startPointerY;
+    if (Math.abs(e.clientY - startPointerY) > 3) {
+      moved = true;
+      _triggerDragMoved = true;
+    }
+    setTriggerTop(trigger, nextTop);
+  }
+
+  function handlePointerUp(e: PointerEvent): void {
+    if (pointerId !== e.pointerId) return;
+    endDrag();
+  }
+
+  function handlePointerCancel(e: PointerEvent): void {
+    if (pointerId !== e.pointerId) return;
+    endDrag();
+  }
+
+  handle.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = trigger.getBoundingClientRect();
+    pointerId = e.pointerId;
+    startPointerY = e.clientY;
+    startTop = rect.top;
+    moved = false;
+    trigger.classList.add('bd-trigger--dragging');
+    handle.setPointerCapture(e.pointerId);
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
+  });
+
+  handle.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
 }
 
 // Create the pull tab shown after dismissing the button
@@ -547,7 +700,7 @@ function initWidget(config: WidgetConfig) {
 
   if (shouldShowButton) {
     const trigger = document.createElement('button');
-    trigger.className = 'bd-trigger';
+    trigger.className = getTriggerClassName(config);
     appendTriggerContent(trigger, config);
     trigger.setAttribute('aria-label', 'Report a bug or send feedback');
 
@@ -589,9 +742,17 @@ function initWidget(config: WidgetConfig) {
 
     root.appendChild(trigger);
     _triggerButton = trigger;
+    applyStoredTriggerPosition(trigger, config);
+    attachTriggerDragBehavior(trigger, config);
 
     // Handle trigger click
-    trigger.addEventListener('click', () => openFeedbackFlow(root, config));
+    trigger.addEventListener('click', () => {
+      if (_triggerDragMoved) {
+        _triggerDragMoved = false;
+        return;
+      }
+      openFeedbackFlow(root, config);
+    });
   } else if (
     config.showButton &&
     config.buttonDismissible &&
@@ -707,7 +868,7 @@ function exposeBugDropAPI(root: HTMLElement, config: WidgetConfig) {
 // Helper to create the trigger button (used by show() API and pull tab restore)
 function createTriggerButton(root: HTMLElement, config: WidgetConfig, isRestoring = false) {
   const trigger = document.createElement('button');
-  trigger.className = isRestoring ? 'bd-trigger bd-trigger--restoring' : 'bd-trigger';
+  trigger.className = getTriggerClassName(config, isRestoring);
   appendTriggerContent(trigger, config);
   trigger.setAttribute('aria-label', 'Report a bug or send feedback');
 
@@ -747,8 +908,16 @@ function createTriggerButton(root: HTMLElement, config: WidgetConfig, isRestorin
 
   root.appendChild(trigger);
   _triggerButton = trigger;
+  applyStoredTriggerPosition(trigger, config);
+  attachTriggerDragBehavior(trigger, config);
 
-  trigger.addEventListener('click', () => openFeedbackFlow(root, config));
+  trigger.addEventListener('click', () => {
+    if (_triggerDragMoved) {
+      _triggerDragMoved = false;
+      return;
+    }
+    openFeedbackFlow(root, config);
+  });
 }
 
 async function openFeedbackFlow(
