@@ -360,6 +360,7 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       line-height: 1;
       cursor: pointer;
       opacity: 0;
+      pointer-events: none;
       transform: scale(0.8);
       transition: opacity var(--bd-transition), transform var(--bd-transition);
       display: flex;
@@ -371,11 +372,17 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
 
     .bd-trigger--left .bd-trigger-close {
       right: auto;
-      left: 4px;
+      left: 36px;
     }
 
-    .bd-trigger:hover .bd-trigger-close {
+    .bd-trigger--right .bd-trigger-close {
+      right: 36px;
+    }
+
+    .bd-trigger:hover .bd-trigger-close,
+    .bd-trigger-close:focus-visible {
       opacity: 1;
+      pointer-events: auto;
       transform: scale(1);
     }
 
@@ -1109,6 +1116,7 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       /* Always show close button on touch devices */
       .bd-trigger-close {
         opacity: 1;
+        pointer-events: auto;
         transform: scale(1);
       }
 

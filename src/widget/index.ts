@@ -103,6 +103,7 @@ const BUGDROP_WELCOMED_PREFIX = 'bugdrop_welcomed_';
 const BUGDROP_COMPLEX_SCREENSHOT_SKIPPED_PREFIX = 'bugdrop_complex_screenshot_skipped_';
 const COMPLEX_SCREENSHOT_SKIP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TRIGGER_VIEWPORT_MARGIN_PX = 8;
+const TRIGGER_KEYBOARD_MOVE_PX = 16;
 
 // Parse user agent to extract browser info
 function parseBrowser(ua: string): { name: string; version: string } {
@@ -550,9 +551,11 @@ function clampTriggerTop(trigger: HTMLElement, top: number): number {
   return Math.min(Math.max(top, TRIGGER_VIEWPORT_MARGIN_PX), maxTop);
 }
 
-function setTriggerTop(trigger: HTMLElement, top: number): void {
-  trigger.style.top = `${clampTriggerTop(trigger, top)}px`;
+function setTriggerTop(trigger: HTMLElement, top: number): number {
+  const clampedTop = clampTriggerTop(trigger, top);
+  trigger.style.top = `${clampedTop}px`;
   trigger.style.bottom = 'auto';
+  return clampedTop;
 }
 
 function applyStoredTriggerPosition(trigger: HTMLElement, config: WidgetConfig): void {
@@ -560,6 +563,37 @@ function applyStoredTriggerPosition(trigger: HTMLElement, config: WidgetConfig):
   if (top === null) return;
   trigger.classList.add('bd-trigger--positioned');
   setTriggerTop(trigger, top);
+}
+
+function reclampVisibleTriggerPosition(trigger: HTMLElement, config: WidgetConfig): void {
+  if (!trigger.style.top) return;
+
+  const rect = trigger.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+
+  const currentTop = parseFloat(trigger.style.top);
+  if (!Number.isFinite(currentTop)) return;
+
+  const clampedTop = setTriggerTop(trigger, currentTop);
+  saveTriggerTop(config, clampedTop);
+}
+
+function attachTriggerViewportClamp(trigger: HTMLElement, config: WidgetConfig): void {
+  const reclamp = () => {
+    if (!trigger.isConnected) {
+      cleanup();
+      return;
+    }
+    reclampVisibleTriggerPosition(trigger, config);
+  };
+
+  const cleanup = () => {
+    window.removeEventListener('resize', reclamp);
+    window.visualViewport?.removeEventListener('resize', reclamp);
+  };
+
+  window.addEventListener('resize', reclamp);
+  window.visualViewport?.addEventListener('resize', reclamp);
 }
 
 function attachTriggerDragBehavior(trigger: HTMLElement, config: WidgetConfig): void {
@@ -627,6 +661,30 @@ function attachTriggerDragBehavior(trigger: HTMLElement, config: WidgetConfig): 
   handle.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
+  });
+}
+
+function attachTriggerKeyboardMove(trigger: HTMLElement, config: WidgetConfig): void {
+  trigger.addEventListener('keydown', e => {
+    if (e.target !== trigger) return;
+    if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = trigger.getBoundingClientRect();
+    const maxTop = window.innerHeight - rect.height - TRIGGER_VIEWPORT_MARGIN_PX;
+    const nextTop =
+      e.key === 'ArrowUp'
+        ? rect.top - TRIGGER_KEYBOARD_MOVE_PX
+        : e.key === 'ArrowDown'
+          ? rect.top + TRIGGER_KEYBOARD_MOVE_PX
+          : e.key === 'Home'
+            ? TRIGGER_VIEWPORT_MARGIN_PX
+            : maxTop;
+
+    trigger.classList.add('bd-trigger--positioned');
+    saveTriggerTop(config, setTriggerTop(trigger, nextTop));
   });
 }
 
@@ -753,7 +811,9 @@ function initWidget(config: WidgetConfig) {
     root.appendChild(trigger);
     _triggerButton = trigger;
     applyStoredTriggerPosition(trigger, config);
+    attachTriggerViewportClamp(trigger, config);
     attachTriggerDragBehavior(trigger, config);
+    attachTriggerKeyboardMove(trigger, config);
 
     // Handle trigger click
     trigger.addEventListener('click', () => {
@@ -831,6 +891,10 @@ function exposeBugDropAPI(root: HTMLElement, config: WidgetConfig) {
 
       if (_triggerButton) {
         _triggerButton.style.display = '';
+        reclampVisibleTriggerPosition(_triggerButton, config);
+        window.requestAnimationFrame(() => {
+          if (_triggerButton) reclampVisibleTriggerPosition(_triggerButton, config);
+        });
       } else if (config.showButton) {
         // Recreate button if it was removed
         createTriggerButton(root, config);
@@ -919,7 +983,9 @@ function createTriggerButton(root: HTMLElement, config: WidgetConfig, isRestorin
   root.appendChild(trigger);
   _triggerButton = trigger;
   applyStoredTriggerPosition(trigger, config);
+  attachTriggerViewportClamp(trigger, config);
   attachTriggerDragBehavior(trigger, config);
+  attachTriggerKeyboardMove(trigger, config);
 
   trigger.addEventListener('click', () => {
     if (_triggerDragMoved) {
