@@ -10,28 +10,56 @@ const baseConfig = {
 };
 
 async function loadCaptureFlowWithMocks(opts: {
-  screenshotChoice: ScreenshotChoice;
+  screenshotChoice?: ScreenshotChoice;
+  screenshotChoices?: ScreenshotChoice[];
   pickedElement?: Element | null;
+  pickedElements?: Array<Element | null>;
   captureResult?: CaptureWithLoadingResult;
+  captureResults?: CaptureWithLoadingResult[];
   annotationResult?: string | 'retake' | 'cancel';
+  annotationResults?: Array<string | 'retake' | 'cancel'>;
 }) {
   vi.resetModules();
+  const screenshotOptionsMock = vi.fn();
+  for (const choice of opts.screenshotChoices ?? []) {
+    screenshotOptionsMock.mockResolvedValueOnce(choice);
+  }
+  screenshotOptionsMock.mockResolvedValue(opts.screenshotChoice ?? { kind: 'skip' });
+
+  const elementPickerMock = vi.fn();
+  for (const element of opts.pickedElements ?? []) {
+    elementPickerMock.mockResolvedValueOnce(element);
+  }
+  elementPickerMock.mockResolvedValue(opts.pickedElement ?? null);
+
+  const captureMock = vi.fn();
+  for (const result of opts.captureResults ?? []) {
+    captureMock.mockResolvedValueOnce(result);
+  }
+  captureMock.mockResolvedValue(opts.captureResult ?? { kind: 'skipped' });
+
+  const annotationMock = vi.fn();
+  for (const result of opts.annotationResults ?? []) {
+    annotationMock.mockResolvedValueOnce(result);
+  }
+  annotationMock.mockResolvedValue(opts.annotationResult ?? 'annotated-image');
+
   vi.doMock('../src/widget/screenshot-options', () => ({
-    showScreenshotOptions: vi.fn().mockResolvedValue(opts.screenshotChoice),
+    showScreenshotOptions: screenshotOptionsMock,
   }));
   vi.doMock('../src/widget/picker', () => ({
-    createElementPicker: vi.fn().mockResolvedValue(opts.pickedElement ?? null),
+    createElementPicker: elementPickerMock,
   }));
   vi.doMock('../src/widget/area-picker', () => ({
     createAreaPicker: vi.fn(),
   }));
   vi.doMock('../src/widget/capture-loading', () => ({
-    captureWithLoading: vi.fn().mockResolvedValue(opts.captureResult ?? { kind: 'skipped' }),
+    captureWithLoading: captureMock,
     captureAreaWithLoading: vi.fn(),
-    capturePromiseWithLoading: vi.fn().mockResolvedValue(opts.captureResult ?? { kind: 'skipped' }),
+    capturePromiseWithLoading: captureMock,
   }));
   vi.doMock('../src/widget/annotation-flow', () => ({
-    showAnnotationStep: vi.fn().mockResolvedValue(opts.annotationResult ?? 'annotated-image'),
+    showAnnotationStep: annotationMock,
   }));
   vi.doMock('../src/widget/screenshot', () => ({
     beginViewportCapture: vi.fn(),
@@ -43,6 +71,7 @@ async function loadCaptureFlowWithMocks(opts: {
 }
 
 afterEach(() => {
+  document.body.innerHTML = '';
   vi.doUnmock('../src/widget/screenshot-options');
   vi.doUnmock('../src/widget/picker');
   vi.doUnmock('../src/widget/area-picker');
@@ -79,7 +108,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: false });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: false,
+    });
     expect(onComplexScreenshotSkipped).toHaveBeenCalledTimes(1);
   });
 
@@ -97,14 +131,37 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: false });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: false,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 
   it('keeps selected element metadata when element capture is skipped after failure', async () => {
-    const element = document.createElement('button');
-    element.id = 'target-button';
-    document.body.appendChild(element);
+    document.body.innerHTML = `
+      <div class="injected-before-page"></div>
+      <div class="another-injected-wrapper"></div>
+      <div id="page" class="site">
+        <div id="content" class="site-content">
+          <div id="primary" class="content-area">
+            <main id="main" class="site-main">
+              <article id="post-27" class="post-27 page">
+                <div class="inside-article">
+                  <div class="entry-content">
+                    <div class="gb-container gb-container-f0cc8c05"></div>
+                    <div class="gb-container gb-container-928af62b"></div>
+                  </div>
+                </div>
+              </article>
+            </main>
+          </div>
+        </div>
+      </div>
+    `;
+    const element = document.querySelector('.gb-container-928af62b')!;
     const { runScreenshotCaptureFlow } = await loadCaptureFlowWithMocks({
       screenshotChoice: { kind: 'element' },
       pickedElement: element,
@@ -121,10 +178,117 @@ describe('capture flow state decisions', () => {
 
     expect(result).toEqual({
       screenshot: null,
-      elementSelector: '#target-button',
+      elementSelector:
+        '#post-27 > div.inside-article > div.entry-content > div.gb-container.gb-container-928af62b',
+      fullElementSelector:
+        'html > body > div#page.site > div#content.site-content > div#primary.content-area > main#main.site-main > article#post-27.post-27.page > div.inside-article > div.entry-content > div.gb-container.gb-container-928af62b:nth-of-type(2)',
       returnToForm: false,
     });
+    expect(document.querySelector(result.fullElementSelector!)).toBe(element);
     expect(onComplexScreenshotSkipped).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps full selected element metadata after successful element capture', async () => {
+    document.body.innerHTML = `
+      <main id="content">
+        <section class="card">
+          <button id="save-button" class="primary action">Save</button>
+        </section>
+      </main>
+    `;
+    const element = document.querySelector('#save-button')!;
+    const { runScreenshotCaptureFlow } = await loadCaptureFlowWithMocks({
+      screenshotChoice: { kind: 'element' },
+      pickedElement: element,
+      captureResult: { kind: 'ok', dataUrl: 'data:image/png;base64,BBBB' },
+      annotationResult: 'data:image/png;base64,ANNOTATED',
+    });
+    const onComplexScreenshotSkipped = vi.fn();
+
+    const result = await runScreenshotCaptureFlow(
+      document.createElement('div'),
+      baseConfig,
+      true,
+      onComplexScreenshotSkipped
+    );
+
+    expect(result).toEqual({
+      screenshot: 'data:image/png;base64,ANNOTATED',
+      elementSelector: '#save-button',
+      fullElementSelector:
+        'html > body > main#content > section.card > button#save-button.primary.action',
+      returnToForm: false,
+    });
+    expect(document.querySelector(result.fullElementSelector!)).toBe(element);
+    expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
+  });
+
+  it('uses the latest selected element metadata after annotation retake', async () => {
+    document.body.innerHTML = `
+      <main>
+        <button id="first-button" class="primary">First</button>
+        <button id="second-button" class="secondary">Second</button>
+      </main>
+    `;
+    const firstElement = document.querySelector('#first-button')!;
+    const secondElement = document.querySelector('#second-button')!;
+    const { runScreenshotCaptureFlow } = await loadCaptureFlowWithMocks({
+      screenshotChoices: [{ kind: 'element' }, { kind: 'element' }],
+      pickedElements: [firstElement, secondElement],
+      captureResults: [
+        { kind: 'ok', dataUrl: 'data:image/png;base64,FIRST' },
+        { kind: 'ok', dataUrl: 'data:image/png;base64,SECOND' },
+      ],
+      annotationResults: ['retake', 'data:image/png;base64,ANNOTATED_SECOND'],
+    });
+    const onComplexScreenshotSkipped = vi.fn();
+
+    const result = await runScreenshotCaptureFlow(
+      document.createElement('div'),
+      baseConfig,
+      true,
+      onComplexScreenshotSkipped
+    );
+
+    expect(result).toEqual({
+      screenshot: 'data:image/png;base64,ANNOTATED_SECOND',
+      elementSelector: '#second-button',
+      fullElementSelector: 'html > body > main > button#second-button.secondary',
+      returnToForm: false,
+    });
+    expect(result.fullElementSelector).not.toContain('first-button');
+    expect(document.querySelector(result.fullElementSelector!)).toBe(secondElement);
+    expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
+  });
+
+  it('drops selected element metadata when element capture is cancelled', async () => {
+    document.body.innerHTML = `
+      <main>
+        <button id="cancelled-button" class="primary">Cancel target</button>
+      </main>
+    `;
+    const element = document.querySelector('#cancelled-button')!;
+    const { runScreenshotCaptureFlow } = await loadCaptureFlowWithMocks({
+      screenshotChoice: { kind: 'element' },
+      pickedElement: element,
+      captureResult: { kind: 'cancelled' },
+    });
+    const onComplexScreenshotSkipped = vi.fn();
+
+    const result = await runScreenshotCaptureFlow(
+      document.createElement('div'),
+      baseConfig,
+      true,
+      onComplexScreenshotSkipped
+    );
+
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: true,
+    });
+    expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 
   it('returns to form when the user dismisses the screenshot options modal', async () => {
@@ -140,7 +304,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: true });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: true,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 
@@ -158,7 +327,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: true });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: true,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 
@@ -177,7 +351,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: true });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: true,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 
