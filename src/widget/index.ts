@@ -90,6 +90,7 @@ interface FeedbackData {
   category: FeedbackCategory;
   screenshot: string | null;
   elementSelector: string | null;
+  fullElementSelector: string | null;
   selectedElementHighlightColor: string | null;
   name?: string;
   email?: string;
@@ -830,6 +831,7 @@ async function openFeedbackFlow(
       email: formResult.email,
       screenshot: screenshotResult.screenshot,
       elementSelector: screenshotResult.elementSelector,
+      fullElementSelector: screenshotResult.fullElementSelector,
       selectedElementHighlightColor: screenshotResult.elementSelector
         ? resolveAccentColor(config.accentColor)
         : null,
@@ -1169,6 +1171,7 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
           },
           timestamp: new Date().toISOString(),
           elementSelector: data.elementSelector,
+          fullElementSelector: data.fullElementSelector,
           selectedElementHighlightColor: data.selectedElementHighlightColor || undefined,
           domNodeCount,
           fullPageDisabled: isFullPageDisabled(),

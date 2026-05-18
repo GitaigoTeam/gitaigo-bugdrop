@@ -6,6 +6,7 @@ import {
   captureWithLoading,
 } from './capture-loading';
 import { createElementPicker } from './picker';
+import { getElementSelector, getFullElementSelector } from './selector-metadata';
 import { beginViewportCapture, getRedactionCount, isFullPageDisabled } from './screenshot';
 import { showScreenshotOptions, type ScreenshotChoice } from './screenshot-options';
 import {
@@ -31,6 +32,7 @@ export interface CaptureFlowConfig {
 export interface CaptureFlowResult {
   screenshot: string | null;
   elementSelector: string | null;
+  fullElementSelector: string | null;
   returnToForm: boolean;
 }
 
@@ -40,16 +42,19 @@ export type EmptyCaptureReason =
   | 'capture-failure-skip'
   | 'selection-cancelled';
 
+type ElementMetadata = Pick<CaptureFlowResult, 'elementSelector' | 'fullElementSelector'>;
 type ChosenCaptureResult =
-  | {
+  | ({
       kind: 'captured';
       screenshot: string;
-      elementSelector: string | null;
       redactionCount: number;
       redactionUnavailable: boolean;
-    }
+    } & ElementMetadata)
   | { kind: 'returnToForm' }
-  | { kind: 'empty'; reason: EmptyCaptureReason; elementSelector: string | null };
+  | ({
+      kind: 'empty';
+      reason: EmptyCaptureReason;
+    } & ElementMetadata);
 
 export async function runScreenshotCaptureFlow(
   root: HTMLElement,
@@ -80,6 +85,7 @@ export async function runScreenshotCaptureFlow(
       return {
         screenshot: null,
         elementSelector: result.elementSelector,
+        fullElementSelector: result.fullElementSelector,
         returnToForm: false,
       };
     }
@@ -102,6 +108,7 @@ export async function runScreenshotCaptureFlow(
     return {
       screenshot: annotatedScreenshot,
       elementSelector: result.elementSelector,
+      fullElementSelector: result.fullElementSelector,
       returnToForm: false,
     };
   }
@@ -123,6 +130,7 @@ async function captureAutomaticScreenshot(
   return {
     screenshot: result.kind === 'ok' ? result.dataUrl : null,
     elementSelector: null,
+    fullElementSelector: null,
     returnToForm: false,
   };
 }
@@ -144,7 +152,7 @@ async function captureChosenScreenshot(
     case 'cancel':
       return { kind: 'returnToForm' };
     case 'skip':
-      return { kind: 'empty', reason: 'explicit-skip', elementSelector: null };
+      return emptyChosenCaptureResult('explicit-skip');
     case 'viewport':
       return captureFromViewportChoice(root, screenshotChoice, screenshotRequired);
     case 'capture':
@@ -174,12 +182,13 @@ async function captureFromViewportChoice(
   );
   if (result.kind === 'cancelled') return { kind: 'returnToForm' };
   if (result.kind === 'skipped') {
-    return { kind: 'empty', reason: 'capture-failure-skip', elementSelector: null };
+    return emptyChosenCaptureResult('capture-failure-skip');
   }
   return {
     kind: 'captured',
     screenshot: result.dataUrl,
     elementSelector: null,
+    fullElementSelector: null,
     redactionCount: 0,
     redactionUnavailable: true,
   };
@@ -195,12 +204,13 @@ async function captureFromFullPageChoice(
   });
   if (result.kind === 'cancelled') return { kind: 'returnToForm' };
   if (result.kind === 'skipped') {
-    return { kind: 'empty', reason: 'capture-failure-skip', elementSelector: null };
+    return emptyChosenCaptureResult('capture-failure-skip');
   }
   return {
     kind: 'captured',
     screenshot: result.dataUrl,
     elementSelector: null,
+    fullElementSelector: null,
     redactionCount: getRedactionCount(),
     redactionUnavailable: false,
   };
@@ -213,10 +223,13 @@ async function captureFromElementChoice(
 ): Promise<ChosenCaptureResult> {
   const element = await createElementPicker(getPickerStyle(config));
   if (!element) {
-    return { kind: 'empty', reason: 'selection-cancelled', elementSelector: null };
+    return emptyChosenCaptureResult('selection-cancelled');
   }
 
-  const elementSelector = getElementSelector(element);
+  const elementMetadata = {
+    elementSelector: getElementSelector(element),
+    fullElementSelector: getFullElementSelector(element),
+  };
   const captureTarget = getElementContextCaptureTarget(element, {
     maxViewportAreaMultiplier: config.elementContextMaxArea,
   });
@@ -234,12 +247,12 @@ async function captureFromElementChoice(
   });
   if (result.kind === 'cancelled') return { kind: 'returnToForm' };
   if (result.kind === 'skipped') {
-    return { kind: 'empty', reason: 'capture-failure-skip', elementSelector };
+    return emptyChosenCaptureResult('capture-failure-skip', elementMetadata);
   }
   return {
     kind: 'captured',
     screenshot: result.dataUrl,
-    elementSelector,
+    ...elementMetadata,
     redactionCount: getRedactionCount(captureTarget),
     redactionUnavailable: false,
   };
@@ -254,7 +267,7 @@ async function captureFromAreaChoice(
     redactionsAvailable: getRedactionCount() > 0,
   });
   if (!rect) {
-    return { kind: 'empty', reason: 'selection-cancelled', elementSelector: null };
+    return emptyChosenCaptureResult('selection-cancelled');
   }
 
   const result = await captureAreaWithLoading(root, rect, config.screenshotScale, {
@@ -262,12 +275,13 @@ async function captureFromAreaChoice(
   });
   if (result.kind === 'cancelled') return { kind: 'returnToForm' };
   if (result.kind === 'skipped') {
-    return { kind: 'empty', reason: 'capture-failure-skip', elementSelector: null };
+    return emptyChosenCaptureResult('capture-failure-skip');
   }
   return {
     kind: 'captured',
     screenshot: result.dataUrl,
     elementSelector: null,
+    fullElementSelector: null,
     redactionCount: getRedactionCount(undefined, rect),
     redactionUnavailable: false,
   };
@@ -289,47 +303,24 @@ function getPickerStyle(config: CaptureFlowConfig) {
 function emptyCaptureResult(): CaptureFlowResult {
   return {
     screenshot: null,
-    elementSelector: null,
+    ...emptyElementMetadata(),
     returnToForm: false,
   };
 }
 
-function assertNever(value: never): never {
-  throw new Error(`Unhandled screenshot choice: ${JSON.stringify(value)}`);
+function emptyChosenCaptureResult(
+  reason: EmptyCaptureReason,
+  metadata: ElementMetadata = emptyElementMetadata()
+): ChosenCaptureResult {
+  return { kind: 'empty', reason, ...metadata };
 }
 
-function getElementSelector(element: Element): string {
-  const path: string[] = [];
-  let current: Element | null = element;
+function emptyElementMetadata(): ElementMetadata {
+  return { elementSelector: null, fullElementSelector: null };
+}
 
-  while (current && current !== document.body) {
-    let selector = current.tagName.toLowerCase();
-
-    if (current.id) {
-      selector = `#${current.id}`;
-      path.unshift(selector);
-      break;
-    }
-
-    if (current.className) {
-      const classNameStr =
-        typeof current.className === 'string'
-          ? current.className
-          : (current.className as SVGAnimatedString).baseVal || '';
-      const classes = classNameStr
-        .split(' ')
-        .filter(c => c)
-        .slice(0, 2);
-      if (classes.length) {
-        selector += `.${classes.join('.')}`;
-      }
-    }
-
-    path.unshift(selector);
-    current = current.parentElement;
-  }
-
-  return path.join(' > ');
+function assertNever(value: never): never {
+  throw new Error(`Unhandled screenshot choice: ${JSON.stringify(value)}`);
 }
 
 interface ElementContextOptions {

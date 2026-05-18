@@ -13,24 +13,63 @@ const baseConfig = {
   theme: 'light' as const,
 };
 
+function rect(width: number, height: number, x = 0, y = 0): DOMRect {
+  return {
+    x,
+    y,
+    top: y,
+    left: x,
+    right: x + width,
+    bottom: y + height,
+    width,
+    height,
+    toJSON() {
+      return {};
+    },
+  } as DOMRect;
+}
+
 async function loadCaptureFlowWithMocks(opts: {
-  screenshotChoice: ScreenshotChoice;
+  screenshotChoice?: ScreenshotChoice;
+  screenshotChoices?: ScreenshotChoice[];
   pickedElement?: Element | null;
+  pickedElements?: Array<Element | null>;
   captureResult?: CaptureWithLoadingResult;
+  captureResults?: CaptureWithLoadingResult[];
   annotationResult?: string | 'retake' | 'cancel';
+  annotationResults?: Array<string | 'retake' | 'cancel'>;
 }) {
   vi.resetModules();
-  const captureWithLoadingMock = vi
-    .fn()
-    .mockResolvedValue(opts.captureResult ?? { kind: 'skipped' });
-  const captureAreaWithLoadingMock = vi
-    .fn()
-    .mockResolvedValue(opts.captureResult ?? { kind: 'skipped' });
+  const screenshotOptionsMock = vi.fn();
+  for (const choice of opts.screenshotChoices ?? []) {
+    screenshotOptionsMock.mockResolvedValueOnce(choice);
+  }
+  screenshotOptionsMock.mockResolvedValue(opts.screenshotChoice ?? { kind: 'skip' });
+
+  const elementPickerMock = vi.fn();
+  for (const element of opts.pickedElements ?? []) {
+    elementPickerMock.mockResolvedValueOnce(element);
+  }
+  elementPickerMock.mockResolvedValue(opts.pickedElement ?? null);
+
+  const captureWithLoadingMock = vi.fn();
+  for (const result of opts.captureResults ?? []) {
+    captureWithLoadingMock.mockResolvedValueOnce(result);
+  }
+  captureWithLoadingMock.mockResolvedValue(opts.captureResult ?? { kind: 'skipped' });
+  const captureAreaWithLoadingMock = vi.fn();
+
+  const annotationMock = vi.fn();
+  for (const result of opts.annotationResults ?? []) {
+    annotationMock.mockResolvedValueOnce(result);
+  }
+  annotationMock.mockResolvedValue(opts.annotationResult ?? 'annotated-image');
+
   vi.doMock('../src/widget/screenshot-options', () => ({
-    showScreenshotOptions: vi.fn().mockResolvedValue(opts.screenshotChoice),
+    showScreenshotOptions: screenshotOptionsMock,
   }));
   vi.doMock('../src/widget/picker', () => ({
-    createElementPicker: vi.fn().mockResolvedValue(opts.pickedElement ?? null),
+    createElementPicker: elementPickerMock,
   }));
   vi.doMock('../src/widget/area-picker', () => ({
     createAreaPicker: vi.fn(),
@@ -38,10 +77,10 @@ async function loadCaptureFlowWithMocks(opts: {
   vi.doMock('../src/widget/capture-loading', () => ({
     captureWithLoading: captureWithLoadingMock,
     captureAreaWithLoading: captureAreaWithLoadingMock,
-    capturePromiseWithLoading: vi.fn().mockResolvedValue(opts.captureResult ?? { kind: 'skipped' }),
+    capturePromiseWithLoading: captureWithLoadingMock,
   }));
   vi.doMock('../src/widget/annotation-flow', () => ({
-    showAnnotationStep: vi.fn().mockResolvedValue(opts.annotationResult ?? 'annotated-image'),
+    showAnnotationStep: annotationMock,
   }));
   vi.doMock('../src/widget/screenshot', () => ({
     beginViewportCapture: vi.fn(),
@@ -57,6 +96,7 @@ async function loadCaptureFlowWithMocks(opts: {
 }
 
 afterEach(() => {
+  document.body.innerHTML = '';
   vi.doUnmock('../src/widget/screenshot-options');
   vi.doUnmock('../src/widget/picker');
   vi.doUnmock('../src/widget/area-picker');
@@ -93,7 +133,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: false });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: false,
+    });
     expect(onComplexScreenshotSkipped).toHaveBeenCalledTimes(1);
   });
 
@@ -111,14 +156,37 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: false });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: false,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 
   it('keeps selected element metadata when element capture is skipped after failure', async () => {
-    const element = document.createElement('button');
-    element.id = 'target-button';
-    document.body.appendChild(element);
+    document.body.innerHTML = `
+      <div class="injected-before-page"></div>
+      <div class="another-injected-wrapper"></div>
+      <div id="page" class="site">
+        <div id="content" class="site-content">
+          <div id="primary" class="content-area">
+            <main id="main" class="site-main">
+              <article id="post-27" class="post-27 page">
+                <div class="inside-article">
+                  <div class="entry-content">
+                    <div class="gb-container gb-container-f0cc8c05"></div>
+                    <div class="gb-container gb-container-928af62b"></div>
+                  </div>
+                </div>
+              </article>
+            </main>
+          </div>
+        </div>
+      </div>
+    `;
+    const element = document.querySelector('.gb-container-928af62b')!;
     const { runScreenshotCaptureFlow } = await loadCaptureFlowWithMocks({
       screenshotChoice: { kind: 'element' },
       pickedElement: element,
@@ -135,9 +203,13 @@ describe('capture flow state decisions', () => {
 
     expect(result).toEqual({
       screenshot: null,
-      elementSelector: '#target-button',
+      elementSelector:
+        '#post-27 > div.inside-article > div.entry-content > div.gb-container.gb-container-928af62b',
+      fullElementSelector:
+        'html > body > div#page.site > div#content.site-content > div#primary.content-area > main#main.site-main > article#post-27.post-27.page > div.inside-article > div.entry-content > div.gb-container.gb-container-928af62b:nth-of-type(2)',
       returnToForm: false,
     });
+    expect(document.querySelector(result.fullElementSelector!)).toBe(element);
     expect(onComplexScreenshotSkipped).toHaveBeenCalledTimes(1);
   });
 
@@ -147,54 +219,15 @@ describe('capture flow state decisions', () => {
 
     const outerContext = document.createElement('article');
     outerContext.className = 'listing-card';
-    outerContext.getBoundingClientRect = () =>
-      ({
-        x: 0,
-        y: 0,
-        top: 0,
-        left: 0,
-        right: 900,
-        bottom: 900,
-        width: 900,
-        height: 900,
-        toJSON() {
-          return {};
-        },
-      }) as DOMRect;
+    outerContext.getBoundingClientRect = () => rect(900, 900);
 
     const context = document.createElement('section');
     context.className = 'field-group';
-    context.getBoundingClientRect = () =>
-      ({
-        x: 0,
-        y: 0,
-        top: 0,
-        left: 0,
-        right: 500,
-        bottom: 300,
-        width: 500,
-        height: 300,
-        toJSON() {
-          return {};
-        },
-      }) as DOMRect;
+    context.getBoundingClientRect = () => rect(500, 300);
 
     const target = document.createElement('button');
     target.id = 'book-now';
-    target.getBoundingClientRect = () =>
-      ({
-        x: 100,
-        y: 100,
-        top: 100,
-        left: 100,
-        right: 180,
-        bottom: 140,
-        width: 80,
-        height: 40,
-        toJSON() {
-          return {};
-        },
-      }) as DOMRect;
+    target.getBoundingClientRect = () => rect(80, 40, 100, 100);
     context.appendChild(target);
     outerContext.appendChild(context);
     document.body.appendChild(outerContext);
@@ -230,7 +263,7 @@ describe('capture flow state decisions', () => {
     });
   });
 
-  it('uses the default selected element context settings when no overrides are provided', async () => {
+  it('uses the default selected element context settings when no overrides are provided', () => {
     expect(DEFAULT_SELECTED_ELEMENT_CONTEXT_MAX_VIEWPORT_AREA_MULTIPLIER).toBe(0);
   });
 
@@ -240,54 +273,15 @@ describe('capture flow state decisions', () => {
 
     const outerContext = document.createElement('article');
     outerContext.className = 'listing-card';
-    outerContext.getBoundingClientRect = () =>
-      ({
-        x: 0,
-        y: 0,
-        top: 0,
-        left: 0,
-        right: 900,
-        bottom: 900,
-        width: 900,
-        height: 900,
-        toJSON() {
-          return {};
-        },
-      }) as DOMRect;
+    outerContext.getBoundingClientRect = () => rect(900, 900);
 
     const context = document.createElement('section');
     context.className = 'field-group';
-    context.getBoundingClientRect = () =>
-      ({
-        x: 0,
-        y: 0,
-        top: 0,
-        left: 0,
-        right: 500,
-        bottom: 300,
-        width: 500,
-        height: 300,
-        toJSON() {
-          return {};
-        },
-      }) as DOMRect;
+    context.getBoundingClientRect = () => rect(500, 300);
 
     const target = document.createElement('button');
     target.id = 'book-now';
-    target.getBoundingClientRect = () =>
-      ({
-        x: 100,
-        y: 100,
-        top: 100,
-        left: 100,
-        right: 180,
-        bottom: 140,
-        width: 80,
-        height: 40,
-        toJSON() {
-          return {};
-        },
-      }) as DOMRect;
+    target.getBoundingClientRect = () => rect(80, 40, 100, 100);
     context.appendChild(target);
     outerContext.appendChild(context);
     document.body.appendChild(outerContext);
@@ -297,10 +291,9 @@ describe('capture flow state decisions', () => {
       pickedElement: target,
       captureResult: { kind: 'skipped' },
     });
-    const root = document.createElement('div');
 
     await runScreenshotCaptureFlow(
-      root,
+      document.createElement('div'),
       {
         ...baseConfig,
         elementContextMaxArea: 0.2,
@@ -318,37 +311,11 @@ describe('capture flow state decisions', () => {
 
     const context = document.createElement('section');
     context.className = 'field-group';
-    context.getBoundingClientRect = () =>
-      ({
-        x: 0,
-        y: 0,
-        top: 0,
-        left: 0,
-        right: 500,
-        bottom: 300,
-        width: 500,
-        height: 300,
-        toJSON() {
-          return {};
-        },
-      }) as DOMRect;
+    context.getBoundingClientRect = () => rect(500, 300);
 
     const target = document.createElement('button');
     target.id = 'book-now';
-    target.getBoundingClientRect = () =>
-      ({
-        x: 100,
-        y: 100,
-        top: 100,
-        left: 100,
-        right: 180,
-        bottom: 140,
-        width: 80,
-        height: 40,
-        toJSON() {
-          return {};
-        },
-      }) as DOMRect;
+    target.getBoundingClientRect = () => rect(80, 40, 100, 100);
     context.appendChild(target);
     document.body.appendChild(context);
 
@@ -357,9 +324,8 @@ describe('capture flow state decisions', () => {
       pickedElement: target,
       captureResult: { kind: 'skipped' },
     });
-    const root = document.createElement('div');
 
-    await runScreenshotCaptureFlow(root, baseConfig, true, vi.fn());
+    await runScreenshotCaptureFlow(document.createElement('div'), baseConfig, true, vi.fn());
 
     expect(captureWithLoadingMock.mock.calls[0]?.[1]).toBe(target);
   });
@@ -370,21 +336,7 @@ describe('capture flow state decisions', () => {
 
     const target = document.createElement('button');
     target.id = 'book-now';
-    target.getBoundingClientRect = () =>
-      ({
-        x: 100,
-        y: 100,
-        top: 100,
-        left: 100,
-        right: 180,
-        bottom: 140,
-        width: 80,
-        height: 40,
-        toJSON() {
-          return {};
-        },
-      }) as DOMRect;
-
+    target.getBoundingClientRect = () => rect(80, 40, 100, 100);
     document.body.appendChild(target);
 
     const { runScreenshotCaptureFlow, captureWithLoadingMock } = await loadCaptureFlowWithMocks({
@@ -410,6 +362,109 @@ describe('capture flow state decisions', () => {
     });
   });
 
+  it('keeps full selected element metadata after successful element capture', async () => {
+    document.body.innerHTML = `
+      <main id="content">
+        <section class="card">
+          <button id="save-button" class="primary action">Save</button>
+        </section>
+      </main>
+    `;
+    const element = document.querySelector('#save-button')!;
+    const { runScreenshotCaptureFlow } = await loadCaptureFlowWithMocks({
+      screenshotChoice: { kind: 'element' },
+      pickedElement: element,
+      captureResult: { kind: 'ok', dataUrl: 'data:image/png;base64,BBBB' },
+      annotationResult: 'data:image/png;base64,ANNOTATED',
+    });
+    const onComplexScreenshotSkipped = vi.fn();
+
+    const result = await runScreenshotCaptureFlow(
+      document.createElement('div'),
+      baseConfig,
+      true,
+      onComplexScreenshotSkipped
+    );
+
+    expect(result).toEqual({
+      screenshot: 'data:image/png;base64,ANNOTATED',
+      elementSelector: '#save-button',
+      fullElementSelector:
+        'html > body > main#content > section.card > button#save-button.primary.action',
+      returnToForm: false,
+    });
+    expect(document.querySelector(result.fullElementSelector!)).toBe(element);
+    expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
+  });
+
+  it('uses the latest selected element metadata after annotation retake', async () => {
+    document.body.innerHTML = `
+      <main>
+        <button id="first-button" class="primary">First</button>
+        <button id="second-button" class="secondary">Second</button>
+      </main>
+    `;
+    const firstElement = document.querySelector('#first-button')!;
+    const secondElement = document.querySelector('#second-button')!;
+    const { runScreenshotCaptureFlow } = await loadCaptureFlowWithMocks({
+      screenshotChoices: [{ kind: 'element' }, { kind: 'element' }],
+      pickedElements: [firstElement, secondElement],
+      captureResults: [
+        { kind: 'ok', dataUrl: 'data:image/png;base64,FIRST' },
+        { kind: 'ok', dataUrl: 'data:image/png;base64,SECOND' },
+      ],
+      annotationResults: ['retake', 'data:image/png;base64,ANNOTATED_SECOND'],
+    });
+    const onComplexScreenshotSkipped = vi.fn();
+
+    const result = await runScreenshotCaptureFlow(
+      document.createElement('div'),
+      baseConfig,
+      true,
+      onComplexScreenshotSkipped
+    );
+
+    expect(result).toEqual({
+      screenshot: 'data:image/png;base64,ANNOTATED_SECOND',
+      elementSelector: '#second-button',
+      fullElementSelector: 'html > body > main > button#second-button.secondary',
+      returnToForm: false,
+    });
+    expect(result.fullElementSelector).not.toContain('first-button');
+    expect(document.querySelector(result.fullElementSelector!)).toBe(secondElement);
+    expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
+  });
+
+  it('drops selected element metadata when element capture is cancelled', async () => {
+    document.body.innerHTML = `
+      <main>
+        <button id="cancelled-button" class="primary">Cancel target</button>
+      </main>
+    `;
+    const element = document.querySelector('#cancelled-button')!;
+    const { runScreenshotCaptureFlow } = await loadCaptureFlowWithMocks({
+      screenshotChoice: { kind: 'element' },
+      pickedElement: element,
+      captureResult: { kind: 'cancelled' },
+    });
+    const onComplexScreenshotSkipped = vi.fn();
+
+    const result = await runScreenshotCaptureFlow(
+      document.createElement('div'),
+      baseConfig,
+      true,
+      onComplexScreenshotSkipped
+    );
+
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: true,
+    });
+    expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
+  });
+
   it('returns to form when the user dismisses the screenshot options modal', async () => {
     const { runScreenshotCaptureFlow } = await loadCaptureFlowWithMocks({
       screenshotChoice: { kind: 'cancel' },
@@ -423,7 +478,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: true });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: true,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 
@@ -441,7 +501,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: true });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: true,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 
@@ -460,7 +525,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: true });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: true,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 

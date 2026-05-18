@@ -605,7 +605,13 @@ function formatIssueBody(
   sections.push(`| **Timestamp** | ${payload.metadata.timestamp} |`);
 
   if (payload.metadata.elementSelector) {
-    sections.push(`| **Element** | \`${payload.metadata.elementSelector}\` |`);
+    sections.push(`| **Element** | ${formatMarkdownTableCode(payload.metadata.elementSelector)} |`);
+  }
+
+  if (payload.metadata.fullElementSelector) {
+    sections.push(
+      `| **Full CSS path** | ${formatMarkdownTableCode(payload.metadata.fullElementSelector)} |`
+    );
   }
 
   sections.push('');
@@ -621,6 +627,17 @@ function getSelectedElementHighlightColor(payload: FeedbackPayload): string {
   const color = payload.metadata.selectedElementHighlightColor;
   if (!color || hasControlChars(color)) return resolveAccentColor();
   return safeInlineCode(color.trim()) || resolveAccentColor();
+}
+
+function formatMarkdownTableCode(value: string): string {
+  const tableSafeValue = value.replace(/\|/g, '\\|');
+  if (!tableSafeValue.includes('`')) {
+    return `\`${tableSafeValue}\``;
+  }
+
+  const longestBacktickRun = Math.max(...tableSafeValue.match(/`+/g)!.map(match => match.length));
+  const fence = '`'.repeat(longestBacktickRun + 1);
+  return `${fence} ${tableSafeValue} ${fence}`;
 }
 
 export default api;

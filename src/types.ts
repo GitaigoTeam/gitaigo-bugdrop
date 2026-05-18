@@ -39,6 +39,7 @@ export interface FeedbackPayload {
     viewport: { width: number; height: number };
     timestamp: string;
     elementSelector?: string;
+    fullElementSelector?: string;
     selectedElementHighlightColor?: string;
     // Parsed system info
     browser?: { name: string; version: string };
