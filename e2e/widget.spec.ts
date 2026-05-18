@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
+import { DEFAULT_ACCENT_COLOR } from '../src/defaults';
 
 type CaptureOptions = Record<string, unknown> & {
   pixelRatio?: number;
@@ -14,6 +15,13 @@ declare global {
   interface Window {
     __hostKeystrokeCount?: number;
     __captureOpts?: CaptureOptions;
+    __captureTargetInfo?: {
+      tagName: string;
+      id: string;
+      className: string;
+      width: number;
+      height: number;
+    };
   }
 }
 
@@ -2421,6 +2429,21 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     }`;
   }
 
+  function targetSpyToPng() {
+    return `function(el, opts) {
+      window.__captureOpts = opts;
+      var rect = el.getBoundingClientRect();
+      window.__captureTargetInfo = {
+        tagName: el.tagName,
+        id: el.id || '',
+        className: typeof el.className === 'string' ? el.className : '',
+        width: rect.width,
+        height: rect.height
+      };
+      return Promise.resolve('${STUB_PNG}');
+    }`;
+  }
+
   function redactionAwarePng() {
     return `function(el, opts) {
       window.__captureOpts = opts;
@@ -3073,6 +3096,72 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     expect(timeoutRejections).toHaveLength(0);
   });
 
+  test('element capture uses a surrounding context target', async ({ page }) => {
+    await mockHtmlToImage(page, targetSpyToPng());
+    await page.goto('/test/annotation-style.html?elementContextMaxArea=1.5');
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="element"]').click();
+    await expect(page.locator('#bugdrop-element-picker-tooltip')).toBeVisible({ timeout: 5000 });
+
+    const selected = page.locator('.dot.green');
+    await expect(selected).toBeVisible();
+    const selectedBox = await selected.boundingBox();
+    expect(selectedBox).toBeTruthy();
+
+    await page.mouse.click(
+      selectedBox!.x + selectedBox!.width / 2,
+      selectedBox!.y + selectedBox!.height / 2
+    );
+
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 10000 });
+
+    const targetInfo = await page.evaluate(() => window.__captureTargetInfo);
+    expect(targetInfo).toBeDefined();
+    if (!targetInfo) throw new Error('Missing capture target info');
+    expect(targetInfo.className).not.toContain('dot');
+    expect(targetInfo.width).toBeGreaterThan(selectedBox!.width * 4);
+    expect(targetInfo.height).toBeGreaterThan(selectedBox!.height * 4);
+
+    const captureOpts = await page.evaluate(() => window.__captureOpts);
+    expect(captureOpts?.pixelRatio).toBe(1);
+
+    const selectedElementNote = host.locator('css=.bd-selected-element-note');
+    await expect(selectedElementNote).toContainText('data-element-context-max-area');
+    await expect(selectedElementNote.locator('css=a')).toHaveAttribute(
+      'href',
+      'https://bugdrop.dev/docs/configuration#select-element-screenshots'
+    );
+  });
+
+  test('element context max-area setting can keep captures tightly scoped', async ({ page }) => {
+    await mockHtmlToImage(page, targetSpyToPng());
+    await page.goto('/test/annotation-style.html?elementContextMaxArea=0');
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="element"]').click();
+    await expect(page.locator('#bugdrop-element-picker-tooltip')).toBeVisible({ timeout: 5000 });
+
+    const selected = page.locator('.dot.green');
+    await expect(selected).toBeVisible();
+    const selectedBox = await selected.boundingBox();
+    expect(selectedBox).toBeTruthy();
+
+    await page.mouse.click(
+      selectedBox!.x + selectedBox!.width / 2,
+      selectedBox!.y + selectedBox!.height / 2
+    );
+
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 10000 });
+
+    const targetInfo = await page.evaluate(() => window.__captureTargetInfo);
+    expect(targetInfo).toBeDefined();
+    if (!targetInfo) throw new Error('Missing capture target info');
+    expect(targetInfo.className).toContain('dot');
+    expect(targetInfo.width).toBeLessThanOrEqual(selectedBox!.width + 1);
+    expect(targetInfo.height).toBeLessThanOrEqual(selectedBox!.height + 1);
+  });
+
   test('shows error modal when capture times out', async ({ page }) => {
     await mockHtmlToImage(page, 'function() { return new Promise(function() {}); }');
     await page.goto('/test/');
@@ -3633,7 +3722,20 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     await host.locator('css=[data-action="skip"]').click();
     await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
     expect(payloads).toHaveLength(1);
-    expect((payloads[0].metadata as { elementSelector?: string }).elementSelector).toContain('h1');
+    const metadata = payloads[0].metadata as {
+      elementSelector?: string;
+      fullElementSelector?: string;
+      selectedElementHighlightColor?: string;
+    };
+    expect(metadata.elementSelector).toContain('h1');
+    expect(metadata.selectedElementHighlightColor).toBe(DEFAULT_ACCENT_COLOR);
+    expect(metadata.fullElementSelector).toContain('html > body');
+    expect(metadata.fullElementSelector).toContain('h1');
+    expect(
+      await page.evaluate(selector => {
+        return document.querySelector(selector) === document.querySelector('h1');
+      }, metadata.fullElementSelector)
+    ).toBe(true);
 
     await host.locator('css=.bd-close').click();
     await host.locator('css=.bd-trigger').click();
@@ -3655,6 +3757,12 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
     expect(payloads).toHaveLength(1);
     expect(payloads[0].screenshot).toBeNull();
+    const metadata = payloads[0].metadata as {
+      elementSelector?: string | null;
+      fullElementSelector?: string | null;
+    };
+    expect(metadata.elementSelector).toBeNull();
+    expect(metadata.fullElementSelector).toBeNull();
 
     await host.locator('css=.bd-close').click();
     await host.locator('css=.bd-trigger').click();
@@ -4769,7 +4877,15 @@ test.describe('Screenshot Masking', () => {
     fixturePath: string,
     selector: string,
     clickOffset?: { x: number; y: number }
-  ): Promise<{ screenshot: string; imageSize: { w: number; h: number } }> {
+  ): Promise<{
+    screenshot: string;
+    imageSize: { w: number; h: number };
+    metadata: {
+      elementSelector?: string;
+      fullElementSelector?: string;
+      selectedElementHighlightColor?: string;
+    };
+  }> {
     let payload: Record<string, unknown> | null = null;
     await page.route('**/api/check/**', async route =>
       route.fulfill({
@@ -4838,18 +4954,91 @@ test.describe('Screenshot Masking', () => {
       screenshot
     );
 
-    return { screenshot, imageSize };
+    return {
+      screenshot,
+      imageSize,
+      metadata: payload.metadata as {
+        elementSelector?: string;
+        fullElementSelector?: string;
+        selectedElementHighlightColor?: string;
+      },
+    };
   }
+
+  test('successful element capture submits a queryable full CSS path for dynamic repeated DOM', async ({
+    page,
+  }) => {
+    const stubPng =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    await page.addInitScript(png => {
+      (
+        window as Window & {
+          __bugdropMockToPng?: () => Promise<string>;
+        }
+      ).__bugdropMockToPng = () => Promise.resolve(png);
+    }, stubPng);
+    await page.addInitScript(() => {
+      window.addEventListener('DOMContentLoaded', () => {
+        const fixture = document.createElement('section');
+        fixture.id = 'dynamic-selector-fixture';
+        fixture.style.cssText = [
+          'position: fixed',
+          'left: 72px',
+          'top: 96px',
+          'z-index: 10',
+          'display: grid',
+          'gap: 8px',
+        ].join(';');
+        fixture.innerHTML = Array.from(
+          { length: 3 },
+          (_, index) => `
+            <article class="dynamic-card 3xl:panel" data-card-index="${index + 1}">
+              <button class="action primary" data-dynamic-target="${index + 1}">
+                Action ${index + 1}
+              </button>
+            </article>
+          `
+        ).join('');
+        document.body.append(fixture);
+      });
+    });
+
+    const { metadata } = await submitFeedbackWithElementCapture(
+      page,
+      '/test/',
+      '[data-dynamic-target="2"]'
+    );
+
+    expect(metadata.elementSelector).toContain('#dynamic-selector-fixture');
+    expect(metadata.elementSelector).toContain('button.action.primary');
+    expect(metadata.selectedElementHighlightColor).toBe('#ff9e64');
+    expect(metadata.fullElementSelector).toContain('html > body');
+    expect(metadata.fullElementSelector).toContain('article.dynamic-card');
+    expect(metadata.fullElementSelector).toContain(':nth-of-type(2)');
+    expect(
+      await page.evaluate(selector => {
+        const target = document.querySelector('[data-dynamic-target="2"]');
+        return Boolean(selector) && document.querySelector(selector) === target;
+      }, metadata.fullElementSelector)
+    ).toBe(true);
+  });
 
   test('element-scoped capture masks descendant inside picked element', async ({ page }) => {
     // Click inside the top padding of #unmasked-parent (above the first <p> child)
     // so the picker's elementsFromPoint resolves the parent, not a child element.
     // The 16px top padding gives ~8px of safe click area before the first child.
-    const { screenshot, imageSize } = await submitFeedbackWithElementCapture(
+    const { screenshot, imageSize, metadata } = await submitFeedbackWithElementCapture(
       page,
       '/test/masking-nested.html',
       '#unmasked-parent',
       { x: 40, y: 8 } // 8px from top = within the 16px top padding
+    );
+    expect(metadata.elementSelector).toBe('#unmasked-parent');
+    expect(metadata.fullElementSelector).toContain('html > body');
+    expect(metadata.fullElementSelector).toContain('div#unmasked-parent');
+    await expect(page.locator(`css=${metadata.fullElementSelector}`)).toHaveAttribute(
+      'id',
+      'unmasked-parent'
     );
 
     // Measure child geometry relative to the parent using the image's own scale.

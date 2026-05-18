@@ -6,12 +6,19 @@ import {
   captureWithLoading,
 } from './capture-loading';
 import { createElementPicker } from './picker';
+import { getElementSelector, getFullElementSelector } from './selector-metadata';
 import { beginViewportCapture, getRedactionCount, isFullPageDisabled } from './screenshot';
 import { showScreenshotOptions, type ScreenshotChoice } from './screenshot-options';
+import {
+  DEFAULT_SELECTED_ELEMENT_CONTEXT_MIN_PADDING_PX,
+  DEFAULT_SELECTED_ELEMENT_SCREENSHOT_PIXEL_RATIO,
+  resolveSelectedElementContextMaxArea,
+} from '../defaults';
 
 export interface CaptureFlowConfig {
   screenshotMode: 'optional' | 'auto' | 'required';
   screenshotScale?: number;
+  elementContextMaxArea?: number;
   accentColor?: string;
   font?: string;
   radius?: string;
@@ -25,6 +32,7 @@ export interface CaptureFlowConfig {
 export interface CaptureFlowResult {
   screenshot: string | null;
   elementSelector: string | null;
+  fullElementSelector: string | null;
   returnToForm: boolean;
 }
 
@@ -34,16 +42,19 @@ export type EmptyCaptureReason =
   | 'capture-failure-skip'
   | 'selection-cancelled';
 
+type ElementMetadata = Pick<CaptureFlowResult, 'elementSelector' | 'fullElementSelector'>;
 type ChosenCaptureResult =
-  | {
+  | ({
       kind: 'captured';
       screenshot: string;
-      elementSelector: string | null;
       redactionCount: number;
       redactionUnavailable: boolean;
-    }
+    } & ElementMetadata)
   | { kind: 'returnToForm' }
-  | { kind: 'empty'; reason: EmptyCaptureReason; elementSelector: string | null };
+  | ({
+      kind: 'empty';
+      reason: EmptyCaptureReason;
+    } & ElementMetadata);
 
 export async function runScreenshotCaptureFlow(
   root: HTMLElement,
@@ -74,6 +85,7 @@ export async function runScreenshotCaptureFlow(
       return {
         screenshot: null,
         elementSelector: result.elementSelector,
+        fullElementSelector: result.fullElementSelector,
         returnToForm: false,
       };
     }
@@ -84,6 +96,7 @@ export async function runScreenshotCaptureFlow(
       result.redactionCount,
       {
         redactionUnavailable: result.redactionUnavailable,
+        ...(result.elementSelector ? { selectedElementCapture: true } : {}),
       }
     );
 
@@ -95,6 +108,7 @@ export async function runScreenshotCaptureFlow(
     return {
       screenshot: annotatedScreenshot,
       elementSelector: result.elementSelector,
+      fullElementSelector: result.fullElementSelector,
       returnToForm: false,
     };
   }
@@ -116,6 +130,7 @@ async function captureAutomaticScreenshot(
   return {
     screenshot: result.kind === 'ok' ? result.dataUrl : null,
     elementSelector: null,
+    fullElementSelector: null,
     returnToForm: false,
   };
 }
@@ -137,7 +152,7 @@ async function captureChosenScreenshot(
     case 'cancel':
       return { kind: 'returnToForm' };
     case 'skip':
-      return { kind: 'empty', reason: 'explicit-skip', elementSelector: null };
+      return emptyChosenCaptureResult('explicit-skip');
     case 'viewport':
       return captureFromViewportChoice(root, screenshotChoice, screenshotRequired);
     case 'capture':
@@ -167,12 +182,13 @@ async function captureFromViewportChoice(
   );
   if (result.kind === 'cancelled') return { kind: 'returnToForm' };
   if (result.kind === 'skipped') {
-    return { kind: 'empty', reason: 'capture-failure-skip', elementSelector: null };
+    return emptyChosenCaptureResult('capture-failure-skip');
   }
   return {
     kind: 'captured',
     screenshot: result.dataUrl,
     elementSelector: null,
+    fullElementSelector: null,
     redactionCount: 0,
     redactionUnavailable: true,
   };
@@ -188,12 +204,13 @@ async function captureFromFullPageChoice(
   });
   if (result.kind === 'cancelled') return { kind: 'returnToForm' };
   if (result.kind === 'skipped') {
-    return { kind: 'empty', reason: 'capture-failure-skip', elementSelector: null };
+    return emptyChosenCaptureResult('capture-failure-skip');
   }
   return {
     kind: 'captured',
     screenshot: result.dataUrl,
     elementSelector: null,
+    fullElementSelector: null,
     redactionCount: getRedactionCount(),
     redactionUnavailable: false,
   };
@@ -206,22 +223,37 @@ async function captureFromElementChoice(
 ): Promise<ChosenCaptureResult> {
   const element = await createElementPicker(getPickerStyle(config));
   if (!element) {
-    return { kind: 'empty', reason: 'selection-cancelled', elementSelector: null };
+    return emptyChosenCaptureResult('selection-cancelled');
   }
 
-  const elementSelector = getElementSelector(element);
-  const result = await captureWithLoading(root, element, config.screenshotScale, {
+  const elementMetadata = {
+    elementSelector: getElementSelector(element),
+    fullElementSelector: getFullElementSelector(element),
+  };
+  const captureTarget = getElementContextCaptureTarget(element, {
+    maxViewportAreaMultiplier: config.elementContextMaxArea,
+  });
+  const result = await captureWithLoading(root, captureTarget, config.screenshotScale, {
     allowSkip: !screenshotRequired,
+    captureOptions: {
+      highlightElement: element,
+      highlightStyle: {
+        accentColor: config.accentColor,
+        radius: config.radius,
+        borderWidth: config.borderWidth,
+      },
+      pixelRatio: DEFAULT_SELECTED_ELEMENT_SCREENSHOT_PIXEL_RATIO,
+    },
   });
   if (result.kind === 'cancelled') return { kind: 'returnToForm' };
   if (result.kind === 'skipped') {
-    return { kind: 'empty', reason: 'capture-failure-skip', elementSelector };
+    return emptyChosenCaptureResult('capture-failure-skip', elementMetadata);
   }
   return {
     kind: 'captured',
     screenshot: result.dataUrl,
-    elementSelector,
-    redactionCount: getRedactionCount(element),
+    ...elementMetadata,
+    redactionCount: getRedactionCount(captureTarget),
     redactionUnavailable: false,
   };
 }
@@ -235,7 +267,7 @@ async function captureFromAreaChoice(
     redactionsAvailable: getRedactionCount() > 0,
   });
   if (!rect) {
-    return { kind: 'empty', reason: 'selection-cancelled', elementSelector: null };
+    return emptyChosenCaptureResult('selection-cancelled');
   }
 
   const result = await captureAreaWithLoading(root, rect, config.screenshotScale, {
@@ -243,12 +275,13 @@ async function captureFromAreaChoice(
   });
   if (result.kind === 'cancelled') return { kind: 'returnToForm' };
   if (result.kind === 'skipped') {
-    return { kind: 'empty', reason: 'capture-failure-skip', elementSelector: null };
+    return emptyChosenCaptureResult('capture-failure-skip');
   }
   return {
     kind: 'captured',
     screenshot: result.dataUrl,
     elementSelector: null,
+    fullElementSelector: null,
     redactionCount: getRedactionCount(undefined, rect),
     redactionUnavailable: false,
   };
@@ -270,45 +303,80 @@ function getPickerStyle(config: CaptureFlowConfig) {
 function emptyCaptureResult(): CaptureFlowResult {
   return {
     screenshot: null,
-    elementSelector: null,
+    ...emptyElementMetadata(),
     returnToForm: false,
   };
+}
+
+function emptyChosenCaptureResult(
+  reason: EmptyCaptureReason,
+  metadata: ElementMetadata = emptyElementMetadata()
+): ChosenCaptureResult {
+  return { kind: 'empty', reason, ...metadata };
+}
+
+function emptyElementMetadata(): ElementMetadata {
+  return { elementSelector: null, fullElementSelector: null };
 }
 
 function assertNever(value: never): never {
   throw new Error(`Unhandled screenshot choice: ${JSON.stringify(value)}`);
 }
 
-function getElementSelector(element: Element): string {
-  const path: string[] = [];
-  let current: Element | null = element;
+interface ElementContextOptions {
+  maxViewportAreaMultiplier?: number;
+}
 
-  while (current && current !== document.body) {
-    let selector = current.tagName.toLowerCase();
+function getElementContextCaptureTarget(element: Element, options: ElementContextOptions): Element {
+  const selectedRect = element.getBoundingClientRect();
+  if (!isUsableRect(selectedRect)) return element;
 
-    if (current.id) {
-      selector = `#${current.id}`;
-      path.unshift(selector);
-      break;
+  const viewportArea = Math.max(1, window.innerWidth * window.innerHeight);
+  const maxContextArea =
+    viewportArea * resolveSelectedElementContextMaxArea(options.maxViewportAreaMultiplier);
+
+  let best: Element = element;
+  let current = element.parentElement;
+
+  while (current && current !== document.body && current !== document.documentElement) {
+    const rect = current.getBoundingClientRect();
+    const area = rect.width * rect.height;
+
+    if (
+      isUsableRect(rect) &&
+      area <= maxContextArea &&
+      containsRect(rect, selectedRect) &&
+      hasUsefulContext(rect, selectedRect)
+    ) {
+      best = current;
     }
 
-    if (current.className) {
-      const classNameStr =
-        typeof current.className === 'string'
-          ? current.className
-          : (current.className as SVGAnimatedString).baseVal || '';
-      const classes = classNameStr
-        .split(' ')
-        .filter(c => c)
-        .slice(0, 2);
-      if (classes.length) {
-        selector += `.${classes.join('.')}`;
-      }
-    }
-
-    path.unshift(selector);
     current = current.parentElement;
   }
 
-  return path.join(' > ');
+  return best;
+}
+
+function isUsableRect(rect: DOMRect): boolean {
+  return rect.width > 0 && rect.height > 0;
+}
+
+function containsRect(candidate: DOMRect, selected: DOMRect): boolean {
+  return (
+    candidate.left <= selected.left &&
+    candidate.top <= selected.top &&
+    candidate.right >= selected.right &&
+    candidate.bottom >= selected.bottom
+  );
+}
+
+function hasUsefulContext(candidate: DOMRect, selected: DOMRect): boolean {
+  const horizontalContext =
+    candidate.width >= selected.width + DEFAULT_SELECTED_ELEMENT_CONTEXT_MIN_PADDING_PX * 2;
+  const verticalContext =
+    candidate.height >= selected.height + DEFAULT_SELECTED_ELEMENT_CONTEXT_MIN_PADDING_PX * 2;
+  const selectedArea = selected.width * selected.height;
+  const candidateArea = candidate.width * candidate.height;
+
+  return horizontalContext || verticalContext || candidateArea >= selectedArea * 4;
 }
