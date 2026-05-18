@@ -4,10 +4,15 @@ const MAX_FULL_SELECTOR_SEGMENT_LENGTH = 128;
 
 export function getElementSelector(element: Element): string {
   const path: string[] = [];
+  const body = element.ownerDocument.body;
   let current: Element | null = element;
 
-  while (current && current !== document.body) {
-    let selector = current.tagName.toLowerCase();
+  if (current === body) {
+    return getTagSelector(current);
+  }
+
+  while (current && current !== body) {
+    let selector = getTagSelector(current);
 
     if (current.id) {
       selector = `#${escapeCssIdentifier(current.id)}`;
@@ -57,7 +62,7 @@ function getFullSelectorSegment(element: Element): string {
 }
 
 function buildFullSelectorSegment(element: Element): string {
-  let selector = element.tagName.toLowerCase();
+  let selector = getTagSelector(element);
 
   if (element.id) {
     selector += `#${escapeCssIdentifier(element.id)}`;
@@ -76,11 +81,15 @@ function buildFullSelectorSegment(element: Element): string {
 }
 
 function buildStructuralSelectorSegment(element: Element): string {
-  return `${element.tagName.toLowerCase()}${getNthOfTypeSuffix(element)}`;
+  return `${getTagSelector(element)}${getNthOfTypeSuffix(element)}`;
 }
 
 function getClassNames(element: Element): string[] {
   return Array.from(element.classList).filter(Boolean);
+}
+
+function getTagSelector(element: Element): string {
+  return escapeCssIdentifier(element.localName || element.tagName.toLowerCase());
 }
 
 function limitSelectorLength(

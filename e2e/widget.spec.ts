@@ -3599,6 +3599,12 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
     expect(payloads).toHaveLength(1);
     expect(payloads[0].screenshot).toBeNull();
+    const metadata = payloads[0].metadata as {
+      elementSelector?: string | null;
+      fullElementSelector?: string | null;
+    };
+    expect(metadata.elementSelector).toBeNull();
+    expect(metadata.fullElementSelector).toBeNull();
 
     await host.locator('css=.bd-close').click();
     await host.locator('css=.bd-trigger').click();
@@ -4792,6 +4798,63 @@ test.describe('Screenshot Masking', () => {
       metadata: payload.metadata as { elementSelector?: string; fullElementSelector?: string },
     };
   }
+
+  test('successful element capture submits a queryable full CSS path for dynamic repeated DOM', async ({
+    page,
+  }) => {
+    const stubPng =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    await page.addInitScript(png => {
+      (
+        window as Window & {
+          __bugdropMockToPng?: () => Promise<string>;
+        }
+      ).__bugdropMockToPng = () => Promise.resolve(png);
+    }, stubPng);
+    await page.addInitScript(() => {
+      window.addEventListener('DOMContentLoaded', () => {
+        const fixture = document.createElement('section');
+        fixture.id = 'dynamic-selector-fixture';
+        fixture.style.cssText = [
+          'position: fixed',
+          'left: 72px',
+          'top: 96px',
+          'z-index: 10',
+          'display: grid',
+          'gap: 8px',
+        ].join(';');
+        fixture.innerHTML = Array.from(
+          { length: 3 },
+          (_, index) => `
+            <article class="dynamic-card 3xl:panel" data-card-index="${index + 1}">
+              <button class="action primary" data-dynamic-target="${index + 1}">
+                Action ${index + 1}
+              </button>
+            </article>
+          `
+        ).join('');
+        document.body.append(fixture);
+      });
+    });
+
+    const { metadata } = await submitFeedbackWithElementCapture(
+      page,
+      '/test/',
+      '[data-dynamic-target="2"]'
+    );
+
+    expect(metadata.elementSelector).toContain('#dynamic-selector-fixture');
+    expect(metadata.elementSelector).toContain('button.action.primary');
+    expect(metadata.fullElementSelector).toContain('html > body');
+    expect(metadata.fullElementSelector).toContain('article.dynamic-card');
+    expect(metadata.fullElementSelector).toContain(':nth-of-type(2)');
+    expect(
+      await page.evaluate(selector => {
+        const target = document.querySelector('[data-dynamic-target="2"]');
+        return Boolean(selector) && document.querySelector(selector) === target;
+      }, metadata.fullElementSelector)
+    ).toBe(true);
+  });
 
   test('element-scoped capture masks descendant inside picked element', async ({ page }) => {
     // Click inside the top padding of #unmasked-parent (above the first <p> child)

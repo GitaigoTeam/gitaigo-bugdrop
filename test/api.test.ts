@@ -1268,6 +1268,95 @@ describe('API Routes', () => {
       expect(issueBody).not.toContain('Full CSS path');
     });
 
+    it('should omit selector rows when no element metadata is present', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      mockCreateIssue.mockResolvedValue({
+        number: 42,
+        html_url: 'https://github.com/testowner/testrepo/issues/42',
+      });
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validPayload),
+      });
+      await app.fetch(req, mockEnv);
+
+      const issueBody = mockCreateIssue.mock.calls[0][4];
+      expect(issueBody).toContain('System Info');
+      expect(issueBody).not.toContain('| **Element** |');
+      expect(issueBody).not.toContain('| **Full CSS path** |');
+    });
+
+    it('should include full CSS path even when compact selector metadata is absent', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      mockCreateIssue.mockResolvedValue({
+        number: 42,
+        html_url: 'https://github.com/testowner/testrepo/issues/42',
+      });
+
+      const payloadWithFullSelectorOnly = {
+        ...validPayload,
+        metadata: {
+          ...validPayload.metadata,
+          fullElementSelector: 'html > body > main > button#submit-button',
+        },
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadWithFullSelectorOnly),
+      });
+      await app.fetch(req, mockEnv);
+
+      const issueBody = mockCreateIssue.mock.calls[0][4];
+      expect(issueBody).not.toContain('| **Element** |');
+      expect(issueBody).toContain(
+        '| **Full CSS path** | `html > body > main > button#submit-button` |'
+      );
+    });
+
+    it('should preserve selector metadata when screenshot upload fails', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      mockUploadScreenshotAsAsset.mockRejectedValue(new Error('upload failed'));
+      mockCreateIssue.mockResolvedValue({
+        number: 42,
+        html_url: 'https://github.com/testowner/testrepo/issues/42',
+      });
+
+      const payloadWithScreenshotAndSelectors = {
+        ...validPayload,
+        screenshot: validPngDataUrl,
+        metadata: {
+          ...validPayload.metadata,
+          elementSelector: '#submit-button',
+          fullElementSelector: 'html > body > main > button#submit-button',
+        },
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadWithScreenshotAndSelectors),
+      });
+      const res = await app.fetch(req, mockEnv);
+
+      expect(res.status).toBe(200);
+      expect(mockUploadScreenshotAsAsset).toHaveBeenCalledWith(
+        'test-token',
+        'testowner',
+        'testrepo',
+        validPngDataUrl
+      );
+      const issueBody = mockCreateIssue.mock.calls[0][4];
+      expect(issueBody).not.toContain('## Screenshot');
+      expect(issueBody).toContain('| **Element** | `#submit-button` |');
+      expect(issueBody).toContain(
+        '| **Full CSS path** | `html > body > main > button#submit-button` |'
+      );
+    });
+
     it.each([
       [
         'button#save\\`now',

@@ -72,6 +72,18 @@ describe('selector metadata', () => {
     expect(getFullElementSelector(element)).toBe('html > body > main > section > button');
   });
 
+  it('returns queryable selectors for document edge elements', () => {
+    expect(getElementSelector(document.body)).toBe('body');
+    expect(document.querySelector(getElementSelector(document.body))).toBe(document.body);
+    expect(document.querySelector(getFullElementSelector(document.body))).toBe(document.body);
+    expect(document.querySelector(getElementSelector(document.documentElement))).toBe(
+      document.documentElement
+    );
+    expect(document.querySelector(getFullElementSelector(document.documentElement))).toBe(
+      document.documentElement
+    );
+  });
+
   it('bounds deep full selectors while keeping the target queryable', () => {
     let html = '<main>';
     for (let i = 0; i < 180; i += 1) {
@@ -125,5 +137,39 @@ describe('selector metadata', () => {
     expect(selector).toContain('g.first.second.third:nth-of-type(1)');
     expect(selector).not.toContain('fourth');
     expect(document.querySelector(selector)).toBe(element);
+  });
+
+  it('preserves case-sensitive SVG tag selectors', () => {
+    document.body.innerHTML = `
+      <main>
+        <svg>
+          <defs>
+            <linearGradient class="brand-gradient">
+              <stop></stop>
+            </linearGradient>
+          </defs>
+        </svg>
+      </main>
+    `;
+    const element = document.querySelector('linearGradient')!;
+
+    const selector = getFullElementSelector(element);
+
+    expect(selector).toContain('linearGradient.brand-gradient');
+    expect(document.querySelector(selector)).toBe(element);
+  });
+
+  it('escapes colon-containing tag names in full selectors', () => {
+    const wrapper = document.createElement('main');
+    const first = document.createElement('foo:bar');
+    const second = document.createElement('foo:bar');
+    second.className = 'target';
+    wrapper.append(first, second);
+    document.body.appendChild(wrapper);
+
+    const selector = getFullElementSelector(second);
+
+    expect(selector).toContain('foo\\:bar.target:nth-of-type(2)');
+    expect(document.querySelector(selector)).toBe(second);
   });
 });
