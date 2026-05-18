@@ -1067,6 +1067,73 @@ describe('API Routes', () => {
       );
     });
 
+    it('should add a selected-element screenshot caption when an element was chosen', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      const uploadedUrl =
+        'https://raw.githubusercontent.com/testowner/testrepo/main/.feedback/screenshots/selected.png';
+      mockUploadScreenshotAsAsset.mockResolvedValue(uploadedUrl);
+      mockCreateIssue.mockResolvedValue({
+        number: 42,
+        html_url: 'https://github.com/testowner/testrepo/issues/42',
+      });
+
+      const payloadWithSelectedElement = {
+        ...validPayload,
+        screenshot: validPngDataUrl,
+        metadata: {
+          ...validPayload.metadata,
+          elementSelector: '#book-now',
+          selectedElementHighlightColor: '#2563eb',
+        },
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadWithSelectedElement),
+      });
+      await app.fetch(req, mockEnv);
+
+      const issueBody = mockCreateIssue.mock.calls[0][4];
+      expect(issueBody).toContain(`![Screenshot](${uploadedUrl})`);
+      expect(issueBody).toContain(
+        '_Selected element is indicated by the rounded highlight border (`#2563eb`)._'
+      );
+    });
+
+    it('should render markdown-sensitive selected-element highlight metadata as inline code', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      const uploadedUrl =
+        'https://raw.githubusercontent.com/testowner/testrepo/main/.feedback/screenshots/selected.png';
+      mockUploadScreenshotAsAsset.mockResolvedValue(uploadedUrl);
+      mockCreateIssue.mockResolvedValue({
+        number: 42,
+        html_url: 'https://github.com/testowner/testrepo/issues/42',
+      });
+
+      const payloadWithMarkdownHighlight = {
+        ...validPayload,
+        screenshot: validPngDataUrl,
+        metadata: {
+          ...validPayload.metadata,
+          elementSelector: '#book-now',
+          selectedElementHighlightColor: '](https://example.com) ![x](y)',
+        },
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadWithMarkdownHighlight),
+      });
+      await app.fetch(req, mockEnv);
+
+      const issueBody = mockCreateIssue.mock.calls[0][4];
+      expect(issueBody).toContain(
+        '_Selected element is indicated by the rounded highlight border (`](https://example.com) ![x](y)`)._'
+      );
+    });
+
     it('should use screenshot when provided (annotations handled client-side)', async () => {
       mockGetInstallationToken.mockResolvedValue('test-token');
       const uploadedUrl =
@@ -1369,6 +1436,12 @@ describe('API Routes', () => {
         'html > body > button#save\\```now.action\\|primary',
         '| **Element** | ``` button#save\\``now ``` |',
         '| **Full CSS path** | ```` html > body > button#save\\```now.action\\\\|primary ```` |',
+      ],
+      [
+        'button#save\n| **Injected** | yes |',
+        'html > body\r\n## injected',
+        '| **Element** | `button#save \\| **Injected** \\| yes \\|` |',
+        '| **Full CSS path** | `html > body ## injected` |',
       ],
     ])(
       'should format selector metadata safely in markdown tables for %s',

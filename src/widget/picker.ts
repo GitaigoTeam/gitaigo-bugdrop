@@ -1,4 +1,5 @@
 import { sanitizeCssColor, sanitizeCssFontFamily, sanitizeNonNegativePixelValue } from './sanitize';
+import { resolveAccentColor } from '../defaults';
 
 export interface PickerStyle {
   accentColor?: string;
@@ -28,7 +29,7 @@ export function resolvePickerStyle(style?: PickerStyle): ResolvedPickerStyle {
   const fontFamily = sanitizeCssFontFamily(style?.font);
 
   return {
-    accent: sanitizeCssColor(style?.accentColor) || '#14b8a6',
+    accent: resolveAccentColor(sanitizeCssColor(style?.accentColor)),
     fontFamily:
       style?.font === 'inherit'
         ? 'system-ui, sans-serif'
@@ -59,12 +60,13 @@ function startPicker(resolve: (element: Element | null) => void, style?: PickerS
   highlight.id = 'bugdrop-element-picker-highlight';
   highlight.style.cssText = `
     position: fixed;
+    box-sizing: content-box;
     pointer-events: none;
     border: ${bw}px solid ${accent};
-    background: color-mix(in srgb, ${accent} 15%, transparent);
+    background: transparent;
     z-index: 2147483646;
     transition: all 0.05s ease-out;
-    box-shadow: 0 0 0 4px color-mix(in srgb, ${accent} 30%, transparent);
+    box-shadow: none;
     border-radius: ${radius};
   `;
   document.body.appendChild(highlight);
@@ -93,18 +95,21 @@ function startPicker(resolve: (element: Element | null) => void, style?: PickerS
 
   let currentElement: Element | null = null;
 
-  function onMouseMove(e: MouseEvent) {
-    // Get the element under the cursor, ignoring our picker elements
-    const elementsAtPoint = document.elementsFromPoint(e.clientX, e.clientY);
+  function getSelectableElementAtPoint(x: number, y: number): Element | undefined {
+    const elementsAtPoint = document.elementsFromPoint(x, y);
 
-    // Find the first element that's not our picker UI
-    const target = elementsAtPoint.find(el => {
+    return elementsAtPoint.find(el => {
       if (el === highlight || el === tooltip) return false;
       if (el.id === 'bugdrop-element-picker-highlight') return false;
       if (el.id === 'bugdrop-element-picker-tooltip') return false;
       if (el.closest('#bugdrop-host')) return false;
       return true;
     });
+  }
+
+  function onMouseMove(e: MouseEvent) {
+    // Get the element under the cursor, ignoring our picker elements
+    const target = getSelectableElementAtPoint(e.clientX, e.clientY);
 
     if (!target) return;
 
@@ -122,6 +127,7 @@ function startPicker(resolve: (element: Element | null) => void, style?: PickerS
   function onClick(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    currentElement = getSelectableElementAtPoint(e.clientX, e.clientY) ?? currentElement;
     cleanup();
     resolve(currentElement);
   }
