@@ -160,6 +160,41 @@ describe('capture flow state decisions', () => {
     expect(onComplexScreenshotSkipped).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps full selected element metadata after successful element capture', async () => {
+    document.body.innerHTML = `
+      <main id="content">
+        <section class="card">
+          <button id="save-button" class="primary action">Save</button>
+        </section>
+      </main>
+    `;
+    const element = document.querySelector('#save-button')!;
+    const { runScreenshotCaptureFlow } = await loadCaptureFlowWithMocks({
+      screenshotChoice: { kind: 'element' },
+      pickedElement: element,
+      captureResult: { kind: 'ok', dataUrl: 'data:image/png;base64,BBBB' },
+      annotationResult: 'data:image/png;base64,ANNOTATED',
+    });
+    const onComplexScreenshotSkipped = vi.fn();
+
+    const result = await runScreenshotCaptureFlow(
+      document.createElement('div'),
+      baseConfig,
+      true,
+      onComplexScreenshotSkipped
+    );
+
+    expect(result).toEqual({
+      screenshot: 'data:image/png;base64,ANNOTATED',
+      elementSelector: '#save-button',
+      fullElementSelector:
+        'html > body > main#content > section.card > button#save-button.primary.action',
+      returnToForm: false,
+    });
+    expect(document.querySelector(result.fullElementSelector!)).toBe(element);
+    expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
+  });
+
   it('returns to form when the user dismisses the screenshot options modal', async () => {
     const { runScreenshotCaptureFlow } = await loadCaptureFlowWithMocks({
       screenshotChoice: { kind: 'cancel' },

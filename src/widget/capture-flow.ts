@@ -6,10 +6,9 @@ import {
   captureWithLoading,
 } from './capture-loading';
 import { createElementPicker } from './picker';
+import { getElementSelector, getFullElementSelector } from './selector-metadata';
 import { beginViewportCapture, getRedactionCount, isFullPageDisabled } from './screenshot';
 import { showScreenshotOptions, type ScreenshotChoice } from './screenshot-options';
-
-const MAX_FULL_SELECTOR_CLASSES = 3;
 
 export interface CaptureFlowConfig {
   screenshotMode: 'optional' | 'auto' | 'required';
@@ -37,22 +36,19 @@ export type EmptyCaptureReason =
   | 'capture-failure-skip'
   | 'selection-cancelled';
 
+type ElementMetadata = Pick<CaptureFlowResult, 'elementSelector' | 'fullElementSelector'>;
 type ChosenCaptureResult =
-  | {
+  | ({
       kind: 'captured';
       screenshot: string;
-      elementSelector: string | null;
-      fullElementSelector: string | null;
       redactionCount: number;
       redactionUnavailable: boolean;
-    }
+    } & ElementMetadata)
   | { kind: 'returnToForm' }
-  | {
+  | ({
       kind: 'empty';
       reason: EmptyCaptureReason;
-      elementSelector: string | null;
-      fullElementSelector: string | null;
-    };
+    } & ElementMetadata);
 
 export async function runScreenshotCaptureFlow(
   root: HTMLElement,
@@ -149,12 +145,7 @@ async function captureChosenScreenshot(
     case 'cancel':
       return { kind: 'returnToForm' };
     case 'skip':
-      return {
-        kind: 'empty',
-        reason: 'explicit-skip',
-        elementSelector: null,
-        fullElementSelector: null,
-      };
+      return emptyChosenCaptureResult('explicit-skip');
     case 'viewport':
       return captureFromViewportChoice(root, screenshotChoice, screenshotRequired);
     case 'capture':
@@ -184,12 +175,7 @@ async function captureFromViewportChoice(
   );
   if (result.kind === 'cancelled') return { kind: 'returnToForm' };
   if (result.kind === 'skipped') {
-    return {
-      kind: 'empty',
-      reason: 'capture-failure-skip',
-      elementSelector: null,
-      fullElementSelector: null,
-    };
+    return emptyChosenCaptureResult('capture-failure-skip');
   }
   return {
     kind: 'captured',
@@ -211,12 +197,7 @@ async function captureFromFullPageChoice(
   });
   if (result.kind === 'cancelled') return { kind: 'returnToForm' };
   if (result.kind === 'skipped') {
-    return {
-      kind: 'empty',
-      reason: 'capture-failure-skip',
-      elementSelector: null,
-      fullElementSelector: null,
-    };
+    return emptyChosenCaptureResult('capture-failure-skip');
   }
   return {
     kind: 'captured',
@@ -235,33 +216,24 @@ async function captureFromElementChoice(
 ): Promise<ChosenCaptureResult> {
   const element = await createElementPicker(getPickerStyle(config));
   if (!element) {
-    return {
-      kind: 'empty',
-      reason: 'selection-cancelled',
-      elementSelector: null,
-      fullElementSelector: null,
-    };
+    return emptyChosenCaptureResult('selection-cancelled');
   }
 
-  const elementSelector = getElementSelector(element);
-  const fullElementSelector = getFullElementSelector(element);
+  const elementMetadata = {
+    elementSelector: getElementSelector(element),
+    fullElementSelector: getFullElementSelector(element),
+  };
   const result = await captureWithLoading(root, element, config.screenshotScale, {
     allowSkip: !screenshotRequired,
   });
   if (result.kind === 'cancelled') return { kind: 'returnToForm' };
   if (result.kind === 'skipped') {
-    return {
-      kind: 'empty',
-      reason: 'capture-failure-skip',
-      elementSelector,
-      fullElementSelector,
-    };
+    return emptyChosenCaptureResult('capture-failure-skip', elementMetadata);
   }
   return {
     kind: 'captured',
     screenshot: result.dataUrl,
-    elementSelector,
-    fullElementSelector,
+    ...elementMetadata,
     redactionCount: getRedactionCount(element),
     redactionUnavailable: false,
   };
@@ -276,12 +248,7 @@ async function captureFromAreaChoice(
     redactionsAvailable: getRedactionCount() > 0,
   });
   if (!rect) {
-    return {
-      kind: 'empty',
-      reason: 'selection-cancelled',
-      elementSelector: null,
-      fullElementSelector: null,
-    };
+    return emptyChosenCaptureResult('selection-cancelled');
   }
 
   const result = await captureAreaWithLoading(root, rect, config.screenshotScale, {
@@ -289,12 +256,7 @@ async function captureFromAreaChoice(
   });
   if (result.kind === 'cancelled') return { kind: 'returnToForm' };
   if (result.kind === 'skipped') {
-    return {
-      kind: 'empty',
-      reason: 'capture-failure-skip',
-      elementSelector: null,
-      fullElementSelector: null,
-    };
+    return emptyChosenCaptureResult('capture-failure-skip');
   }
   return {
     kind: 'captured',
@@ -322,127 +284,22 @@ function getPickerStyle(config: CaptureFlowConfig) {
 function emptyCaptureResult(): CaptureFlowResult {
   return {
     screenshot: null,
-    elementSelector: null,
-    fullElementSelector: null,
+    ...emptyElementMetadata(),
     returnToForm: false,
   };
 }
 
+function emptyChosenCaptureResult(
+  reason: EmptyCaptureReason,
+  metadata: ElementMetadata = emptyElementMetadata()
+): ChosenCaptureResult {
+  return { kind: 'empty', reason, ...metadata };
+}
+
+function emptyElementMetadata(): ElementMetadata {
+  return { elementSelector: null, fullElementSelector: null };
+}
+
 function assertNever(value: never): never {
   throw new Error(`Unhandled screenshot choice: ${JSON.stringify(value)}`);
-}
-
-function getElementSelector(element: Element): string {
-  const path: string[] = [];
-  let current: Element | null = element;
-
-  while (current && current !== document.body) {
-    let selector = current.tagName.toLowerCase();
-
-    if (current.id) {
-      selector = `#${current.id}`;
-      path.unshift(selector);
-      break;
-    }
-
-    if (current.className) {
-      const classNameStr =
-        typeof current.className === 'string'
-          ? current.className
-          : (current.className as SVGAnimatedString).baseVal || '';
-      const classes = classNameStr
-        .split(' ')
-        .filter(c => c)
-        .slice(0, 2);
-      if (classes.length) {
-        selector += `.${classes.join('.')}`;
-      }
-    }
-
-    path.unshift(selector);
-    current = current.parentElement;
-  }
-
-  return path.join(' > ');
-}
-
-function getFullElementSelector(element: Element): string {
-  const path: string[] = [];
-  let current: Element | null = element;
-
-  while (current) {
-    path.unshift(getFullSelectorSegment(current));
-    current = current.parentElement;
-  }
-
-  return path.join(' > ');
-}
-
-function getFullSelectorSegment(element: Element): string {
-  let selector = element.tagName.toLowerCase();
-
-  if (element.id) {
-    selector += `#${escapeCssIdentifier(element.id)}`;
-  }
-
-  const classes = getClassNames(element).slice(0, MAX_FULL_SELECTOR_CLASSES);
-  if (classes.length > 0) {
-    selector += `.${classes.map(escapeCssIdentifier).join('.')}`;
-  }
-
-  if (!element.id) {
-    const nthOfType = getNthOfType(element);
-    if (nthOfType > 1 || hasSameTagSibling(element)) {
-      selector += `:nth-of-type(${nthOfType})`;
-    }
-  }
-
-  return selector;
-}
-
-function getClassNames(element: Element): string[] {
-  const classNameStr =
-    typeof element.className === 'string'
-      ? element.className
-      : (element.className as SVGAnimatedString).baseVal || '';
-
-  return classNameStr.split(/\s+/).filter(Boolean);
-}
-
-function getNthOfType(element: Element): number {
-  let index = 1;
-  let sibling = element.previousElementSibling;
-
-  while (sibling) {
-    if (sibling.tagName === element.tagName) {
-      index += 1;
-    }
-    sibling = sibling.previousElementSibling;
-  }
-
-  return index;
-}
-
-function hasSameTagSibling(element: Element): boolean {
-  let sibling = element.previousElementSibling;
-  while (sibling) {
-    if (sibling.tagName === element.tagName) return true;
-    sibling = sibling.previousElementSibling;
-  }
-
-  sibling = element.nextElementSibling;
-  while (sibling) {
-    if (sibling.tagName === element.tagName) return true;
-    sibling = sibling.nextElementSibling;
-  }
-
-  return false;
-}
-
-function escapeCssIdentifier(value: string): string {
-  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
-    return CSS.escape(value);
-  }
-
-  return value.replace(/[^a-zA-Z0-9_-]/g, char => `\\${char}`);
 }

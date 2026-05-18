@@ -1235,10 +1235,82 @@ describe('API Routes', () => {
       expect(issueBody).toContain('http://localhost:3000');
       expect(issueBody).toContain('1920×1080');
       expect(issueBody).toContain('#submit-button');
-      expect(issueBody).toContain('Full CSS path');
-      expect(issueBody).toContain('html > body > main > form#contact > button#submit-button');
+      expect(issueBody).toContain(
+        '| **Full CSS path** | `html > body > main > form#contact > button#submit-button` |'
+      );
       expect(issueBody).toContain('Submitted via');
     });
+
+    it('should omit full CSS path row when metadata is absent', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      mockCreateIssue.mockResolvedValue({
+        number: 42,
+        html_url: 'https://github.com/testowner/testrepo/issues/42',
+      });
+
+      const payloadWithSelector = {
+        ...validPayload,
+        metadata: {
+          ...validPayload.metadata,
+          elementSelector: '#submit-button',
+        },
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadWithSelector),
+      });
+      await app.fetch(req, mockEnv);
+
+      const issueBody = mockCreateIssue.mock.calls[0][4];
+      expect(issueBody).toContain('| **Element** | `#submit-button` |');
+      expect(issueBody).not.toContain('Full CSS path');
+    });
+
+    it.each([
+      [
+        'button#save\\`now',
+        'html > body > button#save\\`now.action\\|primary',
+        '| **Element** | `` button#save\\`now `` |',
+        '| **Full CSS path** | `` html > body > button#save\\`now.action\\\\|primary `` |',
+      ],
+      [
+        'button#save\\``now',
+        'html > body > button#save\\```now.action\\|primary',
+        '| **Element** | ``` button#save\\``now ``` |',
+        '| **Full CSS path** | ```` html > body > button#save\\```now.action\\\\|primary ```` |',
+      ],
+    ])(
+      'should format selector metadata safely in markdown tables for %s',
+      async (elementSelector, fullElementSelector, expectedElementRow, expectedFullPathRow) => {
+        mockGetInstallationToken.mockResolvedValue('test-token');
+        mockCreateIssue.mockResolvedValue({
+          number: 42,
+          html_url: 'https://github.com/testowner/testrepo/issues/42',
+        });
+
+        const payloadWithMarkdownSensitiveSelector = {
+          ...validPayload,
+          metadata: {
+            ...validPayload.metadata,
+            elementSelector,
+            fullElementSelector,
+          },
+        };
+
+        const req = new Request('http://localhost/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payloadWithMarkdownSensitiveSelector),
+        });
+        await app.fetch(req, mockEnv);
+
+        const issueBody = mockCreateIssue.mock.calls[0][4];
+        expect(issueBody).toContain(expectedElementRow);
+        expect(issueBody).toContain(expectedFullPathRow);
+      }
+    );
 
     it('should include submitter info in issue body when provided', async () => {
       mockGetInstallationToken.mockResolvedValue('test-token');

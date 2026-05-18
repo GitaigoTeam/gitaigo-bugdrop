@@ -598,11 +598,13 @@ function formatIssueBody(
   sections.push(`| **Timestamp** | ${payload.metadata.timestamp} |`);
 
   if (payload.metadata.elementSelector) {
-    sections.push(`| **Element** | \`${payload.metadata.elementSelector}\` |`);
+    sections.push(`| **Element** | ${formatMarkdownTableCode(payload.metadata.elementSelector)} |`);
   }
 
   if (payload.metadata.fullElementSelector) {
-    sections.push(`| **Full CSS path** | \`${payload.metadata.fullElementSelector}\` |`);
+    sections.push(
+      `| **Full CSS path** | ${formatMarkdownTableCode(payload.metadata.fullElementSelector)} |`
+    );
   }
 
   sections.push('');
@@ -612,6 +614,17 @@ function formatIssueBody(
   sections.push('*Submitted via [BugDrop](https://github.com/mean-weasel/bugdrop)*');
 
   return sections.join('\n');
+}
+
+function formatMarkdownTableCode(value: string): string {
+  const tableSafeValue = value.replace(/\|/g, '\\|');
+  if (!tableSafeValue.includes('`')) {
+    return `\`${tableSafeValue}\``;
+  }
+
+  const longestBacktickRun = Math.max(...tableSafeValue.match(/`+/g)!.map(match => match.length));
+  const fence = '`'.repeat(longestBacktickRun + 1);
+  return `${fence} ${tableSafeValue} ${fence}`;
 }
 
 export default api;

@@ -3573,6 +3573,11 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     expect(metadata.elementSelector).toContain('h1');
     expect(metadata.fullElementSelector).toContain('html > body');
     expect(metadata.fullElementSelector).toContain('h1');
+    expect(
+      await page.evaluate(selector => {
+        return document.querySelector(selector) === document.querySelector('h1');
+      }, metadata.fullElementSelector)
+    ).toBe(true);
 
     await host.locator('css=.bd-close').click();
     await host.locator('css=.bd-trigger').click();
@@ -4708,7 +4713,11 @@ test.describe('Screenshot Masking', () => {
     fixturePath: string,
     selector: string,
     clickOffset?: { x: number; y: number }
-  ): Promise<{ screenshot: string; imageSize: { w: number; h: number } }> {
+  ): Promise<{
+    screenshot: string;
+    imageSize: { w: number; h: number };
+    metadata: { elementSelector?: string; fullElementSelector?: string };
+  }> {
     let payload: Record<string, unknown> | null = null;
     await page.route('**/api/check/**', async route =>
       route.fulfill({
@@ -4777,18 +4786,29 @@ test.describe('Screenshot Masking', () => {
       screenshot
     );
 
-    return { screenshot, imageSize };
+    return {
+      screenshot,
+      imageSize,
+      metadata: payload.metadata as { elementSelector?: string; fullElementSelector?: string },
+    };
   }
 
   test('element-scoped capture masks descendant inside picked element', async ({ page }) => {
     // Click inside the top padding of #unmasked-parent (above the first <p> child)
     // so the picker's elementsFromPoint resolves the parent, not a child element.
     // The 16px top padding gives ~8px of safe click area before the first child.
-    const { screenshot, imageSize } = await submitFeedbackWithElementCapture(
+    const { screenshot, imageSize, metadata } = await submitFeedbackWithElementCapture(
       page,
       '/test/masking-nested.html',
       '#unmasked-parent',
       { x: 40, y: 8 } // 8px from top = within the 16px top padding
+    );
+    expect(metadata.elementSelector).toBe('#unmasked-parent');
+    expect(metadata.fullElementSelector).toContain('html > body');
+    expect(metadata.fullElementSelector).toContain('div#unmasked-parent');
+    await expect(page.locator(`css=${metadata.fullElementSelector}`)).toHaveAttribute(
+      'id',
+      'unmasked-parent'
     );
 
     // Measure child geometry relative to the parent using the image's own scale.
