@@ -285,7 +285,10 @@ describe('captureScreenshot integrates with mask pipeline', () => {
     const result = await captureScreenshot();
 
     // No masks → applyMaskToImage short-circuits and returns the input unchanged.
-    expect(result).toBe(STUB);
+    expect(result).toEqual({
+      dataUrl: STUB,
+      redaction: { count: 0, hasLimitations: false },
+    });
   });
 
   it('completes element-scoped capture when the picked element has a masked descendant', async () => {
@@ -329,7 +332,10 @@ describe('captureScreenshot integrates with mask pipeline', () => {
       Promise.resolve(STUB);
 
     // applyMaskToImage must have run: only it produces the masked sentinel.
-    await expect(captureScreenshot(target)).resolves.toBe('data:image/png;base64,masked');
+    await expect(captureScreenshot(target)).resolves.toEqual({
+      dataUrl: 'data:image/png;base64,masked',
+      redaction: { count: 1, hasLimitations: false },
+    });
   });
 
   it('captures a context element and draws a selected descendant highlight', async () => {
@@ -394,7 +400,10 @@ describe('captureScreenshot integrates with mask pipeline', () => {
 
     await expect(
       captureScreenshot(context, undefined, { highlightElement: selected })
-    ).resolves.toBe('data:image/png;base64,masked');
+    ).resolves.toEqual({
+      dataUrl: 'data:image/png;base64,masked',
+      redaction: { count: 0, hasLimitations: false },
+    });
 
     expect(toPng).toHaveBeenCalledWith(context, expect.any(Object));
     expect(fill).not.toHaveBeenCalled();
@@ -445,7 +454,10 @@ describe('captureScreenshot integrates with mask pipeline', () => {
 
     await expect(
       captureScreenshot(selected, undefined, { highlightElement: selected })
-    ).resolves.toBe('data:image/png;base64,masked');
+    ).resolves.toEqual({
+      dataUrl: 'data:image/png;base64,masked',
+      redaction: { count: 0, hasLimitations: false },
+    });
 
     expect(toPng).toHaveBeenCalledWith(selected, expect.any(Object));
     expect(drawImage).toHaveBeenCalledWith(

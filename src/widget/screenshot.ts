@@ -1,8 +1,16 @@
 import * as htmlToImage from 'html-to-image';
 import type { Options as HtmlToImageOptions } from 'html-to-image/lib/types';
 import { withCaptureTimeout } from './capture-timeout';
-import { applyMaskToImage, countMaskRects, createRedactionPlan } from './mask';
+import {
+  applyMaskToImage,
+  countMaskRects,
+  createRedactionSnapshot,
+  summarizeRedactionSnapshot,
+  type RedactionSnapshot,
+  type RedactionSummary,
+} from './mask';
 import { resolveAccentColor } from '../defaults';
+export { cropScreenshot } from './crop-screenshot';
 export { beginViewportCapture } from './viewport-capture';
 
 declare const __BUGDROP_ENABLE_TEST_HOOKS__: boolean;
@@ -21,6 +29,11 @@ export interface CaptureScreenshotOptions {
     borderWidth?: string;
   };
   pixelRatio?: number;
+}
+
+export interface CapturedScreenshot {
+  dataUrl: string;
+  redaction: RedactionSummary;
 }
 
 declare global {
@@ -75,7 +88,7 @@ export async function captureScreenshot(
   element?: Element,
   screenshotScale?: number,
   captureOptions: CaptureScreenshotOptions = {}
-): Promise<string> {
+): Promise<CapturedScreenshot> {
   const target = element || document.body;
   const isFullPage = !element;
   const targetRect = element ? getDocumentRect(element) : getDocumentRect(document.body);
@@ -94,27 +107,30 @@ export async function captureScreenshot(
     filter: (node: HTMLElement) => node.id !== 'bugdrop-host',
   };
 
-  const redactionPlan = createRedactionPlan(target);
+  const redactionSnapshot = createRedactionSnapshot(target);
   const originOffset = element ? { x: targetRect.x, y: targetRect.y } : { x: 0, y: 0 };
 
   const capturePromise = toPng(target as HTMLElement, opts);
   const dataUrl = await withCaptureTimeout(capturePromise);
   const maskedDataUrl = await applyMaskToImage(
     dataUrl,
-    redactionPlan.targets.map(target => target.rect),
+    redactionSnapshot.targets.map(target => target.rect),
     pixelRatio,
     originOffset
   );
 
   if (!highlightRect) {
-    return maskedDataUrl;
+    return capturedScreenshot(maskedDataUrl, redactionSnapshot);
   }
 
-  return applyHighlightToImage(
-    maskedDataUrl,
-    highlightRect,
-    targetRect,
-    captureOptions.highlightStyle
+  return capturedScreenshot(
+    await applyHighlightToImage(
+      maskedDataUrl,
+      highlightRect,
+      targetRect,
+      captureOptions.highlightStyle
+    ),
+    redactionSnapshot
   );
 }
 
@@ -122,7 +138,7 @@ export async function captureAreaScreenshot(
   rect: DOMRect,
   screenshotScale?: number,
   captureOptions: CaptureScreenshotOptions = {}
-): Promise<string> {
+): Promise<CapturedScreenshot> {
   const pixelRatio = captureOptions.pixelRatio ?? getPixelRatio(true, screenshotScale);
   const targetRect = { x: rect.x, y: rect.y, w: rect.width, h: rect.height };
   const highlightRect =
@@ -145,11 +161,11 @@ export async function captureAreaScreenshot(
     filter: (node: HTMLElement) => node.id !== 'bugdrop-host',
   };
 
+  const redactionSnapshot = createRedactionSnapshot(document.body);
   const dataUrl = await withCaptureTimeout(toPng(document.body, opts));
-  const redactionPlan = createRedactionPlan(document.body);
   const maskedDataUrl = await applyMaskToImage(
     dataUrl,
-    redactionPlan.targets.map(target => target.rect),
+    redactionSnapshot.targets.map(target => target.rect),
     pixelRatio,
     {
       x: rect.x,
@@ -158,14 +174,18 @@ export async function captureAreaScreenshot(
   );
 
   if (!highlightRect) {
-    return maskedDataUrl;
+    return capturedScreenshot(maskedDataUrl, redactionSnapshot, rect);
   }
 
-  return applyHighlightToImage(
-    maskedDataUrl,
-    highlightRect,
-    targetRect,
-    captureOptions.highlightStyle
+  return capturedScreenshot(
+    await applyHighlightToImage(
+      maskedDataUrl,
+      highlightRect,
+      targetRect,
+      captureOptions.highlightStyle
+    ),
+    redactionSnapshot,
+    rect
   );
 }
 
@@ -181,6 +201,17 @@ function getToPng(): typeof htmlToImage.toPng {
     return window.__bugdropMockToPng;
   }
   return htmlToImage.toPng;
+}
+
+function capturedScreenshot(
+  dataUrl: string,
+  snapshot: RedactionSnapshot,
+  area?: DOMRect
+): CapturedScreenshot {
+  return {
+    dataUrl,
+    redaction: summarizeRedactionSnapshot(snapshot, area),
+  };
 }
 
 async function applyHighlightToImage(
@@ -283,44 +314,5 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error('Failed to load image for selected element highlight'));
     img.src = dataUrl;
-  });
-}
-
-export async function cropScreenshot(
-  imageDataUrl: string,
-  rect: DOMRect,
-  pixelRatio: number
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const cropW = Math.round(rect.width * pixelRatio);
-      const cropH = Math.round(rect.height * pixelRatio);
-      canvas.width = cropW;
-      canvas.height = cropH;
-
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        reject(new Error('Failed to get canvas context'));
-        return;
-      }
-
-      ctx.drawImage(
-        img,
-        Math.round(rect.x * pixelRatio),
-        Math.round(rect.y * pixelRatio),
-        cropW,
-        cropH,
-        0,
-        0,
-        cropW,
-        cropH
-      );
-
-      resolve(canvas.toDataURL('image/png'));
-    };
-    img.onerror = () => reject(new Error('Failed to load image for cropping'));
-    img.src = imageDataUrl;
   });
 }

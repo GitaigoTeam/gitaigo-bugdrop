@@ -1,22 +1,36 @@
-interface MaskRect {
+export interface MaskRect {
   x: number;
   y: number;
   w: number;
   h: number;
 }
 
-type RedactionReason = 'developer-marked' | 'sensitive-input';
-type RedactionStrategy = 'canvas-mask';
+export type RedactionReason = 'developer-marked' | 'sensitive-input';
+export type RedactionStrategy = 'canvas-mask';
+export type UnsupportedSurfaceReason = 'embedded-document' | 'pixel-content' | 'media-content';
 
-interface RedactionTarget {
+export interface RedactionTarget {
   element: Element;
   rect: MaskRect;
   reason: RedactionReason;
   strategy: RedactionStrategy;
 }
 
-interface RedactionPlan {
+export interface UnsupportedRedactionSurface {
+  tagName: string;
+  reason: UnsupportedSurfaceReason;
+  rect: MaskRect;
+}
+
+export interface RedactionSnapshot {
   targets: RedactionTarget[];
+  unsupportedSurfaces: UnsupportedRedactionSurface[];
+  redactionCount: number;
+}
+
+export interface RedactionSummary {
+  count: number;
+  hasLimitations: boolean;
 }
 
 export class MaskApplicationError extends Error {
@@ -30,6 +44,9 @@ const EXPLICIT_SELECTOR =
   '[data-bugdrop-mask], [data-bugdrop-redact], [data-bd-redact], [data-bugdrop-redacted]';
 const DEFAULT_SELECTOR =
   'input[type="password"], input[autocomplete*="cc-number"], input[autocomplete*="cc-csc"], input[autocomplete*="cc-exp"]';
+const UNSUPPORTED_SURFACE_SELECTOR = 'iframe, canvas, img, svg, video';
+const PIXEL_CONTENT_TAGS = new Set(['CANVAS', 'IMG', 'SVG']);
+const MEDIA_CONTENT_TAGS = new Set(['VIDEO']);
 
 function getRedactionReason(el: Element): RedactionReason | null {
   if (el.matches(EXPLICIT_SELECTOR)) return 'developer-marked';
@@ -53,28 +70,62 @@ function createTarget(el: Element, reason: RedactionReason): RedactionTarget | n
   };
 }
 
-export function createRedactionPlan(root: Element): RedactionPlan {
+export function createRedactionSnapshot(root: Element): RedactionSnapshot {
   const targets: RedactionTarget[] = [];
+  const unsupportedSurfaces: UnsupportedRedactionSurface[] = [];
   const rootReason = getRedactionReason(root);
 
   if (rootReason) {
     const rootTarget = createTarget(root, rootReason);
-    return { targets: rootTarget ? [rootTarget] : [] };
+    if (rootTarget) {
+      targets.push(rootTarget);
+      collectUnsupportedSurfaces(root, unsupportedSurfaces);
+    }
+    return {
+      targets,
+      unsupportedSurfaces,
+      redactionCount: targets.length,
+    };
   }
 
-  walk(root, targets);
-  walkOpenShadowRoot(root, targets);
-  return { targets };
+  walk(root, targets, unsupportedSurfaces);
+  walkOpenShadowRoot(root, targets, unsupportedSurfaces);
+  return {
+    targets,
+    unsupportedSurfaces,
+    redactionCount: targets.length,
+  };
+}
+
+export function createRedactionPlan(root: Element): RedactionSnapshot {
+  return createRedactionSnapshot(root);
 }
 
 export function collectMaskRects(root: Element): MaskRect[] {
-  return createRedactionPlan(root).targets.map(target => target.rect);
+  return createRedactionSnapshot(root).targets.map(target => target.rect);
 }
 
 export function countMaskRects(root: Element = document.body, area?: DOMRect): number {
-  const rects = createRedactionPlan(root).targets.map(target => target.rect);
+  const rects = createRedactionSnapshot(root).targets.map(target => target.rect);
   if (!area) return rects.length;
   return rects.filter(rect => intersects(rect, area)).length;
+}
+
+export function summarizeRedactionSnapshot(
+  snapshot: RedactionSnapshot,
+  area?: DOMRect
+): RedactionSummary {
+  const targets = area
+    ? snapshot.targets.filter(target => intersects(target.rect, area))
+    : snapshot.targets;
+  const unsupportedSurfaces = area
+    ? snapshot.unsupportedSurfaces.filter(surface => intersects(surface.rect, area))
+    : snapshot.unsupportedSurfaces;
+
+  return {
+    count: targets.length,
+    hasLimitations: unsupportedSurfaces.length > 0,
+  };
 }
 
 function intersects(rect: MaskRect, area: DOMRect): boolean {
@@ -86,21 +137,32 @@ function intersects(rect: MaskRect, area: DOMRect): boolean {
   );
 }
 
-function walk(node: Element, targets: RedactionTarget[]): void {
+function walk(
+  node: Element,
+  targets: RedactionTarget[],
+  unsupportedSurfaces: UnsupportedRedactionSurface[]
+): void {
   for (const child of Array.from(node.children)) {
     const reason = getRedactionReason(child);
     if (reason) {
       const target = createTarget(child, reason);
-      if (target) targets.push(target);
+      if (target) {
+        targets.push(target);
+        collectUnsupportedSurfaces(child, unsupportedSurfaces);
+      }
       // Top-most-ancestor rule: do not descend into masked subtrees.
       continue;
     }
-    walk(child, targets);
-    walkOpenShadowRoot(child, targets);
+    walk(child, targets, unsupportedSurfaces);
+    walkOpenShadowRoot(child, targets, unsupportedSurfaces);
   }
 }
 
-function walkOpenShadowRoot(node: Element, targets: RedactionTarget[]): void {
+function walkOpenShadowRoot(
+  node: Element,
+  targets: RedactionTarget[],
+  unsupportedSurfaces: UnsupportedRedactionSurface[]
+): void {
   const shadowRoot = node.shadowRoot;
   if (!shadowRoot) return;
 
@@ -108,11 +170,62 @@ function walkOpenShadowRoot(node: Element, targets: RedactionTarget[]): void {
     const reason = getRedactionReason(child);
     if (reason) {
       const target = createTarget(child, reason);
-      if (target) targets.push(target);
+      if (target) {
+        targets.push(target);
+        collectUnsupportedSurfaces(child, unsupportedSurfaces);
+      }
       continue;
     }
-    walk(child, targets);
-    walkOpenShadowRoot(child, targets);
+    walk(child, targets, unsupportedSurfaces);
+    walkOpenShadowRoot(child, targets, unsupportedSurfaces);
+  }
+}
+
+function collectUnsupportedSurfaces(root: Element, surfaces: UnsupportedRedactionSurface[]): void {
+  collectUnsupportedSurface(root, surfaces);
+  for (const child of Array.from(root.querySelectorAll(UNSUPPORTED_SURFACE_SELECTOR))) {
+    collectUnsupportedSurface(child, surfaces);
+  }
+  walkOpenShadowUnsupportedSurfaces(root, surfaces);
+}
+
+function collectUnsupportedSurface(
+  element: Element,
+  surfaces: UnsupportedRedactionSurface[]
+): void {
+  const reason = getUnsupportedSurfaceReason(element);
+  if (!reason) return;
+
+  const target = createTarget(element, getRedactionReason(element) ?? 'developer-marked');
+  if (!target) return;
+
+  surfaces.push({
+    tagName: element.tagName,
+    reason,
+    rect: target.rect,
+  });
+}
+
+function getUnsupportedSurfaceReason(element: Element): UnsupportedSurfaceReason | null {
+  if (element.tagName === 'IFRAME') return 'embedded-document';
+  if (PIXEL_CONTENT_TAGS.has(element.tagName)) return 'pixel-content';
+  if (MEDIA_CONTENT_TAGS.has(element.tagName)) return 'media-content';
+  return null;
+}
+
+function walkOpenShadowUnsupportedSurfaces(
+  root: Element,
+  surfaces: UnsupportedRedactionSurface[]
+): void {
+  const shadowRoot = root.shadowRoot;
+  if (shadowRoot) {
+    for (const child of Array.from(shadowRoot.querySelectorAll(UNSUPPORTED_SURFACE_SELECTOR))) {
+      collectUnsupportedSurface(child, surfaces);
+    }
+  }
+
+  for (const child of Array.from(root.children)) {
+    walkOpenShadowUnsupportedSurfaces(child, surfaces);
   }
 }
 
