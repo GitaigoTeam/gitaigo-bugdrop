@@ -578,6 +578,61 @@ test.describe('Screenshot Capture (Live)', () => {
     await expect(page.locator('#bugdrop-area-picker-overlay')).not.toBeVisible({ timeout: 3_000 });
   });
 
+  test('selected-area capture works with touch input on deployed preview widget', async ({
+    browser,
+    browserName,
+  }) => {
+    test.skip(!process.env.LIVE_TARGET, 'Requires a deployed live widget target');
+    test.skip(browserName !== 'chromium', 'CDP touch dispatch is Chromium-only');
+
+    const context = await browser.newContext({
+      hasTouch: true,
+      isMobile: true,
+      viewport: { width: 390, height: 844 },
+    });
+    if (bypassSecret) {
+      await context.route('**/*.vercel.app/**', async route => {
+        const headers = {
+          ...route.request().headers(),
+          'x-vercel-protection-bypass': bypassSecret,
+        };
+        await route.continue({ headers });
+      });
+    }
+    const page = await context.newPage();
+
+    try {
+      const host = await openScreenshotOptions(page, 'Live mobile area capture');
+      const areaBtn = host.locator('css=[data-action="area"]');
+      await expect(areaBtn).toBeVisible({ timeout: 5_000 });
+      await areaBtn.click();
+
+      const overlay = page.locator('#bugdrop-area-picker-overlay');
+      await expect(overlay).toBeVisible({ timeout: 5_000 });
+      await expect(page.locator('#bugdrop-area-picker-cancel')).toHaveText('Cancel');
+
+      const client = await context.newCDPSession(page);
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{ x: 40, y: 170, radiusX: 1, radiusY: 1, id: 1 }],
+      });
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x: 280, y: 430, radiusX: 1, radiusY: 1, id: 1 }],
+      });
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchEnd',
+        touchPoints: [],
+      });
+      await client.detach();
+
+      await expect(overlay).not.toBeVisible({ timeout: 5_000 });
+      await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 30_000 });
+    } finally {
+      await context.close();
+    }
+  });
+
   test('full-page capture reaches annotation with a third-party no-CORS image', async ({
     page,
   }) => {

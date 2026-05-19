@@ -802,15 +802,93 @@ test.describe('Widget Interaction', () => {
       await expect
         .poll(() => tooltip.evaluate(el => (el as HTMLElement).style.top))
         .toContain('safe-area-inset-top');
+      await expect(cancelLink).toHaveCSS('display', 'inline-flex');
+      const tooltipBox = await tooltip.boundingBox();
       const cancelBox = await cancelLink.boundingBox();
+      expect(tooltipBox).not.toBeNull();
       expect(cancelBox).not.toBeNull();
       expect(cancelBox!.width).toBeGreaterThanOrEqual(44);
       expect(cancelBox!.height).toBeGreaterThanOrEqual(44);
+      expect(cancelBox!.width).toBeLessThan(Math.min(140, tooltipBox!.width));
 
       await cancelLink.click();
       await expect(page.locator('#bugdrop-area-picker-overlay')).not.toBeVisible({
         timeout: 3000,
       });
+      await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+      expect(payloads).toHaveLength(1);
+      expect(payloads[0].screenshot).toBeNull();
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('area picker shows mobile cancel on hybrid touch devices', async ({ browser }) => {
+    const context = await browser.newContext({
+      hasTouch: true,
+      viewport: { width: 900, height: 700 },
+    });
+    await context.addInitScript(() => {
+      const nativeMatchMedia = window.matchMedia.bind(window);
+      Object.defineProperty(navigator, 'maxTouchPoints', {
+        configurable: true,
+        value: 1,
+      });
+      window.matchMedia = query => {
+        if (query.includes('any-pointer: coarse')) {
+          return {
+            matches: true,
+            media: query,
+            onchange: null,
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+            addListener: () => undefined,
+            removeListener: () => undefined,
+            dispatchEvent: () => false,
+          };
+        }
+        if (query.includes('hover: none') || query.includes('pointer: coarse')) {
+          return {
+            matches: false,
+            media: query,
+            onchange: null,
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+            addListener: () => undefined,
+            removeListener: () => undefined,
+            dispatchEvent: () => false,
+          };
+        }
+        return nativeMatchMedia(query);
+      };
+    });
+    const page = await context.newPage();
+
+    try {
+      const payloads = await trackFeedbackPayloads(page);
+      await page.route('**/api/check/**', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ installed: true }),
+        });
+      });
+
+      await page.goto('/test/');
+
+      const host = page.locator('#bugdrop-host');
+      await host.locator('css=.bd-trigger').click();
+      await host.locator('css=[data-action="continue"]').click();
+      await host.locator('css=#title').fill('Hybrid touch area test');
+      await host.locator('css=#include-screenshot').check();
+      await host.locator('css=#submit-btn').click();
+      await host.locator('css=[data-action="area"]').click();
+
+      await expect(page.locator('#bugdrop-area-picker-tooltip')).not.toContainText('ESC');
+      const cancelButton = page.locator('#bugdrop-area-picker-cancel');
+      await expect(cancelButton).toHaveText('Cancel');
+
+      await cancelButton.click();
       await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
       expect(payloads).toHaveLength(1);
       expect(payloads[0].screenshot).toBeNull();

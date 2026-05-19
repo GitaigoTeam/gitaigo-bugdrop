@@ -243,6 +243,7 @@ function createTooltip(
       text-underline-offset: 2px;
       touch-action: manipulation;
       white-space: nowrap;
+      width: auto;
     `;
     tooltip.append(text, ' (', cancelButton, ')');
   } else {
@@ -252,8 +253,11 @@ function createTooltip(
 }
 
 function usesCoarsePointer(): boolean {
-  if (window.matchMedia) {
-    return window.matchMedia('(hover: none), (pointer: coarse)').matches;
-  }
-  return navigator.maxTouchPoints > 0;
+  const hasTouchPoints = navigator.maxTouchPoints > 0;
+  if (!window.matchMedia) return hasTouchPoints;
+
+  return (
+    window.matchMedia('(hover: none), (pointer: coarse), (any-pointer: coarse)').matches ||
+    hasTouchPoints
+  );
 }
