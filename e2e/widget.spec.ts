@@ -327,6 +327,19 @@ test.describe('Widget Loading', () => {
 });
 
 test.describe('Widget Interaction', () => {
+  async function trackFeedbackPayloads(page: Page) {
+    const payloads: Array<Record<string, unknown>> = [];
+    await page.route('**/feedback', async route => {
+      payloads.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, issueNumber: 1, issueUrl: '#', isPublic: false }),
+      });
+    });
+    return payloads;
+  }
+
   test('clicking feedback button triggers modal', async ({ page }) => {
     await page.goto('/test/');
 
@@ -684,6 +697,7 @@ test.describe('Widget Interaction', () => {
   });
 
   test('select area button appears and launches area picker overlay', async ({ page }) => {
+    const payloads = await trackFeedbackPayloads(page);
     await page.route('**/api/check/**', async route => {
       await route.fulfill({
         status: 200,
@@ -730,13 +744,283 @@ test.describe('Widget Interaction', () => {
     const tooltip = page.locator('#bugdrop-area-picker-tooltip');
     await expect(tooltip).toBeVisible();
     await expect(tooltip).toHaveText('Draw a selection around the area to capture (ESC to cancel)');
-    await expect(tooltip).not.toContainText('Drag');
+    await expect(page.locator('#bugdrop-area-picker-cancel')).not.toBeAttached();
 
-    // Press ESC to cancel
     await page.keyboard.press('Escape');
 
     // Overlay should be removed
     await expect(overlay).not.toBeVisible({ timeout: 3000 });
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0].screenshot).toBeNull();
+  });
+
+  test('area picker prompt clears mobile safe areas and uses an inline cancel link', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      hasTouch: true,
+      isMobile: true,
+      viewport: { width: 390, height: 844 },
+    });
+    const page = await context.newPage();
+
+    try {
+      const payloads = await trackFeedbackPayloads(page);
+      await page.route('**/api/check/**', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ installed: true }),
+        });
+      });
+
+      await page.goto('/test/');
+      await page.addStyleTag({
+        content: `
+          button {
+            display: block;
+            width: 100%;
+          }
+        `,
+      });
+
+      const host = page.locator('#bugdrop-host');
+      await host.locator('css=.bd-trigger').click();
+      await host.locator('css=[data-action="continue"]').click();
+      await host.locator('css=#title').fill('Mobile safe area test');
+      await host.locator('css=#include-screenshot').check();
+      await host.locator('css=#submit-btn').click();
+      await host.locator('css=[data-action="area"]').click();
+
+      const tooltip = page.locator('#bugdrop-area-picker-tooltip');
+      const cancelLink = page.locator('#bugdrop-area-picker-cancel');
+      await expect(tooltip).toBeVisible({ timeout: 5000 });
+      await expect(tooltip).not.toContainText('ESC');
+      await expect(cancelLink).toHaveText('Cancel');
+
+      await expect
+        .poll(() => tooltip.evaluate(el => (el as HTMLElement).style.top))
+        .toContain('safe-area-inset-top');
+      await expect(cancelLink).toHaveCSS('display', 'inline-flex');
+      const tooltipBox = await tooltip.boundingBox();
+      const cancelBox = await cancelLink.boundingBox();
+      expect(tooltipBox).not.toBeNull();
+      expect(cancelBox).not.toBeNull();
+      expect(cancelBox!.width).toBeGreaterThanOrEqual(44);
+      expect(cancelBox!.height).toBeGreaterThanOrEqual(44);
+      expect(cancelBox!.width).toBeLessThan(Math.min(140, tooltipBox!.width));
+
+      await cancelLink.click();
+      await expect(page.locator('#bugdrop-area-picker-overlay')).not.toBeVisible({
+        timeout: 3000,
+      });
+      await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+      expect(payloads).toHaveLength(1);
+      expect(payloads[0].screenshot).toBeNull();
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('area picker shows mobile cancel on hybrid touch devices', async ({ browser }) => {
+    const context = await browser.newContext({
+      hasTouch: true,
+      viewport: { width: 900, height: 700 },
+    });
+    await context.addInitScript(() => {
+      const nativeMatchMedia = window.matchMedia.bind(window);
+      Object.defineProperty(navigator, 'maxTouchPoints', {
+        configurable: true,
+        value: 1,
+      });
+      window.matchMedia = query => {
+        if (query.includes('any-pointer: coarse')) {
+          return {
+            matches: true,
+            media: query,
+            onchange: null,
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+            addListener: () => undefined,
+            removeListener: () => undefined,
+            dispatchEvent: () => false,
+          };
+        }
+        if (query.includes('hover: none') || query.includes('pointer: coarse')) {
+          return {
+            matches: false,
+            media: query,
+            onchange: null,
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+            addListener: () => undefined,
+            removeListener: () => undefined,
+            dispatchEvent: () => false,
+          };
+        }
+        return nativeMatchMedia(query);
+      };
+    });
+    const page = await context.newPage();
+
+    try {
+      const payloads = await trackFeedbackPayloads(page);
+      await page.route('**/api/check/**', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ installed: true }),
+        });
+      });
+
+      await page.goto('/test/');
+
+      const host = page.locator('#bugdrop-host');
+      await host.locator('css=.bd-trigger').click();
+      await host.locator('css=[data-action="continue"]').click();
+      await host.locator('css=#title').fill('Hybrid touch area test');
+      await host.locator('css=#include-screenshot').check();
+      await host.locator('css=#submit-btn').click();
+      await host.locator('css=[data-action="area"]').click();
+
+      await expect(page.locator('#bugdrop-area-picker-tooltip')).not.toContainText('ESC');
+      const cancelButton = page.locator('#bugdrop-area-picker-cancel');
+      await expect(cancelButton).toHaveText('Cancel');
+
+      await cancelButton.click();
+      await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+      expect(payloads).toHaveLength(1);
+      expect(payloads[0].screenshot).toBeNull();
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('area picker touch drags pass through non-link prompt text', async ({ browser }) => {
+    const context = await browser.newContext({
+      hasTouch: true,
+      isMobile: true,
+      viewport: { width: 390, height: 844 },
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.route('**/api/check/**', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ installed: true }),
+        });
+      });
+
+      await page.goto('/test/');
+
+      const host = page.locator('#bugdrop-host');
+      await host.locator('css=.bd-trigger').click();
+      await host.locator('css=[data-action="continue"]').click();
+      await host.locator('css=#title').fill('Prompt pass-through test');
+      await host.locator('css=#include-screenshot').check();
+      await host.locator('css=#submit-btn').click();
+      await host.locator('css=[data-action="area"]').click();
+
+      const tooltip = page.locator('#bugdrop-area-picker-tooltip');
+      await expect(tooltip).toBeVisible({ timeout: 5000 });
+
+      const tooltipBox = await tooltip.boundingBox();
+      expect(tooltipBox).not.toBeNull();
+      const startX = Math.round(tooltipBox!.x + tooltipBox!.width / 2);
+      const startY = Math.round(tooltipBox!.y + 8);
+
+      await page.evaluate(
+        ({ x, y }) => {
+          const startTarget = document.elementFromPoint(x, y);
+          if (!startTarget) throw new Error('no start target for prompt drag');
+
+          startTarget.dispatchEvent(
+            new PointerEvent('pointerdown', {
+              bubbles: true,
+              cancelable: true,
+              clientX: x,
+              clientY: y,
+              pointerId: 2,
+              pointerType: 'touch',
+              isPrimary: true,
+              buttons: 1,
+            })
+          );
+          document.dispatchEvent(
+            new PointerEvent('pointermove', {
+              bubbles: true,
+              cancelable: true,
+              clientX: x,
+              clientY: y + 180,
+              pointerId: 2,
+              pointerType: 'touch',
+              isPrimary: true,
+              buttons: 1,
+            })
+          );
+        },
+        { x: startX, y: startY }
+      );
+
+      await expect(page.locator('#bugdrop-area-picker-selection')).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('area picker accepts touch drag selection on mobile', async ({ browser }) => {
+    const context = await browser.newContext({
+      hasTouch: true,
+      isMobile: true,
+      viewport: { width: 390, height: 844 },
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.route('**/api/check/**', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ installed: true }),
+        });
+      });
+
+      await page.goto('/test/');
+
+      const host = page.locator('#bugdrop-host');
+      await host.locator('css=.bd-trigger').click();
+      await host.locator('css=[data-action="continue"]').click();
+      await host.locator('css=#title').fill('Mobile area test');
+      await host.locator('css=#include-screenshot').check();
+      await host.locator('css=#submit-btn').click();
+      await host.locator('css=[data-action="area"]').click();
+
+      const overlay = page.locator('#bugdrop-area-picker-overlay');
+      await expect(overlay).toBeVisible({ timeout: 5000 });
+
+      const client = await context.newCDPSession(page);
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{ x: 40, y: 160, radiusX: 1, radiusY: 1, id: 1 }],
+      });
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x: 280, y: 420, radiusX: 1, radiusY: 1, id: 1 }],
+      });
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchEnd',
+        touchPoints: [],
+      });
+      await client.detach();
+
+      await expect(overlay).not.toBeVisible({ timeout: 5000 });
+      await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 30000 });
+    } finally {
+      await context.close();
+    }
   });
 
   test('screenshot options prioritize capture actions before skip', async ({ page }) => {
