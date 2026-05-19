@@ -78,7 +78,9 @@ BugDrop is built with a privacy-first approach:
 
 ### Screenshot masking
 
-You can mark sensitive elements so BugDrop visually covers them in supported screenshot modes. Add `data-bugdrop-redact` or `data-bugdrop-mask` to any element you want covered:
+BugDrop supports developer-configured visual masking for screenshots. Add
+`data-bugdrop-redact` or `data-bugdrop-mask` to any DOM element that should be
+covered:
 
 ```html
 <input type="email" data-bugdrop-redact />
@@ -92,16 +94,14 @@ You can mark sensitive elements so BugDrop visually covers them in supported scr
 Supported explicit attributes are `data-bugdrop-redact`, `data-bd-redact`,
 `data-bugdrop-redacted`, and `data-bugdrop-mask`.
 
-When a user submits feedback, BugDrop plans redactions from matching DOM
-elements, then paints an opaque rectangle over each target's measured bounding
-box on supported captured PNGs. In manual screenshot flows, the masked image is
-shown in the annotator preview so the user can audit it before submitting. In
-automatic screenshot mode, BugDrop applies supported masks but submits without
-showing the preview step.
+When capture starts, BugDrop records the geometry of matching DOM elements,
+renders the screenshot, then paints opaque rectangles over those measured boxes
+in the PNG. The submitted image contains the black rectangles. The original page
+DOM is not mutated.
 
-Masking is best-effort visual coverage, not a data-loss-prevention or security
-boundary. Users should still review screenshots before submitting when the manual
-screenshot flow is enabled.
+Masking is visual coverage, not data-loss prevention. BugDrop does not inspect
+text or pixels to discover secrets. Developers must mark the sensitive regions
+they control, and users should review manual screenshots before submitting.
 
 **Inheritance.** When an ancestor has `data-bugdrop-mask`, the entire ancestor box is
 masked as a single rectangle. Descendants do not get individual rectangles — this
@@ -112,26 +112,25 @@ prevents gaps from CSS `gap` or non-masked siblings inside a masked container.
 - `input[type="password"]`
 - Any input with `autocomplete="cc-number"`, `cc-csc`, or `cc-exp`
 
-**Known limitations:**
+| Surface | Behavior | Recommended control |
+| --- | --- | --- |
+| Regular DOM elements | Marked element box is covered | Mark the smallest stable container that fully encloses the sensitive content |
+| Password and credit-card inputs | Covered automatically | No extra attribute required, but explicit marks are fine |
+| Open Shadow DOM | Traversed when the browser exposes `shadowRoot` | Mark inner controls or the host |
+| Closed Shadow DOM | Not traversed | Mark the host custom element |
+| Iframes | Iframe internals are not traversed | Mark the iframe element if the whole embedded frame is sensitive |
+| Canvas, image, SVG, video | Internal pixels are not inspected | Mark the element or a containing wrapper |
+| Pseudo-elements and highly custom controls | Generated pixels are not inspected separately | Mark a stable wrapper around the whole control |
+| Native viewport capture fallback | Element masks cannot be applied | Avoid viewport fallback on pages that require masking |
 
-- Elements inside open Shadow DOM are traversed when the browser exposes the
-  shadow root. Closed Shadow DOM cannot be traversed; mark the host element if
-  the whole custom control should be covered.
-- Iframe contents are not traversed. Mark the iframe element itself if the whole
-  embedded frame should be visually covered.
-- BugDrop does not inspect pixels or text inside canvas, image, video, plugin,
-  or iframe content. Mark the containing DOM element if that entire region should
-  be visually covered.
-- Mask rectangles are collected at the start of capture. If the page reflows or reveals
-  sensitive elements between collection and the moment `html-to-image` finishes
-  rendering, the mask may not cover the final pixels. Keep masked content stable during
-  the brief capture window.
-- **Viewport capture fallback (very complex pages):** When the page exceeds the
-  full-page DOM-complexity threshold, BugDrop falls back to a screen-recording
-  capture (via the browser's `getDisplayMedia` API). That path captures the
-  visible viewport directly and does not apply element masks. If you rely on
-  masking, ensure the user is not capturing through this fallback when sensitive
-  elements are visible.
+If a marked region includes embedded, media, or pixel-rendered content, BugDrop
+covers the marked element box and warns the user in manual screenshot review
+flows that it cannot inspect the internal pixels. Automatic screenshot mode
+still applies supported masks, but it submits without showing a review step.
+
+Mask rectangles are measured at capture start. If the page reflows or reveals
+sensitive elements after that measurement but before rendering finishes, a mask
+can become stale. Keep sensitive marked regions stable during capture.
 
 The only network requests BugDrop makes are:
 
