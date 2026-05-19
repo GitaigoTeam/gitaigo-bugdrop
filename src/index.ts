@@ -72,7 +72,7 @@ app.get('/test/local-config.js', async c => {
   }
   return new Response('', {
     headers: {
-      'content-type': 'application/javascript; charset=utf-8',
+      'content-type': 'text/javascript; charset=utf-8',
     },
   });
 });

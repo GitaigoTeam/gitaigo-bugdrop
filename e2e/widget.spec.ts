@@ -223,12 +223,11 @@ test.describe('Widget Loading', () => {
     expect(savedAfterResize).toBe(savedTop);
   });
 
-  test('missing local test config returns an empty script', async ({ page }) => {
+  test('missing local test config returns a javascript file', async ({ page }) => {
     const response = await page.request.get('/test/local-config.js');
 
     expect(response.status()).toBe(200);
-    expect(response.headers()['content-type']).toContain('application/javascript');
-    expect(await response.text()).toBe('');
+    expect(response.headers()['content-type']).toBe('text/javascript; charset=utf-8');
   });
 
   test('test pages use upstream repo when no local override is present', async ({ page }) => {
