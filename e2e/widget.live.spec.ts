@@ -106,6 +106,31 @@ async function trackLiveFeedbackPayloads(page: Page) {
   return payloads;
 }
 
+async function clearTriggerPositionStorage(page: Page) {
+  await page.evaluate(() => {
+    Object.keys(localStorage)
+      .filter(key => key.startsWith('bugdrop_trigger_position_'))
+      .forEach(key => localStorage.removeItem(key));
+  });
+}
+
+async function dragTriggerHandle(page: Page, deltaY: number) {
+  const handle = page.locator('#bugdrop-host').locator('css=.bd-trigger-drag-handle');
+  await expect(handle).toBeVisible({ timeout: 10_000 });
+
+  const handleBox = await handle.boundingBox();
+  expect(handleBox).not.toBeNull();
+
+  await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    handleBox!.x + handleBox!.width / 2,
+    handleBox!.y + handleBox!.height / 2 + deltaY,
+    { steps: 8 }
+  );
+  await page.mouse.up();
+}
+
 async function countRedPixelsInRegion(
   canvas: Locator,
   region: { left: number; top: number; right: number; bottom: number }
@@ -323,6 +348,33 @@ test.describe('Feedback Button (Live)', () => {
 
     const modal = page.locator('#bugdrop-host').locator('css=.bd-modal');
     await expect(modal).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('feedback button drag position persists on deployed preview widget', async ({ page }) => {
+    await page.goto(venuePath);
+    await clearTriggerPositionStorage(page);
+    await page.reload();
+
+    const host = page.locator('#bugdrop-host');
+    const trigger = host.locator('css=.bd-trigger');
+    await expect(trigger).toBeVisible({ timeout: 10_000 });
+
+    await dragTriggerHandle(page, -140);
+
+    const draggedTop = await trigger.evaluate(el => el.getBoundingClientRect().top);
+    const storedPosition = await page.evaluate(() => {
+      const key = Object.keys(localStorage).find(k => k.startsWith('bugdrop_trigger_position_'));
+      return key ? localStorage.getItem(key) : null;
+    });
+
+    expect(storedPosition).not.toBeNull();
+    await expect(host.locator('css=.bd-modal')).not.toBeVisible();
+
+    await page.reload();
+    await expect(trigger).toBeVisible({ timeout: 10_000 });
+
+    const restoredTop = await trigger.evaluate(el => el.getBoundingClientRect().top);
+    expect(Math.abs(restoredTop - draggedTop)).toBeLessThanOrEqual(2);
   });
 });
 

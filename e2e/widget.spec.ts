@@ -30,6 +30,37 @@ declare global {
  * Tests run against wrangler dev server at http://localhost:8787
  */
 
+async function clearTriggerPositionStorage(page: Page) {
+  await page.evaluate(() => {
+    Object.keys(localStorage)
+      .filter(key => key.startsWith('bugdrop_trigger_position_'))
+      .forEach(key => localStorage.removeItem(key));
+  });
+}
+
+async function dragTriggerHandle(page: Page, deltaY: number) {
+  const handle = page.locator('#bugdrop-host').locator('css=.bd-trigger-drag-handle');
+  await expect(handle).toBeVisible();
+
+  const handleBox = await handle.boundingBox();
+  expect(handleBox).not.toBeNull();
+
+  await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    handleBox!.x + handleBox!.width / 2,
+    handleBox!.y + handleBox!.height / 2 + deltaY,
+    { steps: 8 }
+  );
+  await page.mouse.up();
+}
+
+async function getWidgetRepo(page: Page) {
+  return page.locator('script[src="/widget.js"]').evaluate(script => {
+    return (script as HTMLScriptElement).dataset.repo;
+  });
+}
+
 test.describe('Widget Loading', () => {
   test('page loads without console errors', async ({ page }) => {
     const errors: string[] = [];
@@ -63,6 +94,133 @@ test.describe('Widget Loading', () => {
     // Access button inside shadow DOM
     const button = page.locator('#bugdrop-host').locator('css=.bd-trigger');
     await expect(button).toBeVisible();
+  });
+
+  test('feedback button is an edge label with a drag handle', async ({ page }) => {
+    await page.goto('/test/');
+    const host = page.locator('#bugdrop-host');
+    const trigger = host.locator('css=.bd-trigger');
+    await expect(trigger).toBeVisible({ timeout: 5000 });
+    await trigger.evaluate(async el => {
+      await Promise.all(el.getAnimations().map(animation => animation.finished));
+    });
+
+    const viewport = page.viewportSize();
+    expect(viewport).not.toBeNull();
+
+    const triggerBox = await trigger.boundingBox();
+    expect(triggerBox).not.toBeNull();
+    expect(Math.round(triggerBox!.x + triggerBox!.width)).toBe(viewport!.width);
+
+    await expect(trigger).toHaveCSS('border-top-right-radius', '0px');
+    await expect(trigger).toHaveCSS('border-bottom-right-radius', '0px');
+    await expect(host.locator('css=.bd-trigger-drag-handle')).toBeVisible();
+    await expect(host.locator('css=.bd-trigger-drag-handle')).toHaveCSS('cursor', 'grab');
+  });
+
+  test('dragging the feedback button persists after reload', async ({ page }) => {
+    await page.goto('/test/');
+    await clearTriggerPositionStorage(page);
+    await page.reload();
+
+    const host = page.locator('#bugdrop-host');
+    const trigger = host.locator('css=.bd-trigger');
+    await expect(trigger).toBeVisible({ timeout: 5000 });
+
+    await dragTriggerHandle(page, -160);
+
+    const draggedTop = await trigger.evaluate(el => el.getBoundingClientRect().top);
+    const repo = await getWidgetRepo(page);
+    const storedPosition = await page.evaluate(
+      key => localStorage.getItem(key),
+      `bugdrop_trigger_position_${repo}_bottom-right`
+    );
+    expect(storedPosition).not.toBeNull();
+
+    await expect(host.locator('css=.bd-modal')).not.toBeVisible();
+    await page.reload();
+    await expect(trigger).toBeVisible({ timeout: 5000 });
+
+    const restoredTop = await trigger.evaluate(el => el.getBoundingClientRect().top);
+    expect(Math.abs(restoredTop - draggedTop)).toBeLessThanOrEqual(2);
+  });
+
+  test('feedback button position reclamps when the viewport is resized', async ({ page }) => {
+    await page.setViewportSize({ width: 900, height: 900 });
+    await page.goto('/test/');
+    await clearTriggerPositionStorage(page);
+    await page.reload();
+
+    const trigger = page.locator('#bugdrop-host').locator('css=.bd-trigger');
+    await expect(trigger).toBeVisible({ timeout: 5000 });
+
+    await dragTriggerHandle(page, 500);
+    await page.setViewportSize({ width: 900, height: 360 });
+
+    await expect
+      .poll(async () => {
+        return trigger.evaluate(el => {
+          const rect = el.getBoundingClientRect();
+          return window.innerHeight - rect.bottom;
+        });
+      })
+      .toBeGreaterThanOrEqual(7);
+  });
+
+  test('hidden feedback button keeps saved position across viewport resize', async ({ page }) => {
+    await page.setViewportSize({ width: 900, height: 700 });
+    await page.goto('/test/');
+    await clearTriggerPositionStorage(page);
+    await page.reload();
+
+    const trigger = page.locator('#bugdrop-host').locator('css=.bd-trigger');
+    await expect(trigger).toBeVisible({ timeout: 5000 });
+
+    await dragTriggerHandle(page, -140);
+
+    await page.evaluate(() => {
+      (window as Window & { BugDrop?: { hide: () => void } }).BugDrop?.hide();
+    });
+    await page.setViewportSize({ width: 900, height: 500 });
+    await page.evaluate(() => {
+      (window as Window & { BugDrop?: { show: () => void } }).BugDrop?.show();
+    });
+    await page.mouse.move(10, 10);
+
+    await expect
+      .poll(async () => {
+        return trigger.evaluate(el => {
+          const rect = el.getBoundingClientRect();
+          return window.innerHeight - rect.bottom;
+        });
+      })
+      .toBeGreaterThanOrEqual(0);
+
+    const shownTop = await trigger.evaluate(el => el.getBoundingClientRect().top);
+    expect(shownTop).toBeGreaterThan(100);
+  });
+
+  test('hovered feedback button does not drift saved position during resize', async ({ page }) => {
+    await page.setViewportSize({ width: 900, height: 900 });
+    await page.goto('/test/');
+    await clearTriggerPositionStorage(page);
+    await page.reload();
+
+    const trigger = page.locator('#bugdrop-host').locator('css=.bd-trigger');
+    await expect(trigger).toBeVisible({ timeout: 5000 });
+
+    await dragTriggerHandle(page, -160);
+    const repo = await getWidgetRepo(page);
+    const storageKey = `bugdrop_trigger_position_${repo}_bottom-right`;
+    const savedTop = await page.evaluate(key => localStorage.getItem(key), storageKey);
+    expect(savedTop).not.toBeNull();
+
+    await trigger.hover();
+    await page.setViewportSize({ width: 900, height: 860 });
+    await page.setViewportSize({ width: 900, height: 900 });
+
+    const savedAfterResize = await page.evaluate(key => localStorage.getItem(key), storageKey);
+    expect(savedAfterResize).toBe(savedTop);
   });
 
   test('missing local test config returns an empty script', async ({ page }) => {
@@ -895,8 +1053,10 @@ test.describe('Dismissible Button', () => {
   test('dismissible button works with bottom-left position', async ({ page }) => {
     await page.goto('/test/dismissible-left.html');
     await page.evaluate(() => localStorage.removeItem('bugdrop_dismissed'));
+    await clearTriggerPositionStorage(page);
     await page.reload();
 
+    const host = page.locator('#bugdrop-host');
     const trigger = page.locator('#bugdrop-host').locator('css=.bd-trigger');
     await expect(trigger).toBeVisible({ timeout: 5000 });
 
@@ -909,8 +1069,27 @@ test.describe('Dismissible Button', () => {
       expect(buttonBox.x).toBeLessThan(viewportWidth / 2);
     }
 
+    await expect(trigger).toHaveCSS('border-top-left-radius', '0px');
+    await expect(trigger).toHaveCSS('border-bottom-left-radius', '0px');
+
+    const firstChildClass = await trigger.evaluate(el => el.firstElementChild?.className);
+    expect(firstChildClass).toContain('bd-trigger-drag-handle');
+
+    await dragTriggerHandle(page, -120);
+    const repo = await getWidgetRepo(page);
+    const leftPosition = await page.evaluate(
+      key => localStorage.getItem(key),
+      `bugdrop_trigger_position_${repo}_bottom-left`
+    );
+    const rightPosition = await page.evaluate(
+      key => localStorage.getItem(key),
+      `bugdrop_trigger_position_${repo}_bottom-right`
+    );
+    expect(leftPosition).not.toBeNull();
+    expect(rightPosition).toBeNull();
+
     // Close button should exist and work
-    const closeBtn = page.locator('#bugdrop-host').locator('css=.bd-trigger-close');
+    const closeBtn = host.locator('css=.bd-trigger-close');
     await expect(closeBtn).toBeAttached();
 
     // Hover and dismiss
@@ -918,6 +1097,30 @@ test.describe('Dismissible Button', () => {
     await expect(closeBtn).toHaveCSS('opacity', '1', { timeout: 2000 });
     await closeBtn.click();
     await expect(trigger).not.toBeAttached();
+  });
+
+  test('drag handle top area does not dismiss the feedback button', async ({ page }) => {
+    await page.goto('/test/dismissible.html');
+    await page.evaluate(() => localStorage.removeItem('bugdrop_dismissed'));
+    await clearTriggerPositionStorage(page);
+    await page.reload();
+
+    const host = page.locator('#bugdrop-host');
+    const trigger = host.locator('css=.bd-trigger');
+    const handle = host.locator('css=.bd-trigger-drag-handle');
+    await expect(trigger).toBeVisible({ timeout: 5000 });
+
+    const handleBox = await handle.boundingBox();
+    expect(handleBox).not.toBeNull();
+
+    await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + 4);
+    await page.mouse.down();
+    await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y - 100, { steps: 8 });
+    await page.mouse.up();
+
+    await expect(trigger).toBeVisible();
+    await expect(host.locator('css=.bd-pull-tab')).not.toBeAttached();
+    expect(await page.evaluate(() => localStorage.getItem('bugdrop_dismissed'))).toBeNull();
   });
 
   test('close icon is always visible on touch devices', async ({ browser }) => {

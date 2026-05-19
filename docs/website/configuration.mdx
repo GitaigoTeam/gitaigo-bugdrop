@@ -58,8 +58,12 @@ The `data-theme` attribute controls the overall color scheme of the widget:
 
 The `data-position` attribute controls where the floating button appears:
 
-- **`bottom-right`** (default) -- Fixed to the bottom-right corner
-- **`bottom-left`** -- Fixed to the bottom-left corner
+- **`bottom-right`** (default) -- Anchored to the right edge
+- **`bottom-left`** -- Anchored to the left edge
+
+The button is shown as an edge label with a small drag handle. Users can drag it vertically
+when it covers page content, and BugDrop remembers that position in the browser for the same
+repository and side.
 
 ## Issue Link Visibility
 
@@ -113,18 +117,18 @@ Allow users to dismiss the floating button so it does not obstruct their view. T
 | Attribute | Default | Description |
 |-----------|---------|-------------|
 | `data-button-dismissible` | `"false"` | Allow users to dismiss (hide) the floating button |
-| `data-dismiss-duration` | `"session"` | How long the button stays dismissed: `"session"` (until tab close) or a number in minutes (e.g., `"60"`) |
+| `data-dismiss-duration` | Forever | How long the button stays dismissed: omit for forever, or provide a number of days (e.g., `"7"`) |
 | `data-show-restore` | `"true"` | Show a small restore link after dismissing |
 
 ### Dismissible Button Example
 
 ```html
-<!-- Dismissible button that stays hidden for 60 minutes -->
+<!-- Dismissible button that stays hidden for 7 days -->
 <script
   src="https://bugdrop.neonwatty.workers.dev/widget.js"
   data-repo="owner/repo"
   data-button-dismissible="true"
-  data-dismiss-duration="60"
+  data-dismiss-duration="7"
   data-show-restore="true"
 ></script>
 ```
@@ -134,7 +138,7 @@ When a user dismisses the button:
 1. The floating button hides
 2. If `data-show-restore` is `"true"`, a small "Restore feedback button" link appears in the corner
 3. The button stays hidden for the duration specified by `data-dismiss-duration`
-4. After the duration expires (or the session ends), the button reappears automatically
+4. After the duration expires, the button reappears automatically
 
 ## Feedback Categories
 
@@ -389,13 +393,13 @@ Here is a script tag using many configuration options together:
   data-show-email="true"
   data-require-email="true"
   data-button-dismissible="true"
-  data-dismiss-duration="120"
+  data-dismiss-duration="7"
   data-show-restore="true"
   data-label="Feedback"
 ></script>
 ```
 
-This configuration creates a dark-themed widget in the bottom-left corner with an indigo accent color, collects the submitter's name and email (email required), and shows a "Feedback" label on the button. The button is dismissible for 2 hours with a restore link.
+This configuration creates a dark-themed widget in the bottom-left corner with an indigo accent color, collects the submitter's name and email (email required), and shows a "Feedback" label on the button. The button is dismissible for 7 days with a restore link.
 
 ## Next Steps
 
