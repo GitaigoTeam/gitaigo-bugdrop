@@ -730,13 +730,146 @@ test.describe('Widget Interaction', () => {
     // Tooltip should be visible
     const tooltip = page.locator('#bugdrop-area-picker-tooltip');
     await expect(tooltip).toBeVisible();
-    await expect(tooltip).toHaveText('Draw a selection around the area to capture');
-    await expect(page.locator('#bugdrop-area-picker-cancel')).toHaveText('Cancel');
+    await expect(tooltip).toHaveText('Draw a selection around the area to capture (ESC to cancel)');
+    await expect(page.locator('#bugdrop-area-picker-cancel')).not.toBeAttached();
 
-    await page.locator('#bugdrop-area-picker-cancel').click();
+    await page.keyboard.press('Escape');
 
     // Overlay should be removed
     await expect(overlay).not.toBeVisible({ timeout: 3000 });
+  });
+
+  test('area picker prompt clears mobile safe areas and uses an inline cancel link', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      hasTouch: true,
+      isMobile: true,
+      viewport: { width: 390, height: 844 },
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.route('**/api/check/**', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ installed: true }),
+        });
+      });
+
+      await page.goto('/test/');
+      await page.addStyleTag({
+        content: `
+          button {
+            display: block;
+            width: 100%;
+          }
+        `,
+      });
+
+      const host = page.locator('#bugdrop-host');
+      await host.locator('css=.bd-trigger').click();
+      await host.locator('css=[data-action="continue"]').click();
+      await host.locator('css=#title').fill('Mobile safe area test');
+      await host.locator('css=#include-screenshot').check();
+      await host.locator('css=#submit-btn').click();
+      await host.locator('css=[data-action="area"]').click();
+
+      const tooltip = page.locator('#bugdrop-area-picker-tooltip');
+      const cancelLink = page.locator('#bugdrop-area-picker-cancel');
+      await expect(tooltip).toBeVisible({ timeout: 5000 });
+      await expect(tooltip).not.toContainText('ESC');
+      await expect(cancelLink).toHaveText('Cancel');
+
+      await expect
+        .poll(() => tooltip.evaluate(el => (el as HTMLElement).style.top))
+        .toContain('safe-area-inset-top');
+      const cancelBox = await cancelLink.boundingBox();
+      expect(cancelBox).not.toBeNull();
+      expect(cancelBox!.width).toBeLessThan(80);
+
+      await cancelLink.click();
+      await expect(page.locator('#bugdrop-area-picker-overlay')).not.toBeVisible({
+        timeout: 3000,
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('area picker touch drags pass through non-link prompt text', async ({ browser }) => {
+    const context = await browser.newContext({
+      hasTouch: true,
+      isMobile: true,
+      viewport: { width: 390, height: 844 },
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.route('**/api/check/**', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ installed: true }),
+        });
+      });
+
+      await page.goto('/test/');
+
+      const host = page.locator('#bugdrop-host');
+      await host.locator('css=.bd-trigger').click();
+      await host.locator('css=[data-action="continue"]').click();
+      await host.locator('css=#title').fill('Prompt pass-through test');
+      await host.locator('css=#include-screenshot').check();
+      await host.locator('css=#submit-btn').click();
+      await host.locator('css=[data-action="area"]').click();
+
+      const tooltip = page.locator('#bugdrop-area-picker-tooltip');
+      await expect(tooltip).toBeVisible({ timeout: 5000 });
+
+      const tooltipBox = await tooltip.boundingBox();
+      expect(tooltipBox).not.toBeNull();
+      const startX = Math.round(tooltipBox!.x + tooltipBox!.width / 2);
+      const startY = Math.round(tooltipBox!.y + 8);
+
+      await page.evaluate(
+        ({ x, y }) => {
+          const startTarget = document.elementFromPoint(x, y);
+          if (!startTarget) throw new Error('no start target for prompt drag');
+
+          startTarget.dispatchEvent(
+            new PointerEvent('pointerdown', {
+              bubbles: true,
+              cancelable: true,
+              clientX: x,
+              clientY: y,
+              pointerId: 2,
+              pointerType: 'touch',
+              isPrimary: true,
+              buttons: 1,
+            })
+          );
+          document.dispatchEvent(
+            new PointerEvent('pointermove', {
+              bubbles: true,
+              cancelable: true,
+              clientX: x,
+              clientY: y + 180,
+              pointerId: 2,
+              pointerType: 'touch',
+              isPrimary: true,
+              buttons: 1,
+            })
+          );
+        },
+        { x: startX, y: startY }
+      );
+
+      await expect(page.locator('#bugdrop-area-picker-selection')).toBeVisible();
+    } finally {
+      await context.close();
+    }
   });
 
   test('area picker accepts touch drag selection on mobile', async ({ browser }) => {
