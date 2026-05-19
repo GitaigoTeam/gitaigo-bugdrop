@@ -46,8 +46,8 @@ export default tseslint.config(
       'src/routes/api.ts',
     ],
     rules: {
-      'max-lines': ['warn', { max: 300, skipBlankLines: true, skipComments: true }],
-      'max-lines-per-function': ['warn', { max: 150, skipBlankLines: true, skipComments: true }],
+      'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
+      'max-lines-per-function': ['error', { max: 150, skipBlankLines: true, skipComments: true }],
     },
   }
 );
