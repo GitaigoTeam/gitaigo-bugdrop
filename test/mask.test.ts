@@ -304,6 +304,48 @@ describe('collectMaskRects — nesting and scoping', () => {
     ]);
   });
 
+  it('reports inline SVG unsupported surfaces with lowercase tag names', () => {
+    const svg = withRect(
+      document.createElementNS('http://www.w3.org/2000/svg', 'svg') as unknown as HTMLElement,
+      0,
+      0,
+      200,
+      100
+    );
+    svg.setAttribute('data-bugdrop-mask', '');
+    document.body.appendChild(svg);
+
+    expect(createRedactionSnapshot(document.body).unsupportedSurfaces).toMatchObject([
+      {
+        tagName: 'svg',
+        reason: 'pixel-content',
+        rect: { x: 0, y: 0, w: 200, h: 100 },
+      },
+    ]);
+  });
+
+  it('reports inline SVG descendants inside a marked wrapper', () => {
+    const wrapper = withRect(document.createElement('section'), 0, 0, 300, 160);
+    wrapper.setAttribute('data-bugdrop-mask', '');
+    const svg = withRect(
+      document.createElementNS('http://www.w3.org/2000/svg', 'svg') as unknown as HTMLElement,
+      30,
+      40,
+      120,
+      60
+    );
+    wrapper.appendChild(svg);
+    document.body.appendChild(wrapper);
+
+    expect(createRedactionSnapshot(document.body).unsupportedSurfaces).toMatchObject([
+      {
+        tagName: 'svg',
+        reason: 'pixel-content',
+        rect: { x: 30, y: 40, w: 120, h: 60 },
+      },
+    ]);
+  });
+
   it.each(['canvas', 'img', 'video'] as const)(
     'does not treat unmarked %s pixels as redaction targets',
     tagName => {

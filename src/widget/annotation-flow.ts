@@ -25,7 +25,7 @@ export function showAnnotationStep(
       }
       if (opts?.redactionLimitations) {
         redactionMessages.push(
-          'BugDrop covered the marked element boxes. It does not inspect or selectively redact pixels inside iframes, canvas, images, SVGs, or videos, so mark the whole sensitive region and review before sending.'
+          'BugDrop only covered the measured marked boxes. It does not inspect pixels inside embedded or rendered content such as iframes, canvas, images, SVGs, videos, CSS backgrounds, or custom controls. Confirm the black box fully covers the sensitive region before sending, or retake after marking a larger wrapper.'
         );
       }
     }

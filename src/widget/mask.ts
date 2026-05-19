@@ -1,22 +1,22 @@
-export interface MaskRect {
+interface MaskRect {
   x: number;
   y: number;
   w: number;
   h: number;
 }
 
-export type RedactionReason = 'developer-marked' | 'sensitive-input';
-export type RedactionStrategy = 'canvas-mask';
-export type UnsupportedSurfaceReason = 'embedded-document' | 'pixel-content' | 'media-content';
+type RedactionReason = 'developer-marked' | 'sensitive-input';
+type RedactionStrategy = 'canvas-mask';
+type UnsupportedSurfaceReason = 'embedded-document' | 'pixel-content' | 'media-content';
 
-export interface RedactionTarget {
+interface RedactionTarget {
   element: Element;
   rect: MaskRect;
   reason: RedactionReason;
   strategy: RedactionStrategy;
 }
 
-export interface UnsupportedRedactionSurface {
+interface UnsupportedRedactionSurface {
   tagName: string;
   reason: UnsupportedSurfaceReason;
   rect: MaskRect;
@@ -207,9 +207,10 @@ function collectUnsupportedSurface(
 }
 
 function getUnsupportedSurfaceReason(element: Element): UnsupportedSurfaceReason | null {
-  if (element.tagName === 'IFRAME') return 'embedded-document';
-  if (PIXEL_CONTENT_TAGS.has(element.tagName)) return 'pixel-content';
-  if (MEDIA_CONTENT_TAGS.has(element.tagName)) return 'media-content';
+  const tagName = element.tagName.toUpperCase();
+  if (tagName === 'IFRAME') return 'embedded-document';
+  if (PIXEL_CONTENT_TAGS.has(tagName)) return 'pixel-content';
+  if (MEDIA_CONTENT_TAGS.has(tagName)) return 'media-content';
   return null;
 }
 

@@ -4976,6 +4976,20 @@ test.describe('Screenshot Masking', () => {
     }, selector);
   }
 
+  async function shadowDocRectOf(page: Page, hostSelector: string, shadowSelector: string) {
+    return page.locator(hostSelector).evaluate((host, selector) => {
+      const el = host.shadowRoot?.querySelector(selector);
+      if (!el) throw new Error(`no shadow element matches ${selector}`);
+      const r = el.getBoundingClientRect();
+      return {
+        x: r.left + window.scrollX,
+        y: r.top + window.scrollY,
+        w: r.width,
+        h: r.height,
+      };
+    }, shadowSelector);
+  }
+
   async function imagePixelRatio(page: Page, dataUrl: string): Promise<number> {
     return page.evaluate(
       url =>
@@ -5318,17 +5332,7 @@ test.describe('Screenshot Masking', () => {
       '/test/masking-edge-surfaces.html'
     );
 
-    const rect = await page.locator('#open-shadow-host').evaluate(el => {
-      const input = el.shadowRoot?.querySelector('#shadow-secret');
-      if (!input) throw new Error('shadow secret not found');
-      const r = input.getBoundingClientRect();
-      return {
-        x: r.left + window.scrollX,
-        y: r.top + window.scrollY,
-        w: r.width,
-        h: r.height,
-      };
-    });
+    const rect = await shadowDocRectOf(page, '#open-shadow-host', '#shadow-secret');
 
     expect(
       await pixelAt(
@@ -5375,7 +5379,20 @@ test.describe('Screenshot Masking', () => {
 
     const note = host.locator('css=.bd-redaction-note');
     await expect(note).toContainText('private');
-    await expect(note).toContainText('BugDrop covered the marked element boxes');
+    await expect(note).toContainText('BugDrop only covered the measured marked boxes');
+
+    const canvasRect = await docRectOf(page, '#secret-canvas');
+    const canvas = host.locator('css=#annotation-canvas canvas');
+    const dataUrl = await canvas.evaluate(el => (el as HTMLCanvasElement).toDataURL('image/png'));
+    const pixelRatio = await imagePixelRatio(page, dataUrl);
+    expect(
+      await pixelAt(
+        page,
+        dataUrl,
+        Math.floor((canvasRect.x + canvasRect.w / 2) * pixelRatio),
+        Math.floor((canvasRect.y + canvasRect.h / 2) * pixelRatio)
+      )
+    ).toEqual([0, 0, 0, 255]);
   });
 
   test('warns when a marked wrapper contains unsupported pixel-rendered descendants', async ({
@@ -5383,7 +5400,7 @@ test.describe('Screenshot Masking', () => {
   }) => {
     await mockHtmlToImage(page, redactionAwarePng());
     await mockInstalledCheck(page);
-    await page.goto('/test/masking-edge-surfaces.html');
+    await page.goto('/test/masking-edge-surfaces.html?fixture=wrapper-only');
     const host = page.locator('#bugdrop-host');
 
     await host.locator('css=.bd-trigger').click();
@@ -5394,9 +5411,22 @@ test.describe('Screenshot Masking', () => {
     await host.locator('css=[data-action="capture"]').click();
 
     await expect(host.locator('css=.bd-redaction-note')).toContainText(
-      'BugDrop covered the marked element boxes',
+      'BugDrop only covered the measured marked boxes',
       { timeout: 30000 }
     );
+
+    const wrappedRect = await docRectOf(page, '#wrapped-secret-canvas');
+    const canvas = host.locator('css=#annotation-canvas canvas');
+    const dataUrl = await canvas.evaluate(el => (el as HTMLCanvasElement).toDataURL('image/png'));
+    const pixelRatio = await imagePixelRatio(page, dataUrl);
+    expect(
+      await pixelAt(
+        page,
+        dataUrl,
+        Math.floor((wrappedRect.x + wrappedRect.w / 2) * pixelRatio),
+        Math.floor((wrappedRect.y + wrappedRect.h / 2) * pixelRatio)
+      )
+    ).toEqual([0, 0, 0, 255]);
   });
 
   test('selected-area capture warns only for unsupported marked surfaces inside the crop', async ({
@@ -5423,7 +5453,7 @@ test.describe('Screenshot Masking', () => {
     await page.mouse.up();
 
     await expect(host.locator('css=.bd-redaction-note')).toContainText(
-      'BugDrop covered the marked element boxes',
+      'BugDrop only covered the measured marked boxes',
       { timeout: 30000 }
     );
   });
@@ -5451,8 +5481,9 @@ test.describe('Screenshot Masking', () => {
     await page.mouse.move(box.x + box.width + 8, box.y + box.height + 8);
     await page.mouse.up();
 
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 30000 });
     await expect(host.locator('css=.bd-redaction-note')).not.toContainText(
-      'BugDrop covered the marked element boxes',
+      'BugDrop only covered the measured marked boxes',
       { timeout: 30000 }
     );
   });

@@ -94,10 +94,11 @@ covered:
 Supported explicit attributes are `data-bugdrop-redact`, `data-bd-redact`,
 `data-bugdrop-redacted`, and `data-bugdrop-mask`.
 
-When capture starts, BugDrop records the geometry of matching DOM elements,
-renders the screenshot, then paints opaque rectangles over those measured boxes
-in the PNG. The submitted image contains the black rectangles. The original page
-DOM is not mutated.
+For supported DOM-rendered captures, when masking succeeds, BugDrop records the
+geometry of matching DOM elements, renders the screenshot, then paints opaque
+rectangles over those measured boxes in the PNG. The submitted image contains
+the black rectangles. If masking fails, BugDrop discards the screenshot instead
+of uploading it. The original page DOM is not mutated.
 
 Masking is visual coverage, not data-loss prevention. BugDrop does not inspect
 text or pixels to discover secrets. Developers must mark the sensitive regions
@@ -107,10 +108,14 @@ they control, and users should review manual screenshots before submitting.
 masked as a single rectangle. Descendants do not get individual rectangles — this
 prevents gaps from CSS `gap` or non-masked siblings inside a masked container.
 
-**Built-in defaults.** These are always masked, with or without an explicit attribute:
+**Built-in defaults.** In supported DOM-rendered screenshot paths, BugDrop
+automatically masks these with or without an explicit attribute:
 
 - `input[type="password"]`
 - Any input with `autocomplete="cc-number"`, `cc-csc`, or `cc-exp`
+
+These defaults do not apply to native viewport capture or skipped/failed
+screenshot paths.
 
 | Surface | Behavior | Recommended control |
 | --- | --- | --- |

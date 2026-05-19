@@ -93,7 +93,7 @@
         <iframe id="secret-frame" data-bugdrop-mask srcdoc="<p>iframe secret</p>"></iframe>
       </section>
 
-      <section id="wrapper-marked-surface" data-bugdrop-mask>
+      <section id="wrapper-marked-surface" class="wrapper-only-surface" data-bugdrop-mask>
         <p>Wrapper contains an unsupported descendant.</p>
         <canvas id="wrapped-secret-canvas" width="320" height="120"></canvas>
       </section>
@@ -139,6 +139,17 @@
 
       paintCanvas('secret-canvas', 'canvas secret');
       paintCanvas('wrapped-secret-canvas', 'wrapped canvas secret');
+
+      if (new URLSearchParams(window.location.search).get('fixture') === 'wrapper-only') {
+        document
+          .querySelectorAll(
+            '#secret-canvas, #secret-image, #secret-video, #secret-frame, #custom-control, #closed-shadow-host, #offscreen-secret'
+          )
+          .forEach(element => {
+            element.removeAttribute('data-bugdrop-mask');
+            element.removeAttribute('data-bugdrop-redact');
+          });
+      }
     </script>
 
     <script src="/test/load-widget.js"></script>
