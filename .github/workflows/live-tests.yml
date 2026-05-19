@@ -1,4 +1,4 @@
-name: Live Preview Tests
+name: Live Widget Tests
 
 on:
   workflow_call:
@@ -20,8 +20,8 @@ jobs:
     name: Live E2E Tests
     runs-on: ubuntu-latest
     env:
-      LIVE_TARGET: ${{ inputs.target || 'preview' }}
-      PLAYWRIGHT_BASE_URL: https://bugdrop-widget-test-git-preview-jermwatts-projects.vercel.app
+      LIVE_TARGET: ${{ github.event_name == 'schedule' && 'production' || inputs.target || 'preview' }}
+      PLAYWRIGHT_BASE_URL: ${{ (github.event_name == 'schedule' || inputs.target == 'production') && 'https://bugdrop-widget-test.vercel.app' || 'https://bugdrop-widget-test-git-preview-jermwatts-projects.vercel.app' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -38,30 +38,34 @@ jobs:
       - name: Install Playwright
         run: make install-playwright
 
-      - name: Wait for preview widget deployment
+      - name: Wait for widget deployment
         run: |
-          WORKER_URL="https://bugdrop-preview.neonwatty.workers.dev/api/health"
+          if [ "$LIVE_TARGET" = "preview" ]; then
+            WORKER_URL="https://bugdrop-preview.neonwatty.workers.dev/api/health"
+          else
+            WORKER_URL="https://bugdrop.neonwatty.workers.dev/api/health"
+          fi
           echo "Polling $WORKER_URL until ready..."
           for i in $(seq 1 30); do
             if curl -sfo /dev/null "$WORKER_URL"; then
-              echo "Preview worker ready after $((i * 10))s"
+              echo "$LIVE_TARGET worker ready after $((i * 10))s"
               exit 0
             fi
             echo "Attempt $i/30 — not ready, waiting 10s..."
             sleep 10
           done
-          echo "Preview worker not ready after 300s"
+          echo "$LIVE_TARGET worker not ready after 300s"
           exit 1
 
       - name: Verify test venue is reachable
         run: |
           VENUE_URL="${PLAYWRIGHT_BASE_URL}"
           echo "Checking test venue at $VENUE_URL..."
-          BYPASS_ARGS=""
+          BYPASS_ARGS=()
           if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
-            BYPASS_ARGS="-H x-vercel-protection-bypass:${VERCEL_AUTOMATION_BYPASS_SECRET}"
+            BYPASS_ARGS=(-H "x-vercel-protection-bypass:${VERCEL_AUTOMATION_BYPASS_SECRET}")
           fi
-          curl -sfo /dev/null $BYPASS_ARGS "$VENUE_URL" || (echo "Test venue unreachable at $VENUE_URL" && exit 1)
+          curl -sfo /dev/null "${BYPASS_ARGS[@]}" "$VENUE_URL" || (echo "Test venue unreachable at $VENUE_URL" && exit 1)
           echo "Test venue reachable"
         env:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
