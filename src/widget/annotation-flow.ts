@@ -5,19 +5,33 @@ export function showAnnotationStep(
   root: HTMLElement,
   screenshot: string,
   redactionCount = 0,
-  opts?: { redactionUnavailable?: boolean; selectedElementCapture?: boolean }
+  opts?: {
+    redactionUnavailable?: boolean;
+    redactionLimitations?: boolean;
+    selectedElementCapture?: boolean;
+  }
 ): Promise<string | 'retake' | 'cancel'> {
   return new Promise(resolve => {
-    let redactionNote = '';
+    const redactionMessages: string[] = [];
     if (opts?.redactionUnavailable) {
-      redactionNote = redactionNoteHtml(
+      redactionMessages.push(
         'This browser viewport capture could not apply automatic private-field masks. Review and cover any sensitive areas before sending.'
       );
-    } else if (redactionCount > 0) {
-      redactionNote = redactionNoteHtml(
-        `${redactionCount} private ${redactionCount === 1 ? 'item was' : 'items were'} marked for redaction in this screenshot. Review before sending.`
-      );
+    } else {
+      if (redactionCount > 0) {
+        redactionMessages.push(
+          `${redactionCount} private ${redactionCount === 1 ? 'item was' : 'items were'} marked for redaction in this screenshot. Review before sending.`
+        );
+      }
+      if (opts?.redactionLimitations) {
+        redactionMessages.push(
+          'BugDrop only covered the measured marked boxes. It does not inspect pixels inside embedded or rendered content such as iframes, canvas, images, SVGs, videos, CSS backgrounds, or custom controls. Confirm the black box fully covers the sensitive region before sending, or retake after marking a larger wrapper.'
+        );
+      }
     }
+    const redactionNote = redactionMessages.length
+      ? redactionNoteHtml(redactionMessages.join(' '))
+      : '';
     const selectedElementNote = opts?.selectedElementCapture
       ? `
         <p class="bd-selected-element-note" style="margin: -4px 0 12px; color: var(--bd-text-secondary); font-size: 13px;">

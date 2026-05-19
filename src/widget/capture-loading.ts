@@ -2,14 +2,17 @@ import { MaskApplicationError } from './mask';
 import {
   captureAreaScreenshot,
   captureScreenshot,
+  type CapturedScreenshot,
   type CaptureScreenshotOptions,
 } from './screenshot';
 import { createModal } from './ui';
 
 export type CaptureWithLoadingResult =
-  | { kind: 'ok'; dataUrl: string }
+  | { kind: 'ok'; dataUrl: string; redaction?: CapturedScreenshot['redaction'] }
   | { kind: 'skipped' }
   | { kind: 'cancelled' };
+
+type CapturePayload = string | CapturedScreenshot;
 
 export async function captureWithLoading(
   root: HTMLElement,
@@ -41,8 +44,8 @@ export async function captureAreaWithLoading(
 
 export async function capturePromiseWithLoading(
   root: HTMLElement,
-  capturePromise: Promise<string>,
-  retryCapture: () => Promise<string>,
+  capturePromise: Promise<CapturePayload>,
+  retryCapture: () => Promise<CapturePayload>,
   opts?: { allowSkip?: boolean; showLoading?: boolean }
 ): Promise<CaptureWithLoadingResult> {
   const loadingModal =
@@ -62,7 +65,7 @@ export async function capturePromiseWithLoading(
   try {
     const screenshot = await capturePromise;
     loadingModal?.remove();
-    return { kind: 'ok', dataUrl: screenshot };
+    return normalizeCaptureResult(screenshot);
   } catch (error) {
     console.warn('[BugDrop] Screenshot capture failed:', error);
     loadingModal?.remove();
@@ -146,4 +149,16 @@ function showMaskFailureModal(root: HTMLElement): Promise<CaptureWithLoadingResu
       resolve({ kind: 'skipped' });
     });
   });
+}
+
+function normalizeCaptureResult(capture: CapturePayload): CaptureWithLoadingResult {
+  if (typeof capture === 'string') {
+    return { kind: 'ok', dataUrl: capture };
+  }
+
+  return {
+    kind: 'ok',
+    dataUrl: capture.dataUrl,
+    redaction: capture.redaction,
+  };
 }

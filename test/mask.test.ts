@@ -4,7 +4,9 @@ import {
   applyMaskToImage,
   collectMaskRects,
   createRedactionPlan,
+  createRedactionSnapshot,
   MaskApplicationError,
+  summarizeRedactionSnapshot,
   translateMaskRect,
 } from '../src/widget/mask';
 
@@ -15,6 +17,10 @@ describe('mask module exports', () => {
 
   it('exports createRedactionPlan', () => {
     expect(typeof createRedactionPlan).toBe('function');
+  });
+
+  it('exports createRedactionSnapshot', () => {
+    expect(typeof createRedactionSnapshot).toBe('function');
   });
 
   it('exports applyMaskToImage', () => {
@@ -250,14 +256,94 @@ describe('collectMaskRects — nesting and scoping', () => {
     document.body.appendChild(iframe);
 
     expect(collectMaskRects(document.body)).toEqual([{ x: 0, y: 0, w: 200, h: 100 }]);
+    expect(createRedactionSnapshot(document.body).unsupportedSurfaces).toMatchObject([
+      {
+        tagName: 'IFRAME',
+        reason: 'embedded-document',
+        rect: { x: 0, y: 0, w: 200, h: 100 },
+      },
+    ]);
   });
 
-  it.each(['canvas', 'img', 'video'] as const)('masks a marked %s container', tagName => {
+  it.each([
+    ['canvas', 'pixel-content'],
+    ['img', 'pixel-content'],
+    ['video', 'media-content'],
+  ] as const)('masks a marked %s container', (tagName, reason) => {
     const media = withRect(document.createElement(tagName), 0, 0, 200, 100);
     media.setAttribute('data-bugdrop-mask', '');
     document.body.appendChild(media);
 
     expect(collectMaskRects(document.body)).toEqual([{ x: 0, y: 0, w: 200, h: 100 }]);
+    expect(createRedactionSnapshot(document.body).unsupportedSurfaces).toMatchObject([
+      {
+        tagName: tagName.toUpperCase(),
+        reason,
+        rect: { x: 0, y: 0, w: 200, h: 100 },
+      },
+    ]);
+  });
+
+  it('reports unsupported descendants inside a marked wrapper without adding child masks', () => {
+    const wrapper = withRect(document.createElement('section'), 0, 0, 300, 160);
+    wrapper.setAttribute('data-bugdrop-mask', '');
+    const canvas = withRect(document.createElement('canvas'), 20, 30, 120, 50);
+    wrapper.appendChild(canvas);
+    document.body.appendChild(wrapper);
+
+    const snapshot = createRedactionSnapshot(document.body);
+
+    expect(snapshot.targets).toHaveLength(1);
+    expect(snapshot.targets[0].rect).toEqual({ x: 0, y: 0, w: 300, h: 160 });
+    expect(snapshot.unsupportedSurfaces).toMatchObject([
+      {
+        tagName: 'CANVAS',
+        reason: 'pixel-content',
+        rect: { x: 20, y: 30, w: 120, h: 50 },
+      },
+    ]);
+  });
+
+  it('reports inline SVG unsupported surfaces with lowercase tag names', () => {
+    const svg = withRect(
+      document.createElementNS('http://www.w3.org/2000/svg', 'svg') as unknown as HTMLElement,
+      0,
+      0,
+      200,
+      100
+    );
+    svg.setAttribute('data-bugdrop-mask', '');
+    document.body.appendChild(svg);
+
+    expect(createRedactionSnapshot(document.body).unsupportedSurfaces).toMatchObject([
+      {
+        tagName: 'svg',
+        reason: 'pixel-content',
+        rect: { x: 0, y: 0, w: 200, h: 100 },
+      },
+    ]);
+  });
+
+  it('reports inline SVG descendants inside a marked wrapper', () => {
+    const wrapper = withRect(document.createElement('section'), 0, 0, 300, 160);
+    wrapper.setAttribute('data-bugdrop-mask', '');
+    const svg = withRect(
+      document.createElementNS('http://www.w3.org/2000/svg', 'svg') as unknown as HTMLElement,
+      30,
+      40,
+      120,
+      60
+    );
+    wrapper.appendChild(svg);
+    document.body.appendChild(wrapper);
+
+    expect(createRedactionSnapshot(document.body).unsupportedSurfaces).toMatchObject([
+      {
+        tagName: 'svg',
+        reason: 'pixel-content',
+        rect: { x: 30, y: 40, w: 120, h: 60 },
+      },
+    ]);
   });
 
   it.each(['canvas', 'img', 'video'] as const)(
@@ -314,6 +400,43 @@ describe('collectMaskRects — coordinates and visibility', () => {
 
     expect(collectMaskRects(document.body)).toEqual([{ x: 10, y: 20, w: 100, h: 50 }]);
   });
+
+  it('creates an immutable snapshot with target count and unsupported surface metadata', () => {
+    const privateSection = withRect(document.createElement('section'), 0, 0, 100, 40);
+    privateSection.setAttribute('data-bugdrop-mask', '');
+    const canvas = withRect(document.createElement('canvas'), 120, 0, 100, 40);
+    canvas.setAttribute('data-bugdrop-mask', '');
+    const iframe = withRect(document.createElement('iframe'), 240, 0, 100, 40);
+    iframe.setAttribute('data-bugdrop-mask', '');
+    document.body.append(privateSection, canvas, iframe);
+
+    const snapshot = createRedactionSnapshot(document.body);
+
+    expect(snapshot.targets).toHaveLength(3);
+    expect(snapshot.redactionCount).toBe(3);
+    expect(snapshot.unsupportedSurfaces).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tagName: 'CANVAS', reason: 'pixel-content' }),
+        expect.objectContaining({ tagName: 'IFRAME', reason: 'embedded-document' }),
+      ])
+    );
+
+    privateSection.remove();
+    expect(snapshot.targets).toHaveLength(3);
+  });
+
+  it('keeps offscreen target geometry in document coordinates', () => {
+    const spacer = document.createElement('div');
+    const input = withRect(document.createElement('input'), 12, 2400, 160, 32);
+    input.setAttribute('data-bugdrop-mask', '');
+    document.body.append(spacer, input);
+
+    const rect = input.getBoundingClientRect();
+    const snapshot = createRedactionSnapshot(document.body);
+
+    expect(snapshot.targets[0].rect.y).toBeCloseTo(rect.top + window.scrollY);
+    expect(snapshot.targets[0].rect.h).toBeGreaterThan(0);
+  });
 });
 
 describe('translateMaskRect', () => {
@@ -327,6 +450,12 @@ describe('translateMaskRect', () => {
     expect(
       translateMaskRect({ x: 110, y: 220, w: 100, h: 50 }, 2, { x: 100, y: 200 }, 1000, 1000)
     ).toEqual({ x: 19, y: 39, w: 202, h: 102 });
+  });
+
+  it('translates snapshot rectangles into selected-area image coordinates', () => {
+    expect(
+      translateMaskRect({ x: 120, y: 240, w: 40, h: 20 }, 2, { x: 100, y: 200 }, 300, 200)
+    ).toEqual({ x: 39, y: 79, w: 82, h: 42 });
   });
 
   it('clips a rect that overflows the canvas on the right and bottom', () => {
@@ -348,6 +477,51 @@ describe('translateMaskRect', () => {
     const out = translateMaskRect({ x: 1000, y: 1000, w: 50, h: 50 }, 1, { x: 0, y: 0 }, 100, 100);
     expect(out.w).toBeLessThanOrEqual(0);
     expect(out.h).toBeLessThanOrEqual(0);
+  });
+});
+
+describe('summarizeRedactionSnapshot', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('summarizes count and limitations for the whole snapshot', () => {
+    const input = withRect(document.createElement('input'), 0, 0, 100, 20);
+    input.setAttribute('data-bugdrop-mask', '');
+    const canvas = withRect(document.createElement('canvas'), 0, 40, 100, 40);
+    canvas.setAttribute('data-bugdrop-mask', '');
+    document.body.append(input, canvas);
+
+    expect(summarizeRedactionSnapshot(createRedactionSnapshot(document.body))).toEqual({
+      count: 2,
+      hasLimitations: true,
+    });
+  });
+
+  it('scopes limitation summaries to a selected area', () => {
+    const input = withRect(document.createElement('input'), 0, 0, 100, 20);
+    input.setAttribute('data-bugdrop-mask', '');
+    const canvas = withRect(document.createElement('canvas'), 0, 200, 100, 40);
+    canvas.setAttribute('data-bugdrop-mask', '');
+    document.body.append(input, canvas);
+
+    const snapshot = createRedactionSnapshot(document.body);
+
+    expect(
+      summarizeRedactionSnapshot(snapshot, {
+        x: 0,
+        y: 0,
+        width: 120,
+        height: 40,
+        top: 0,
+        left: 0,
+        right: 120,
+        bottom: 40,
+        toJSON() {
+          return {};
+        },
+      } as DOMRect)
+    ).toEqual({ count: 1, hasLimitations: false });
   });
 });
 

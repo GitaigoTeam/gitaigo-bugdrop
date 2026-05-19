@@ -297,9 +297,28 @@ Supported attributes:
 - `data-bugdrop-redacted`
 - `data-bugdrop-mask`
 
-This is best-effort visual masking, not a data-loss-prevention or security boundary. BugDrop can only mask content it can measure in the page DOM. Unmarked sensitive information can still appear, and browser rendering limits can apply to canvas, image, video, iframe, SVG, shadow DOM, pseudo-element, and highly custom control content.
+This is visual masking, not a data-loss-prevention or security boundary.
+BugDrop can only mask content it can measure in the page DOM. Unmarked
+sensitive information can still appear, and browser rendering limits can apply
+to canvas, image, video, iframe, SVG, shadow DOM, pseudo-element, and highly
+custom control content.
 
-Selected-area screenshots are rendered to the selected dimensions and masks are translated into that crop, but the capture still runs client-side against the page DOM. Avoid screenshots entirely for pages where client-side screenshot rendering is unacceptable.
+Masking works in full-page, selected-element, selected-area, and automatic
+screenshot modes when BugDrop renders the page through its DOM screenshot path.
+For selected-area captures, mask rectangles are translated into the selected
+crop. For selected-element captures with surrounding context enabled, masks are
+computed relative to the captured context element.
+
+| Capture path | Automatic DOM masks | User preview | Manual redact tool | Limitation warning | Notes |
+| --- | --- | --- | --- | --- | --- |
+| Full page | Yes | Yes | Yes | Yes | Uses DOM screenshot rendering unless the page is too complex |
+| Selected element | Yes | Yes | Yes | Yes | Masks are relative to the captured element or surrounding context |
+| Selected area | Yes | Yes | Yes | Yes, scoped to the crop | Masks outside the selected crop are ignored |
+| Automatic screenshot | Yes | No | No | No in the current UI | Use only when marked sensitive regions are stable and supported |
+| Native viewport fallback | No | Yes | Yes | Existing unavailable-mask warning | Used for very complex pages; users must review manually |
+
+Disable screenshots or use `data-screenshot="optional"` on pages where sensitive
+pixels cannot be reliably enclosed by DOM boxes.
 
 ```html
 <!-- Automatically attach a full-page screenshot -->

@@ -46,6 +46,7 @@ type ChosenCaptureResult =
       screenshot: string;
       redactionCount: number;
       redactionUnavailable: boolean;
+      redactionLimitations: boolean;
     } & ElementMetadata)
   | { kind: 'returnToForm' }
   | ({
@@ -93,6 +94,7 @@ export async function runScreenshotCaptureFlow(
       result.redactionCount,
       {
         redactionUnavailable: result.redactionUnavailable,
+        ...(result.redactionLimitations ? { redactionLimitations: true } : {}),
         ...(result.elementSelector ? { selectedElementCapture: true } : {}),
       }
     );
@@ -188,6 +190,7 @@ async function captureFromViewportChoice(
     fullElementSelector: null,
     redactionCount: 0,
     redactionUnavailable: true,
+    redactionLimitations: false,
   };
 }
 
@@ -208,8 +211,9 @@ async function captureFromFullPageChoice(
     screenshot: result.dataUrl,
     elementSelector: null,
     fullElementSelector: null,
-    redactionCount: getRedactionCount(),
+    redactionCount: result.redaction?.count ?? 0,
     redactionUnavailable: false,
+    redactionLimitations: result.redaction?.hasLimitations ?? false,
   };
 }
 
@@ -250,8 +254,9 @@ async function captureFromElementChoice(
     kind: 'captured',
     screenshot: result.dataUrl,
     ...elementMetadata,
-    redactionCount: getRedactionCount(captureTarget),
+    redactionCount: result.redaction?.count ?? 0,
     redactionUnavailable: false,
+    redactionLimitations: result.redaction?.hasLimitations ?? false,
   };
 }
 
@@ -279,8 +284,9 @@ async function captureFromAreaChoice(
     screenshot: result.dataUrl,
     elementSelector: null,
     fullElementSelector: null,
-    redactionCount: getRedactionCount(undefined, rect),
+    redactionCount: result.redaction?.count ?? 0,
     redactionUnavailable: false,
+    redactionLimitations: result.redaction?.hasLimitations ?? false,
   };
 }
 

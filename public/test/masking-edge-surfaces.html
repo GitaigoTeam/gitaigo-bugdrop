@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BugDrop Masking Edge Surfaces</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: #f8fafc;
+        color: #111827;
+      }
+
+      main {
+        width: 960px;
+        margin: 0 auto;
+        padding: 32px;
+      }
+
+      section {
+        margin-bottom: 28px;
+        padding: 18px;
+        border: 1px solid #cbd5e1;
+        background: white;
+      }
+
+      .offscreen-spacer {
+        height: 1400px;
+      }
+
+      #open-shadow-host,
+      #closed-shadow-host,
+      #custom-control {
+        display: block;
+        width: 360px;
+        min-height: 64px;
+        border: 1px solid #64748b;
+        padding: 12px;
+      }
+
+      canvas,
+      img,
+      video,
+      iframe {
+        display: block;
+        width: 320px;
+        height: 120px;
+        border: 1px solid #334155;
+        background: #fee2e2;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Masking edge surfaces</h1>
+
+      <section>
+        <label>
+          Open shadow secret
+          <open-secret id="open-shadow-host"></open-secret>
+        </label>
+      </section>
+
+      <section>
+        <closed-secret id="closed-shadow-host" data-bugdrop-mask></closed-secret>
+      </section>
+
+      <section>
+        <div id="custom-control" role="textbox" aria-label="Private custom control" data-bugdrop-mask>
+          Account token: custom-control-secret
+        </div>
+      </section>
+
+      <section>
+        <canvas id="secret-canvas" data-bugdrop-mask width="320" height="120"></canvas>
+      </section>
+
+      <section>
+        <img
+          id="secret-image"
+          data-bugdrop-mask
+          alt="secret rendered image"
+          src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='120'%3E%3Crect width='320' height='120' fill='%23fee2e2'/%3E%3Ctext x='20' y='64' font-size='24'%3Eimage secret%3C/text%3E%3C/svg%3E"
+        />
+      </section>
+
+      <section>
+        <video id="secret-video" data-bugdrop-mask muted playsinline></video>
+      </section>
+
+      <section>
+        <iframe id="secret-frame" data-bugdrop-mask srcdoc="<p>iframe secret</p>"></iframe>
+      </section>
+
+      <section id="wrapper-marked-surface" class="wrapper-only-surface" data-bugdrop-mask>
+        <p>Wrapper contains an unsupported descendant.</p>
+        <canvas id="wrapped-secret-canvas" width="320" height="120"></canvas>
+      </section>
+
+      <div class="offscreen-spacer"></div>
+
+      <section id="offscreen-section">
+        <input id="offscreen-secret" data-bugdrop-mask value="offscreen-secret-value" />
+      </section>
+    </main>
+
+    <script>
+      customElements.define(
+        'open-secret',
+        class extends HTMLElement {
+          connectedCallback() {
+            const root = this.attachShadow({ mode: 'open' });
+            root.innerHTML =
+              '<input id="shadow-secret" data-bugdrop-mask value="open-shadow-secret" />';
+          }
+        }
+      );
+
+      customElements.define(
+        'closed-secret',
+        class extends HTMLElement {
+          connectedCallback() {
+            const root = this.attachShadow({ mode: 'closed' });
+            root.innerHTML = '<input value="closed-shadow-secret" />';
+          }
+        }
+      );
+
+      function paintCanvas(id, label) {
+        const canvas = document.getElementById(id);
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fee2e2';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#111827';
+        ctx.font = '24px sans-serif';
+        ctx.fillText(label, 20, 68);
+      }
+
+      paintCanvas('secret-canvas', 'canvas secret');
+      paintCanvas('wrapped-secret-canvas', 'wrapped canvas secret');
+
+      if (new URLSearchParams(window.location.search).get('fixture') === 'wrapper-only') {
+        document
+          .querySelectorAll(
+            '#secret-canvas, #secret-image, #secret-video, #secret-frame, #custom-control, #closed-shadow-host, #offscreen-secret'
+          )
+          .forEach(element => {
+            element.removeAttribute('data-bugdrop-mask');
+            element.removeAttribute('data-bugdrop-redact');
+          });
+      }
+    </script>
+
+    <script src="/test/load-widget.js"></script>
+    <script>
+      window.loadBugDropTestWidget({
+        dataset: { screenshot: 'optional' },
+      });
+    </script>
+  </body>
+</html>

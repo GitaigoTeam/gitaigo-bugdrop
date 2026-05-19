@@ -368,7 +368,7 @@ test.describe('Widget Interaction', () => {
     });
 
     // Mock the installation check to return installed: true
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -444,7 +444,7 @@ test.describe('Widget Interaction', () => {
     });
 
     // Mock the installation check to return installed: true
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -508,7 +508,7 @@ test.describe('Widget Interaction', () => {
   });
 
   test('welcome screen only shows once per repo (default behavior)', async ({ page }) => {
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -552,7 +552,7 @@ test.describe('Widget Interaction', () => {
   });
 
   test('data-welcome="false" skips welcome entirely', async ({ page }) => {
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -577,7 +577,7 @@ test.describe('Widget Interaction', () => {
   });
 
   test('data-welcome="always" shows welcome every time', async ({ page }) => {
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -612,7 +612,7 @@ test.describe('Widget Interaction', () => {
   });
 
   test('BugDrop.open() skips welcome screen', async ({ page }) => {
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -640,7 +640,7 @@ test.describe('Widget Interaction', () => {
   });
 
   test('screenshot checkbox is checked by default', async ({ page }) => {
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -665,7 +665,7 @@ test.describe('Widget Interaction', () => {
   });
 
   test('version number appears on welcome screen but not on form', async ({ page }) => {
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -698,7 +698,7 @@ test.describe('Widget Interaction', () => {
 
   test('select area button appears and launches area picker overlay', async ({ page }) => {
     const payloads = await trackFeedbackPayloads(page);
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -767,7 +767,7 @@ test.describe('Widget Interaction', () => {
 
     try {
       const payloads = await trackFeedbackPayloads(page);
-      await page.route('**/api/check/**', async route => {
+      await page.route('**/api/check**', async route => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -866,7 +866,7 @@ test.describe('Widget Interaction', () => {
 
     try {
       const payloads = await trackFeedbackPayloads(page);
-      await page.route('**/api/check/**', async route => {
+      await page.route('**/api/check**', async route => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -906,7 +906,7 @@ test.describe('Widget Interaction', () => {
     const page = await context.newPage();
 
     try {
-      await page.route('**/api/check/**', async route => {
+      await page.route('**/api/check**', async route => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -980,7 +980,7 @@ test.describe('Widget Interaction', () => {
     const page = await context.newPage();
 
     try {
-      await page.route('**/api/check/**', async route => {
+      await page.route('**/api/check**', async route => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -1024,7 +1024,7 @@ test.describe('Widget Interaction', () => {
   });
 
   test('screenshot options prioritize capture actions before skip', async ({ page }) => {
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -1072,7 +1072,7 @@ test.describe('Widget Interaction', () => {
   });
 
   test('retake button on annotation step returns to screenshot options', async ({ page }) => {
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -1841,7 +1841,7 @@ test.describe('Dismiss Duration', () => {
 test.describe('Keyboard Event Isolation', () => {
   test('typing in widget inputs does not leak keystrokes to host page', async ({ page }) => {
     // Mock the installation check so the feedback form loads
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -1901,7 +1901,7 @@ test.describe('Keyboard Event Isolation', () => {
 test.describe('Install URL from appName', () => {
   test('uses server-provided appName in install link', async ({ page }) => {
     // Mock /check to return installed: false with a custom appName
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -1931,7 +1931,7 @@ test.describe('Install URL from appName', () => {
 
   test('falls back to URL-derived appName when server omits it', async ({ page }) => {
     // Mock /check to return installed: false without appName
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -2215,7 +2215,7 @@ test.describe('Custom Accent Color', () => {
 
   test('custom color applies to focus ring on form inputs', async ({ page }) => {
     // Mock the installation check to return installed: true
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -2550,7 +2550,7 @@ test.describe('API-Only Mode (data-button="false")', () => {
 test.describe('Feedback Categories', () => {
   test('category selector is visible on feedback form', async ({ page }) => {
     // Mock installation check
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -2599,7 +2599,7 @@ test.describe('Feedback Categories', () => {
   test('feedback form fields progress from category to details and submitter info', async ({
     page,
   }) => {
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -2662,7 +2662,7 @@ test.describe('Feedback Categories', () => {
 
   test('bug category is selected by default', async ({ page }) => {
     // Mock installation check
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -2693,7 +2693,7 @@ test.describe('Feedback Categories', () => {
 
   test('can select different categories', async ({ page }) => {
     // Mock installation check
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -2974,7 +2974,7 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
   }
 
   test.beforeEach(async ({ page }) => {
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -4759,7 +4759,7 @@ test.describe('Screenshot Mode Configuration', () => {
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
   async function setupInstalledApp(page: Page) {
-    await page.route('**/api/check/**', async route => {
+    await page.route('**/api/check**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -4976,13 +4976,70 @@ test.describe('Screenshot Masking', () => {
     }, selector);
   }
 
+  async function shadowDocRectOf(page: Page, hostSelector: string, shadowSelector: string) {
+    return page.locator(hostSelector).evaluate((host, selector) => {
+      const el = host.shadowRoot?.querySelector(selector);
+      if (!el) throw new Error(`no shadow element matches ${selector}`);
+      const r = el.getBoundingClientRect();
+      return {
+        x: r.left + window.scrollX,
+        y: r.top + window.scrollY,
+        w: r.width,
+        h: r.height,
+      };
+    }, shadowSelector);
+  }
+
+  async function imagePixelRatio(page: Page, dataUrl: string): Promise<number> {
+    return page.evaluate(
+      url =>
+        new Promise<number>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            const vw = window.innerWidth;
+            resolve(vw > 0 ? img.naturalWidth / vw : 1);
+          };
+          img.onerror = () => reject(new Error('image load failed'));
+          img.src = url;
+        }),
+      dataUrl
+    );
+  }
+
+  function mockHtmlToImage(page: Page, toPngBody: string) {
+    return page.addInitScript(`window.__bugdropMockToPng = ${toPngBody};`);
+  }
+
+  function redactionAwarePng() {
+    return `function(el, opts) {
+      var canvas = document.createElement('canvas');
+      var pixelRatio = opts && opts.pixelRatio ? opts.pixelRatio : 1;
+      canvas.width = Math.max(1, Math.ceil((opts && opts.width ? opts.width : document.documentElement.scrollWidth) * pixelRatio));
+      canvas.height = Math.max(1, Math.ceil((opts && opts.height ? opts.height : document.documentElement.scrollHeight) * pixelRatio));
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      return Promise.resolve(canvas.toDataURL('image/png'));
+    }`;
+  }
+
+  async function mockInstalledCheck(page: Page): Promise<void> {
+    await page.route('**/api/check**', async route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      })
+    );
+  }
+
   // Walk the standard feedback flow up to a captured screenshot, returning the submitted payload.
   async function submitFeedbackWithFullPageCapture(
     page: Page,
     fixturePath: string
   ): Promise<{ screenshot: string; pixelRatio: number }> {
     let payload: Record<string, unknown> | null = null;
-    await page.route('**/api/check/**', async route =>
+    await page.route('**/api/check**', async route =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -5029,19 +5086,7 @@ test.describe('Screenshot Masking', () => {
     // window.devicePixelRatio, because the widget's getPixelRatio() enforces a
     // minimum scale of 2 regardless of the browser's DPR.
     const screenshotDataUrl = payload.screenshot as string;
-    const pr = await page.evaluate(
-      ({ dataUrl }) =>
-        new Promise<number>((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => {
-            const vw = window.innerWidth;
-            resolve(vw > 0 ? img.naturalWidth / vw : 1);
-          };
-          img.onerror = () => reject(new Error('image load failed'));
-          img.src = dataUrl;
-        }),
-      { dataUrl: screenshotDataUrl }
-    );
+    const pr = await imagePixelRatio(page, screenshotDataUrl);
     return { screenshot: screenshotDataUrl, pixelRatio: pr };
   }
 
@@ -5161,7 +5206,7 @@ test.describe('Screenshot Masking', () => {
     // A scrolled variant of the helper — same flow, but scrolls AFTER goto so the page is
     // captured while the user is offset from the top.
     let payload: Record<string, unknown> | null = null;
-    await page.route('**/api/check/**', async route =>
+    await page.route('**/api/check**', async route =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -5280,6 +5325,262 @@ test.describe('Screenshot Masking', () => {
     expect(await pixelAt(page, screenshot, cx, cy)).toEqual([0, 0, 0, 255]);
   });
 
+  test('masks explicit elements inside open shadow DOM', async ({ page }) => {
+    await mockHtmlToImage(page, redactionAwarePng());
+    const { screenshot, pixelRatio } = await submitFeedbackWithFullPageCapture(
+      page,
+      '/test/masking-edge-surfaces.html'
+    );
+
+    const rect = await shadowDocRectOf(page, '#open-shadow-host', '#shadow-secret');
+
+    expect(
+      await pixelAt(
+        page,
+        screenshot,
+        Math.floor((rect.x + rect.w / 2) * pixelRatio),
+        Math.floor((rect.y + rect.h / 2) * pixelRatio)
+      )
+    ).toEqual([0, 0, 0, 255]);
+  });
+
+  test('masks a closed shadow custom element when the host is marked', async ({ page }) => {
+    await mockHtmlToImage(page, redactionAwarePng());
+    const { screenshot, pixelRatio } = await submitFeedbackWithFullPageCapture(
+      page,
+      '/test/masking-edge-surfaces.html'
+    );
+
+    const rect = await docRectOf(page, '#closed-shadow-host');
+    expect(
+      await pixelAt(
+        page,
+        screenshot,
+        Math.floor((rect.x + rect.w / 2) * pixelRatio),
+        Math.floor((rect.y + rect.h / 2) * pixelRatio)
+      )
+    ).toEqual([0, 0, 0, 255]);
+  });
+
+  test('warns when marked unsupported surfaces are covered by their element boxes', async ({
+    page,
+  }) => {
+    await mockHtmlToImage(page, redactionAwarePng());
+    await mockInstalledCheck(page);
+    await page.goto('/test/masking-edge-surfaces.html');
+    const host = page.locator('#bugdrop-host');
+
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+    await host.locator('css=#title').fill('Surface warning');
+    await host.locator('css=#include-screenshot').check();
+    await host.locator('css=#submit-btn').click();
+    await host.locator('css=[data-action="capture"]').click();
+
+    const note = host.locator('css=.bd-redaction-note');
+    await expect(note).toContainText('private');
+    await expect(note).toContainText('BugDrop only covered the measured marked boxes');
+
+    const canvasRect = await docRectOf(page, '#secret-canvas');
+    const canvas = host.locator('css=#annotation-canvas canvas');
+    const dataUrl = await canvas.evaluate(el => (el as HTMLCanvasElement).toDataURL('image/png'));
+    const pixelRatio = await imagePixelRatio(page, dataUrl);
+    expect(
+      await pixelAt(
+        page,
+        dataUrl,
+        Math.floor((canvasRect.x + canvasRect.w / 2) * pixelRatio),
+        Math.floor((canvasRect.y + canvasRect.h / 2) * pixelRatio)
+      )
+    ).toEqual([0, 0, 0, 255]);
+  });
+
+  test('warns when a marked wrapper contains unsupported pixel-rendered descendants', async ({
+    page,
+  }) => {
+    await mockHtmlToImage(page, redactionAwarePng());
+    await mockInstalledCheck(page);
+    await page.goto('/test/masking-edge-surfaces.html?fixture=wrapper-only');
+    const host = page.locator('#bugdrop-host');
+
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+    await host.locator('css=#title').fill('Wrapper warning');
+    await host.locator('css=#include-screenshot').check();
+    await host.locator('css=#submit-btn').click();
+    await host.locator('css=[data-action="capture"]').click();
+
+    await expect(host.locator('css=.bd-redaction-note')).toContainText(
+      'BugDrop only covered the measured marked boxes',
+      { timeout: 30000 }
+    );
+
+    const wrappedRect = await docRectOf(page, '#wrapped-secret-canvas');
+    const canvas = host.locator('css=#annotation-canvas canvas');
+    const dataUrl = await canvas.evaluate(el => (el as HTMLCanvasElement).toDataURL('image/png'));
+    const pixelRatio = await imagePixelRatio(page, dataUrl);
+    expect(
+      await pixelAt(
+        page,
+        dataUrl,
+        Math.floor((wrappedRect.x + wrappedRect.w / 2) * pixelRatio),
+        Math.floor((wrappedRect.y + wrappedRect.h / 2) * pixelRatio)
+      )
+    ).toEqual([0, 0, 0, 255]);
+  });
+
+  test('selected-area capture warns only for unsupported marked surfaces inside the crop', async ({
+    page,
+  }) => {
+    await mockHtmlToImage(page, redactionAwarePng());
+    await mockInstalledCheck(page);
+    await page.goto('/test/masking-edge-surfaces.html');
+    const host = page.locator('#bugdrop-host');
+
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+    await host.locator('css=#title').fill('Area includes unsupported surface');
+    await host.locator('css=#include-screenshot').check();
+    await host.locator('css=#submit-btn').click();
+    await host.locator('css=[data-action="area"]').click();
+    await expect(page.locator('#bugdrop-area-picker-overlay')).toBeVisible();
+
+    const box = await page.locator('#secret-canvas').boundingBox();
+    if (!box) throw new Error('secret canvas not found');
+    await page.mouse.move(box.x - 8, box.y - 8);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width + 8, box.y + box.height + 8);
+    await page.mouse.up();
+
+    await expect(host.locator('css=.bd-redaction-note')).toContainText(
+      'BugDrop only covered the measured marked boxes',
+      { timeout: 30000 }
+    );
+  });
+
+  test('selected-area capture does not warn for unsupported surfaces outside the crop', async ({
+    page,
+  }) => {
+    await mockHtmlToImage(page, redactionAwarePng());
+    await mockInstalledCheck(page);
+    await page.goto('/test/masking-edge-surfaces.html');
+    const host = page.locator('#bugdrop-host');
+
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+    await host.locator('css=#title').fill('Area excludes unsupported surface');
+    await host.locator('css=#include-screenshot').check();
+    await host.locator('css=#submit-btn').click();
+    await host.locator('css=[data-action="area"]').click();
+    await expect(page.locator('#bugdrop-area-picker-overlay')).toBeVisible();
+
+    const box = await page.locator('#custom-control').boundingBox();
+    if (!box) throw new Error('custom control not found');
+    await page.mouse.move(box.x - 8, box.y - 8);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width + 8, box.y + box.height + 8);
+    await page.mouse.up();
+
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 30000 });
+    await expect(host.locator('css=.bd-redaction-note')).not.toContainText(
+      'BugDrop only covered the measured marked boxes',
+      { timeout: 30000 }
+    );
+  });
+
+  test('auto mode applies developer masks to the submitted screenshot', async ({ page }) => {
+    let payload: Record<string, unknown> | null = null;
+    await page.route('**/api/check**', async route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      })
+    );
+    await page.route('**/feedback', async route => {
+      payload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, issueNumber: 1, issueUrl: '#', isPublic: false }),
+      });
+    });
+
+    await page.goto('/test/redaction.html?screenshot=auto');
+    const host = page.locator('#bugdrop-host');
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+    await host.locator('css=#title').fill('Auto masked screenshot');
+    await host.locator('css=#submit-btn').click();
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 30000 });
+
+    if (!payload?.screenshot || typeof payload.screenshot !== 'string') {
+      throw new Error('expected screenshot payload');
+    }
+
+    const rect = await docRectOf(page, '#redacted-test-input');
+    const pixelRatio = await imagePixelRatio(page, payload.screenshot);
+    expect(
+      await pixelAt(
+        page,
+        payload.screenshot,
+        Math.floor((rect.x + rect.w / 2) * pixelRatio),
+        Math.floor((rect.y + rect.h / 2) * pixelRatio)
+      )
+    ).toEqual([0, 0, 0, 255]);
+  });
+
+  test('full-page capture uses capture-start redaction geometry after DOM mutation', async ({
+    page,
+  }) => {
+    await mockHtmlToImage(
+      page,
+      `function(el, opts) {
+        window.__mutationCaptureRect = (function() {
+          var target = document.querySelector('[data-bugdrop-redact]');
+          var rect = target.getBoundingClientRect();
+          return {
+            x: rect.left + window.scrollX,
+            y: rect.top + window.scrollY,
+            w: rect.width,
+            h: rect.height
+          };
+        })();
+        document.querySelector('[data-bugdrop-redact]').remove();
+        var canvas = document.createElement('canvas');
+        var pixelRatio = opts && opts.pixelRatio ? opts.pixelRatio : 1;
+        canvas.width = Math.ceil(document.documentElement.scrollWidth * pixelRatio);
+        canvas.height = Math.ceil(document.documentElement.scrollHeight * pixelRatio);
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        return Promise.resolve(canvas.toDataURL('image/png'));
+      }`
+    );
+
+    const { screenshot, pixelRatio } = await submitFeedbackWithFullPageCapture(
+      page,
+      '/test/redaction.html'
+    );
+    const originalRect = await page.evaluate(
+      () =>
+        (
+          window as Window & {
+            __mutationCaptureRect: { x: number; y: number; w: number; h: number };
+          }
+        ).__mutationCaptureRect
+    );
+
+    expect(
+      await pixelAt(
+        page,
+        screenshot,
+        Math.floor((originalRect.x + originalRect.w / 2) * pixelRatio),
+        Math.floor((originalRect.y + originalRect.h / 2) * pixelRatio)
+      )
+    ).toEqual([0, 0, 0, 255]);
+  });
+
   // Walk the element-picker flow and capture the chosen element.
   //
   // `selector` identifies the element to click in the picker.  Because the picker
@@ -5306,7 +5607,7 @@ test.describe('Screenshot Masking', () => {
     };
   }> {
     let payload: Record<string, unknown> | null = null;
-    await page.route('**/api/check/**', async route =>
+    await page.route('**/api/check**', async route =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -5514,7 +5815,7 @@ test.describe('Screenshot Masking', () => {
 
   test('area-cropped capture preserves masks inside the selected region', async ({ page }) => {
     let payload: Record<string, unknown> | null = null;
-    await page.route('**/api/check/**', async route =>
+    await page.route('**/api/check**', async route =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -5609,7 +5910,7 @@ test.describe('Screenshot Masking', () => {
     });
 
     let payload: Record<string, unknown> | null = null;
-    await page.route('**/api/check/**', async route =>
+    await page.route('**/api/check**', async route =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
