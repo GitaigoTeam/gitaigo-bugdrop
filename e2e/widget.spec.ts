@@ -327,6 +327,19 @@ test.describe('Widget Loading', () => {
 });
 
 test.describe('Widget Interaction', () => {
+  async function trackFeedbackPayloads(page: Page) {
+    const payloads: Array<Record<string, unknown>> = [];
+    await page.route('**/feedback', async route => {
+      payloads.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, issueNumber: 1, issueUrl: '#', isPublic: false }),
+      });
+    });
+    return payloads;
+  }
+
   test('clicking feedback button triggers modal', async ({ page }) => {
     await page.goto('/test/');
 
@@ -684,6 +697,7 @@ test.describe('Widget Interaction', () => {
   });
 
   test('select area button appears and launches area picker overlay', async ({ page }) => {
+    const payloads = await trackFeedbackPayloads(page);
     await page.route('**/api/check/**', async route => {
       await route.fulfill({
         status: 200,
@@ -736,6 +750,9 @@ test.describe('Widget Interaction', () => {
 
     // Overlay should be removed
     await expect(overlay).not.toBeVisible({ timeout: 3000 });
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0].screenshot).toBeNull();
   });
 
   test('area picker prompt clears mobile safe areas and uses an inline cancel link', async ({
@@ -749,6 +766,7 @@ test.describe('Widget Interaction', () => {
     const page = await context.newPage();
 
     try {
+      const payloads = await trackFeedbackPayloads(page);
       await page.route('**/api/check/**', async route => {
         await route.fulfill({
           status: 200,
@@ -786,12 +804,16 @@ test.describe('Widget Interaction', () => {
         .toContain('safe-area-inset-top');
       const cancelBox = await cancelLink.boundingBox();
       expect(cancelBox).not.toBeNull();
-      expect(cancelBox!.width).toBeLessThan(80);
+      expect(cancelBox!.width).toBeGreaterThanOrEqual(44);
+      expect(cancelBox!.height).toBeGreaterThanOrEqual(44);
 
       await cancelLink.click();
       await expect(page.locator('#bugdrop-area-picker-overlay')).not.toBeVisible({
         timeout: 3000,
       });
+      await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+      expect(payloads).toHaveLength(1);
+      expect(payloads[0].screenshot).toBeNull();
     } finally {
       await context.close();
     }
@@ -901,46 +923,20 @@ test.describe('Widget Interaction', () => {
       const overlay = page.locator('#bugdrop-area-picker-overlay');
       await expect(overlay).toBeVisible({ timeout: 5000 });
 
-      await page.evaluate(() => {
-        const pickerOverlay = document.querySelector('#bugdrop-area-picker-overlay');
-        if (!pickerOverlay) throw new Error('area picker overlay was not found');
-
-        pickerOverlay.dispatchEvent(
-          new PointerEvent('pointerdown', {
-            bubbles: true,
-            cancelable: true,
-            clientX: 40,
-            clientY: 160,
-            pointerId: 1,
-            pointerType: 'touch',
-            isPrimary: true,
-            buttons: 1,
-          })
-        );
-        document.dispatchEvent(
-          new PointerEvent('pointermove', {
-            bubbles: true,
-            cancelable: true,
-            clientX: 280,
-            clientY: 420,
-            pointerId: 1,
-            pointerType: 'touch',
-            isPrimary: true,
-            buttons: 1,
-          })
-        );
-        document.dispatchEvent(
-          new PointerEvent('pointerup', {
-            bubbles: true,
-            cancelable: true,
-            clientX: 280,
-            clientY: 420,
-            pointerId: 1,
-            pointerType: 'touch',
-            isPrimary: true,
-          })
-        );
+      const client = await context.newCDPSession(page);
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{ x: 40, y: 160, radiusX: 1, radiusY: 1, id: 1 }],
       });
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x: 280, y: 420, radiusX: 1, radiusY: 1, id: 1 }],
+      });
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchEnd',
+        touchPoints: [],
+      });
+      await client.detach();
 
       await expect(overlay).not.toBeVisible({ timeout: 5000 });
       await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 30000 });

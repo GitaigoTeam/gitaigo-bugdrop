@@ -36,5 +36,6 @@ beforeEach(() => {
       ? globalThis.localStorage
       : createMemoryLocalStorage();
 
+  storage.clear();
   Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
 });

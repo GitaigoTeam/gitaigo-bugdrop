@@ -36,14 +36,14 @@ function startAreaPicker(
   const instruction = opts?.redactionsAvailable
     ? AREA_PICKER_REDACTION_INSTRUCTION
     : AREA_PICKER_INSTRUCTION;
-  const showInlineCancel = usesTouchInput();
+  const showInlineCancel = usesCoarsePointer();
   const tooltip = createTooltip(
     { accent, fontFamily, radius, bw, tooltipBg, tooltipText, tooltipBorder },
     instruction,
     showInlineCancel
   );
   document.body.appendChild(tooltip);
-  const cancelLink = tooltip.querySelector<HTMLAnchorElement>('#bugdrop-area-picker-cancel');
+  const cancelButton = tooltip.querySelector<HTMLButtonElement>('#bugdrop-area-picker-cancel');
 
   let startX = 0;
   let startY = 0;
@@ -127,8 +127,7 @@ function startAreaPicker(
     }
   }
 
-  function onCancelClick(e: Event) {
-    e.preventDefault();
+  function onCancelClick() {
     cleanup();
     resolve(null);
   }
@@ -139,7 +138,7 @@ function startAreaPicker(
     document.removeEventListener('pointerup', onPointerUp);
     document.removeEventListener('pointercancel', onPointerCancel);
     document.removeEventListener('keydown', onKeyDown);
-    cancelLink?.removeEventListener('click', onCancelClick);
+    cancelButton?.removeEventListener('click', onCancelClick);
     overlay.remove();
     selectionBorder.remove();
     tooltip.remove();
@@ -150,7 +149,7 @@ function startAreaPicker(
   document.addEventListener('pointerup', onPointerUp);
   document.addEventListener('pointercancel', onPointerCancel);
   document.addEventListener('keydown', onKeyDown);
-  cancelLink?.addEventListener('click', onCancelClick);
+  cancelButton?.addEventListener('click', onCancelClick);
 }
 
 function createOverlay(): HTMLDivElement {
@@ -220,30 +219,41 @@ function createTooltip(
     pointer-events: none;
   `;
   if (showInlineCancel) {
-    const cancelLink = document.createElement('a');
-    cancelLink.id = 'bugdrop-area-picker-cancel';
-    cancelLink.href = '#';
-    cancelLink.textContent = 'Cancel';
-    cancelLink.style.cssText = `
+    const cancelButton = document.createElement('button');
+    cancelButton.id = 'bugdrop-area-picker-cancel';
+    cancelButton.type = 'button';
+    cancelButton.textContent = 'Cancel';
+    cancelButton.style.cssText = `
+      align-items: center;
+      appearance: none;
+      background: transparent;
+      border: 0;
       color: ${style.accent};
       cursor: pointer;
-      display: inline;
+      display: inline-flex;
       font: inherit;
       font-weight: 700;
+      justify-content: center;
+      margin: -10px -12px;
+      min-height: 44px;
+      min-width: 44px;
+      padding: 10px 12px;
       pointer-events: auto;
       text-decoration: underline;
       text-underline-offset: 2px;
+      touch-action: manipulation;
       white-space: nowrap;
     `;
-    tooltip.append(text, ' (', cancelLink, ')');
+    tooltip.append(text, ' (', cancelButton, ')');
   } else {
     tooltip.textContent = `${text} (${AREA_PICKER_DESKTOP_CANCEL_INSTRUCTION})`;
   }
   return tooltip;
 }
 
-function usesTouchInput(): boolean {
-  return (
-    window.matchMedia?.('(hover: none), (pointer: coarse)').matches || navigator.maxTouchPoints > 0
-  );
+function usesCoarsePointer(): boolean {
+  if (window.matchMedia) {
+    return window.matchMedia('(hover: none), (pointer: coarse)').matches;
+  }
+  return navigator.maxTouchPoints > 0;
 }
