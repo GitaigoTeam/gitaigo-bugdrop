@@ -571,8 +571,8 @@ test.describe('Screenshot Capture (Live)', () => {
 
     const tooltip = page.locator('#bugdrop-area-picker-tooltip');
     await expect(tooltip).toBeVisible({ timeout: 5_000 });
-    await expect(tooltip).toHaveText('Draw a selection around the area to capture (ESC to cancel)');
-    await expect(tooltip).not.toContainText('Drag');
+    await expect(tooltip).toHaveText('Draw a selection around the area to capture');
+    await expect(page.locator('#bugdrop-area-picker-cancel')).toHaveText('Cancel');
 
     await page.keyboard.press('Escape');
     await expect(page.locator('#bugdrop-area-picker-overlay')).not.toBeVisible({ timeout: 3_000 });
