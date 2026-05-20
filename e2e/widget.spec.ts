@@ -416,7 +416,10 @@ test.describe('Widget Interaction', () => {
     // Click on the SVG element - this previously caused className.split error
     const svgElement = page.locator('#test-svg');
     await expect(svgElement).toBeVisible();
-    await svgElement.click();
+    await svgElement.scrollIntoViewIfNeeded();
+    const svgBox = await svgElement.boundingBox();
+    expect(svgBox).not.toBeNull();
+    await page.mouse.click(svgBox!.x + svgBox!.width / 2, svgBox!.y + svgBox!.height / 2);
 
     // Check for the className.split error that was previously occurring
     const classNameErrors = errors.filter(
@@ -493,7 +496,13 @@ test.describe('Widget Interaction', () => {
     // This tests that getElementSelector handles SVG elements when walking up the tree
     const svgText = page.locator('#test-svg text');
     await expect(svgText).toBeVisible();
-    await svgText.click();
+    await svgText.scrollIntoViewIfNeeded();
+    const svgTextBox = await svgText.boundingBox();
+    expect(svgTextBox).not.toBeNull();
+    await page.mouse.click(
+      svgTextBox!.x + svgTextBox!.width / 2,
+      svgTextBox!.y + svgTextBox!.height / 2
+    );
 
     // Check for the className.split error
     const classNameErrors = errors.filter(
@@ -1018,6 +1027,80 @@ test.describe('Widget Interaction', () => {
 
       await expect(overlay).not.toBeVisible({ timeout: 5000 });
       await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 30000 });
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('element picker prevents selected mobile tap from reaching the page', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      hasTouch: true,
+      isMobile: true,
+      viewport: { width: 390, height: 844 },
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.route('**/api/check**', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ installed: true }),
+        });
+      });
+
+      await page.goto('/test/');
+      await page.evaluate(() => {
+        const target = document.createElement('button');
+        target.id = 'mobile-select-action-target';
+        target.textContent = 'Continue';
+        target.style.cssText = `
+          position: fixed;
+          left: 40px;
+          top: 180px;
+          width: 220px;
+          height: 64px;
+          z-index: 1;
+        `;
+        target.addEventListener('pointerup', () => {
+          document.body.dataset.mobileTapAction = 'fired';
+        });
+        document.body.appendChild(target);
+        document.body.dataset.mobileTapAction = 'idle';
+      });
+
+      const host = page.locator('#bugdrop-host');
+      await host.locator('css=.bd-trigger').click();
+      await host.locator('css=[data-action="continue"]').click();
+      await host.locator('css=#title').fill('Mobile element tap test');
+      await host.locator('css=#include-screenshot').check();
+      await host.locator('css=#submit-btn').click();
+      await host.locator('css=[data-action="element"]').click();
+
+      await expect(page.locator('#bugdrop-element-picker-tooltip')).toBeVisible({ timeout: 5000 });
+
+      const targetBox = await page.locator('#mobile-select-action-target').boundingBox();
+      expect(targetBox).not.toBeNull();
+      const tapX = Math.round(targetBox!.x + targetBox!.width / 2);
+      const tapY = Math.round(targetBox!.y + targetBox!.height / 2);
+
+      const client = await context.newCDPSession(page);
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{ x: tapX, y: tapY, radiusX: 1, radiusY: 1, id: 1 }],
+      });
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchEnd',
+        touchPoints: [],
+      });
+      await client.detach();
+
+      await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 30000 });
+      await expect
+        .poll(() => page.evaluate(() => document.body.dataset.mobileTapAction))
+        .toBe('idle');
     } finally {
       await context.close();
     }
@@ -3581,6 +3664,117 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     expect(targetInfo.height).toBeLessThanOrEqual(selectedBox!.height + 1);
   });
 
+  test('element picker selects nearest clickable ancestor from nested content', async ({
+    page,
+  }) => {
+    await mockHtmlToImage(page, targetSpyToPng());
+    await page.goto('/test/?elementContextMaxArea=0');
+    await page.evaluate(() => {
+      const row = document.createElement('div');
+      row.id = 'clickable-row-fixture';
+      row.innerHTML = `
+        <a id="chat-row-link" class="item-link" href="/chats/12078/">
+          <div class="item-content">
+            <div class="item-inner">
+              <div class="item-title">
+                <div class="conversation-title">
+                  <div class="conversation-name">Eugene</div>
+                  <div class="conversation-preview-line">test for eugene</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </a>
+      `;
+      row.style.cssText = `
+        margin: 24px;
+        width: 420px;
+      `;
+      const link = row.querySelector<HTMLAnchorElement>('#chat-row-link');
+      if (link) {
+        link.style.cssText = `
+          display: block;
+          padding: 16px 20px;
+          background: #1f2937;
+          color: white;
+          text-decoration: none;
+        `;
+      }
+      document.body.prepend(row);
+    });
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="element"]').click();
+    await expect(page.locator('#bugdrop-element-picker-tooltip')).toBeVisible({ timeout: 5000 });
+
+    const selected = page.locator('#clickable-row-fixture .conversation-name');
+    await expect(selected).toBeVisible();
+    const selectedBox = await selected.boundingBox();
+    expect(selectedBox).toBeTruthy();
+
+    await page.mouse.click(
+      selectedBox!.x + selectedBox!.width / 2,
+      selectedBox!.y + selectedBox!.height / 2
+    );
+
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 10000 });
+
+    const targetInfo = await page.evaluate(() => window.__captureTargetInfo);
+    expect(targetInfo).toBeDefined();
+    if (!targetInfo) throw new Error('Missing capture target info');
+    expect(targetInfo.tagName).toBe('A');
+    expect(targetInfo.id).toBe('chat-row-link');
+    expect(targetInfo.className).toContain('item-link');
+    expect(targetInfo.width).toBeGreaterThan(selectedBox!.width);
+  });
+
+  test('element picker recognizes mixed-case clickable fallback role tokens', async ({ page }) => {
+    await mockHtmlToImage(page, targetSpyToPng());
+    await page.goto('/test/?elementContextMaxArea=0');
+    await page.evaluate(() => {
+      const control = document.createElement('div');
+      control.id = 'role-token-control';
+      control.setAttribute('role', 'Switch Button');
+      control.innerHTML = `
+        <span class="role-token-label">
+          <span class="role-token-name">Notifications</span>
+        </span>
+      `;
+      control.style.cssText = `
+        display: block;
+        margin: 24px;
+        padding: 16px 20px;
+        width: 360px;
+        background: #1f2937;
+        color: white;
+      `;
+      document.body.prepend(control);
+    });
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="element"]').click();
+    await expect(page.locator('#bugdrop-element-picker-tooltip')).toBeVisible({ timeout: 5000 });
+
+    const selected = page.locator('#role-token-control .role-token-name');
+    await expect(selected).toBeVisible();
+    const selectedBox = await selected.boundingBox();
+    expect(selectedBox).toBeTruthy();
+
+    await page.mouse.click(
+      selectedBox!.x + selectedBox!.width / 2,
+      selectedBox!.y + selectedBox!.height / 2
+    );
+
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 10000 });
+
+    const targetInfo = await page.evaluate(() => window.__captureTargetInfo);
+    expect(targetInfo).toBeDefined();
+    if (!targetInfo) throw new Error('Missing capture target info');
+    expect(targetInfo.tagName).toBe('DIV');
+    expect(targetInfo.id).toBe('role-token-control');
+    expect(targetInfo.width).toBeGreaterThan(selectedBox!.width);
+  });
+
   test('shows error modal when capture times out', async ({ page }) => {
     await mockHtmlToImage(page, 'function() { return new Promise(function() {}); }');
     await page.goto('/test/');
@@ -5583,9 +5777,9 @@ test.describe('Screenshot Masking', () => {
 
   // Walk the element-picker flow and capture the chosen element.
   //
-  // `selector` identifies the element to click in the picker.  Because the picker
-  // resolves the DEEPEST element at the click point (via elementsFromPoint), pass
-  // `clickOffset` to land on the element's own padding rather than a child.
+  // `selector` identifies the element to click in the picker.  The picker prefers
+  // the nearest clickable ancestor and otherwise falls back to the deepest element
+  // at the click point, so pass `clickOffset` when a fixture needs a precise target.
   // Defaults to the element's center.
   //
   // Returns the screenshot data URL and the image's natural pixel dimensions.
@@ -5639,10 +5833,9 @@ test.describe('Screenshot Masking', () => {
     // Wait for the element picker tooltip to confirm picker mode is active.
     await expect(page.locator('#bugdrop-element-picker-tooltip')).toBeVisible({ timeout: 5000 });
 
-    // Click the target element using mouse coordinates.  The picker intercepts
-    // pointer events at document level via elementsFromPoint, which returns the
-    // DEEPEST element at the cursor — use clickOffset to land on the element's
-    // own padding when you need to select the element rather than a child.
+    // Click the target element using mouse coordinates. The picker intercepts
+    // pointer events through its overlay, then resolves the page element under
+    // that point.
     const target = page.locator(selector);
     await expect(target).toBeVisible({ timeout: 5000 });
     const targetBox = await target.boundingBox();
@@ -5745,7 +5938,7 @@ test.describe('Screenshot Masking', () => {
 
   test('element-scoped capture masks descendant inside picked element', async ({ page }) => {
     // Click inside the top padding of #unmasked-parent (above the first <p> child)
-    // so the picker's elementsFromPoint resolves the parent, not a child element.
+    // so the picker resolves the parent, not a child element.
     // The 16px top padding gives ~8px of safe click area before the first child.
     const { screenshot, imageSize, metadata } = await submitFeedbackWithElementCapture(
       page,
