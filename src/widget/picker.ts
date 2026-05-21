@@ -2,7 +2,7 @@
 import { resolvePickerStyle, type PickerStyle, type ResolvedPickerStyle } from './picker-style';
 import { getSelectionTarget } from './picker-target';
 
-export { resolvePickerStyle, type PickerStyle, type ResolvedPickerStyle };
+export { resolvePickerStyle, type PickerStyle };
 
 const PICKER_CHROME_IDS = new Set([
   'bugdrop-element-picker-overlay',
