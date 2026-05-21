@@ -1050,6 +1050,19 @@ test.describe('Widget Interaction', () => {
           body: JSON.stringify({ installed: true }),
         });
       });
+      await page.addInitScript(`
+        window.__bugdropMockToPng = function(el) {
+          var rect = el.getBoundingClientRect();
+          window.__captureTargetInfo = {
+            tagName: el.tagName,
+            id: el.id || '',
+            className: typeof el.className === 'string' ? el.className : '',
+            width: rect.width,
+            height: rect.height
+          };
+          return Promise.resolve('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+        };
+      `);
 
       await page.goto('/test/');
       await page.evaluate(() => {
@@ -1067,8 +1080,12 @@ test.describe('Widget Interaction', () => {
         target.addEventListener('pointerup', () => {
           document.body.dataset.mobileTapAction = 'fired';
         });
+        target.addEventListener('click', () => {
+          document.body.dataset.mobileClickAction = 'fired';
+        });
         document.body.appendChild(target);
         document.body.dataset.mobileTapAction = 'idle';
+        document.body.dataset.mobileClickAction = 'idle';
       });
 
       const host = page.locator('#bugdrop-host');
@@ -1080,6 +1097,16 @@ test.describe('Widget Interaction', () => {
       await host.locator('css=[data-action="element"]').click();
 
       await expect(page.locator('#bugdrop-element-picker-tooltip')).toBeVisible({ timeout: 5000 });
+      await page.evaluate(() => {
+        window.addEventListener(
+          'pointerup',
+          () => {
+            document.body.dataset.mobileCapturePointerAction = 'fired';
+          },
+          true
+        );
+        document.body.dataset.mobileCapturePointerAction = 'idle';
+      });
 
       const targetBox = await page.locator('#mobile-select-action-target').boundingBox();
       expect(targetBox).not.toBeNull();
@@ -1101,6 +1128,74 @@ test.describe('Widget Interaction', () => {
       await expect
         .poll(() => page.evaluate(() => document.body.dataset.mobileTapAction))
         .toBe('idle');
+      await expect
+        .poll(() => page.evaluate(() => document.body.dataset.mobileClickAction))
+        .toBe('idle');
+      await expect
+        .poll(() => page.evaluate(() => document.body.dataset.mobileCapturePointerAction))
+        .toBe('idle');
+
+      const targetInfo = await page.evaluate(() => window.__captureTargetInfo);
+      expect(targetInfo).toBeDefined();
+      if (!targetInfo) throw new Error('Missing capture target info');
+      expect(targetInfo.tagName).toBe('BUTTON');
+      expect(targetInfo.id).toBe('mobile-select-action-target');
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('element picker exposes a mobile cancel affordance', async ({ browser }) => {
+    const context = await browser.newContext({
+      hasTouch: true,
+      isMobile: true,
+      viewport: { width: 390, height: 844 },
+    });
+    const page = await context.newPage();
+    const submissions: unknown[] = [];
+
+    try {
+      await page.route('**/api/check**', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ installed: true }),
+        });
+      });
+      await page.route('**/feedback', async route => {
+        submissions.push(route.request().postDataJSON());
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true, issueNumber: 1, issueUrl: '#', isPublic: false }),
+        });
+      });
+
+      await page.goto('/test/');
+      const host = page.locator('#bugdrop-host');
+      await host.locator('css=.bd-trigger').click();
+      await host.locator('css=[data-action="continue"]').click();
+      await host.locator('css=#title').fill('Mobile element cancel test');
+      await host.locator('css=#include-screenshot').check();
+      await host.locator('css=#submit-btn').click();
+      await host.locator('css=[data-action="element"]').click();
+
+      const cancelButton = page.locator('#bugdrop-element-picker-cancel');
+      await expect(cancelButton).toBeVisible({ timeout: 5000 });
+      await cancelButton.click();
+
+      await expect(page.locator('#bugdrop-element-picker-tooltip')).not.toBeVisible({
+        timeout: 5000,
+      });
+      await expect(host.locator('css=.bd-trigger')).toBeVisible({ timeout: 5000 });
+      expect(submissions).toHaveLength(1);
+      const payload = submissions[0] as {
+        screenshot: string | null;
+        metadata: { elementSelector?: string | null; fullElementSelector?: string | null };
+      };
+      expect(payload.screenshot).toBeNull();
+      expect(payload.metadata.elementSelector).toBeNull();
+      expect(payload.metadata.fullElementSelector).toBeNull();
     } finally {
       await context.close();
     }
@@ -3773,6 +3868,90 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     expect(targetInfo.tagName).toBe('DIV');
     expect(targetInfo.id).toBe('role-token-control');
     expect(targetInfo.width).toBeGreaterThan(selectedBox!.width);
+  });
+
+  test('element picker uses the first recognized ARIA role token', async ({ page }) => {
+    await mockHtmlToImage(page, targetSpyToPng());
+    await page.goto('/test/?elementContextMaxArea=0');
+    await page.evaluate(() => {
+      const heading = document.createElement('div');
+      heading.id = 'ordered-role-heading';
+      heading.setAttribute('role', 'heading button');
+      heading.innerHTML = '<span class="ordered-role-name">Notifications</span>';
+      heading.style.cssText = `
+        display: block;
+        margin: 24px;
+        padding: 16px 20px;
+        width: 360px;
+        background: #1f2937;
+        color: white;
+      `;
+      document.body.prepend(heading);
+    });
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="element"]').click();
+    await expect(page.locator('#bugdrop-element-picker-tooltip')).toBeVisible({ timeout: 5000 });
+
+    const selected = page.locator('#ordered-role-heading .ordered-role-name');
+    await expect(selected).toBeVisible();
+    const selectedBox = await selected.boundingBox();
+    expect(selectedBox).toBeTruthy();
+
+    await page.mouse.click(
+      selectedBox!.x + selectedBox!.width / 2,
+      selectedBox!.y + selectedBox!.height / 2
+    );
+
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 10000 });
+
+    const targetInfo = await page.evaluate(() => window.__captureTargetInfo);
+    expect(targetInfo).toBeDefined();
+    if (!targetInfo) throw new Error('Missing capture target info');
+    expect(targetInfo.tagName).toBe('SPAN');
+    expect(targetInfo.className).toContain('ordered-role-name');
+  });
+
+  test('element picker honors non-clickable ARIA fallback roles', async ({ page }) => {
+    await mockHtmlToImage(page, targetSpyToPng());
+    await page.goto('/test/?elementContextMaxArea=0');
+    await page.evaluate(() => {
+      const group = document.createElement('div');
+      group.id = 'ordered-role-group';
+      group.setAttribute('role', 'group button');
+      group.innerHTML = '<span class="ordered-group-name">Messages</span>';
+      group.style.cssText = `
+        display: block;
+        margin: 24px;
+        padding: 16px 20px;
+        width: 360px;
+        background: #1f2937;
+        color: white;
+      `;
+      document.body.prepend(group);
+    });
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="element"]').click();
+    await expect(page.locator('#bugdrop-element-picker-tooltip')).toBeVisible({ timeout: 5000 });
+
+    const groupSelected = page.locator('#ordered-role-group .ordered-group-name');
+    await expect(groupSelected).toBeVisible();
+    const groupSelectedBox = await groupSelected.boundingBox();
+    expect(groupSelectedBox).toBeTruthy();
+
+    await page.mouse.click(
+      groupSelectedBox!.x + groupSelectedBox!.width / 2,
+      groupSelectedBox!.y + groupSelectedBox!.height / 2
+    );
+
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 10000 });
+
+    const groupTargetInfo = await page.evaluate(() => window.__captureTargetInfo);
+    expect(groupTargetInfo).toBeDefined();
+    if (!groupTargetInfo) throw new Error('Missing capture target info');
+    expect(groupTargetInfo.tagName).toBe('SPAN');
+    expect(groupTargetInfo.className).toContain('ordered-group-name');
   });
 
   test('shows error modal when capture times out', async ({ page }) => {

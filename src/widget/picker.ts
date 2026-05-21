@@ -1,83 +1,125 @@
-import { sanitizeCssColor, sanitizeCssFontFamily, sanitizeNonNegativePixelValue } from './sanitize';
-import { resolveAccentColor } from '../defaults';
+/* eslint-disable max-lines, max-lines-per-function */
+import { resolvePickerStyle, type PickerStyle, type ResolvedPickerStyle } from './picker-style';
+import { getSelectionTarget } from './picker-target';
 
-export interface PickerStyle {
-  accentColor?: string;
-  font?: string;
-  radius?: string;
-  borderWidth?: string;
-  bgColor?: string;
-  textColor?: string;
-  borderColor?: string;
-  theme?: string;
+export { resolvePickerStyle, type PickerStyle, type ResolvedPickerStyle };
+
+const PICKER_CHROME_IDS = new Set([
+  'bugdrop-element-picker-overlay',
+  'bugdrop-element-picker-highlight',
+  'bugdrop-element-picker-tooltip',
+  'bugdrop-element-picker-cancel',
+]);
+
+function usesCoarsePointer(): boolean {
+  const hasTouchPoints = navigator.maxTouchPoints > 0;
+  if (!window.matchMedia) return hasTouchPoints;
+
+  return (
+    window.matchMedia('(hover: none), (pointer: coarse), (any-pointer: coarse)').matches ||
+    hasTouchPoints
+  );
 }
 
-interface ResolvedPickerStyle {
-  accent: string;
-  fontFamily: string;
-  radius: string;
-  bw: string;
-  tooltipBg: string;
-  tooltipText: string;
-  tooltipBorder: string;
+function createOverlay(): HTMLDivElement {
+  const overlay = document.createElement('div');
+  overlay.id = 'bugdrop-element-picker-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    inset: 0;
+    z-index: 2147483647;
+    cursor: crosshair;
+    touch-action: none;
+    user-select: none;
+    background: transparent;
+  `;
+  return overlay;
 }
 
-const CLICKABLE_ROLES = new Set(['button', 'link', 'menuitem', 'tab', 'option']);
-const CLICKABLE_FORM_TAGS = new Set(['button', 'input', 'select', 'textarea']);
-
-function getSelectionTarget(element: Element): Element {
-  return getNearestClickableAncestor(element) ?? element;
+function createHighlight(
+  style: Pick<ResolvedPickerStyle, 'accent' | 'bw' | 'radius'>
+): HTMLDivElement {
+  const highlight = document.createElement('div');
+  highlight.id = 'bugdrop-element-picker-highlight';
+  highlight.style.cssText = `
+    position: fixed;
+    box-sizing: content-box;
+    pointer-events: none;
+    border: ${style.bw}px solid ${style.accent};
+    background: transparent;
+    z-index: 2147483645;
+    transition: all 0.05s ease-out;
+    box-shadow: none;
+    border-radius: ${style.radius};
+  `;
+  return highlight;
 }
 
-function getNearestClickableAncestor(element: Element): Element | null {
-  const { body, documentElement } = element.ownerDocument;
-  let current: Element | null = element;
+function createTooltip(
+  style: ResolvedPickerStyle,
+  showInlineCancel: boolean
+): { tooltip: HTMLDivElement; cancelButton: HTMLButtonElement | null } {
+  const tooltip = document.createElement('div');
+  tooltip.id = 'bugdrop-element-picker-tooltip';
+  tooltip.style.cssText = `
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: ${style.tooltipBg};
+    color: ${style.tooltipText};
+    padding: 14px 28px;
+    border-radius: ${style.radius};
+    font-family: ${style.fontFamily};
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 2147483647;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    border: ${style.bw}px solid ${style.tooltipBorder};
+  `;
 
-  while (current && current !== body && current !== documentElement) {
-    if (isClickableElement(current)) return current;
-    current = current.parentElement;
+  if (!showInlineCancel) {
+    tooltip.textContent = 'Click any element to capture it (ESC to cancel)';
+    return { tooltip, cancelButton: null };
   }
 
-  return null;
+  const cancelButton = createCancelButton(style.accent);
+  tooltip.append('Tap any element to capture it (', cancelButton, ')');
+  return { tooltip, cancelButton };
 }
 
-function isClickableElement(element: Element): boolean {
-  if (element.getAttribute('aria-disabled') === 'true') return false;
-
-  const tagName = element.tagName.toLowerCase();
-  if (tagName === 'a') return element.hasAttribute('href');
-  if (CLICKABLE_FORM_TAGS.has(tagName)) {
-    return !('disabled' in element && (element as HTMLButtonElement).disabled);
-  }
-  if (tagName === 'summary') return true;
-
-  const role = element.getAttribute('role');
-  if (role && role.split(/\s+/).some(roleToken => CLICKABLE_ROLES.has(roleToken.toLowerCase()))) {
-    return true;
-  }
-
-  const tabIndex = element.getAttribute('tabindex');
-  return tabIndex !== null && Number.parseInt(tabIndex, 10) >= 0;
+function updateHighlight(highlight: HTMLDivElement, element: Element): void {
+  const rect = element.getBoundingClientRect();
+  highlight.style.top = `${rect.top - 2}px`;
+  highlight.style.left = `${rect.left - 2}px`;
+  highlight.style.width = `${rect.width + 4}px`;
+  highlight.style.height = `${rect.height + 4}px`;
+  highlight.style.display = 'block';
 }
 
-export function resolvePickerStyle(style?: PickerStyle): ResolvedPickerStyle {
-  const isDark = style?.theme === 'dark';
-  const radius = sanitizeNonNegativePixelValue(style?.radius);
-  const borderWidth = sanitizeNonNegativePixelValue(style?.borderWidth);
-  const fontFamily = sanitizeCssFontFamily(style?.font);
+interface PickerListeners {
+  overlay: HTMLDivElement;
+  onPointerDown: (e: PointerEvent) => void;
+  onPointerMove: (e: PointerEvent) => void;
+  onPointerUp: (e: PointerEvent) => void;
+  onPointerCancel: (e: PointerEvent) => void;
+  onMouseMove: (e: MouseEvent) => void;
+}
 
-  return {
-    accent: resolveAccentColor(sanitizeCssColor(style?.accentColor)),
-    fontFamily:
-      style?.font === 'inherit'
-        ? 'system-ui, sans-serif'
-        : fontFamily || "'Space Grotesk', system-ui, sans-serif",
-    radius: radius !== undefined ? `${radius}px` : '6px',
-    bw: borderWidth !== undefined ? String(borderWidth) : '3',
-    tooltipBg: sanitizeCssColor(style?.bgColor) || (isDark ? '#0f172a' : '#1a1a1a'),
-    tooltipText: sanitizeCssColor(style?.textColor) || '#f1f5f9',
-    tooltipBorder: sanitizeCssColor(style?.borderColor) || (isDark ? '#334155' : '#333'),
-  };
+function addPickerListeners(listeners: PickerListeners): void {
+  listeners.overlay.addEventListener('pointerdown', listeners.onPointerDown);
+  listeners.overlay.addEventListener('pointermove', listeners.onPointerMove);
+  listeners.overlay.addEventListener('pointerup', listeners.onPointerUp);
+  listeners.overlay.addEventListener('pointercancel', listeners.onPointerCancel);
+  document.addEventListener('mousemove', listeners.onMouseMove, true);
+}
+
+function removePickerListeners(listeners: PickerListeners): void {
+  listeners.overlay.removeEventListener('pointerdown', listeners.onPointerDown);
+  listeners.overlay.removeEventListener('pointermove', listeners.onPointerMove);
+  listeners.overlay.removeEventListener('pointerup', listeners.onPointerUp);
+  listeners.overlay.removeEventListener('pointercancel', listeners.onPointerCancel);
+  document.removeEventListener('mousemove', listeners.onMouseMove, true);
 }
 
 export function createElementPicker(style?: PickerStyle): Promise<Element | null> {
@@ -93,59 +135,31 @@ function startPicker(resolve: (element: Element | null) => void, style?: PickerS
   const { accent, fontFamily, radius, bw, tooltipBg, tooltipText, tooltipBorder } =
     resolvePickerStyle(style);
 
-  const overlay = document.createElement('div');
-  overlay.id = 'bugdrop-element-picker-overlay';
-  overlay.style.cssText = `
-    position: fixed;
-    inset: 0;
-    z-index: 2147483645;
-    cursor: crosshair;
-    touch-action: none;
-    user-select: none;
-    background: transparent;
-  `;
+  const overlay = createOverlay();
   document.body.appendChild(overlay);
 
-  // Create highlight overlay with higher z-index than modal (1000000)
-  const highlight = document.createElement('div');
-  highlight.id = 'bugdrop-element-picker-highlight';
-  highlight.style.cssText = `
-    position: fixed;
-    box-sizing: content-box;
-    pointer-events: none;
-    border: ${bw}px solid ${accent};
-    background: transparent;
-    z-index: 2147483646;
-    transition: all 0.05s ease-out;
-    box-shadow: none;
-    border-radius: ${radius};
-  `;
+  const highlight = createHighlight({ accent, bw, radius });
   document.body.appendChild(highlight);
 
-  // Instruction tooltip with higher z-index
-  const tooltip = document.createElement('div');
-  tooltip.id = 'bugdrop-element-picker-tooltip';
-  tooltip.style.cssText = `
-    position: fixed;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: ${tooltipBg};
-    color: ${tooltipText};
-    padding: 14px 28px;
-    border-radius: ${radius};
-    font-family: ${fontFamily};
-    font-size: 14px;
-    font-weight: 500;
-    z-index: 2147483647;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-    border: ${bw}px solid ${tooltipBorder};
-  `;
-  tooltip.textContent = 'Click or tap any element to capture it (ESC to cancel)';
+  const { tooltip, cancelButton } = createTooltip(
+    { accent, fontFamily, radius, bw, tooltipBg, tooltipText, tooltipBorder },
+    usesCoarsePointer()
+  );
   document.body.appendChild(tooltip);
 
   let currentElement: Element | null = null;
   let activePointerId: number | null = null;
+  let resolved = false;
+  let clickBlockerRemovalTimer: number | undefined;
+
+  function isPickerChrome(element: Element): boolean {
+    return (
+      element === overlay ||
+      element === highlight ||
+      element === tooltip ||
+      PICKER_CHROME_IDS.has(element.id)
+    );
+  }
 
   function getSelectableElementAtPoint(x: number, y: number): Element | undefined {
     const previousPointerEvents = overlay.style.pointerEvents;
@@ -159,38 +173,34 @@ function startPicker(resolve: (element: Element | null) => void, style?: PickerS
     })();
 
     return elementsAtPoint.find(el => {
-      if (el === overlay) return false;
-      if (el === highlight || el === tooltip) return false;
-      if (el.id === 'bugdrop-element-picker-overlay') return false;
-      if (el.id === 'bugdrop-element-picker-highlight') return false;
-      if (el.id === 'bugdrop-element-picker-tooltip') return false;
+      if (isPickerChrome(el)) return false;
       if (el.closest('#bugdrop-host')) return false;
       return true;
     });
   }
 
-  function onMouseMove(e: MouseEvent) {
-    // Get the element under the cursor, ignoring our picker elements
-    const target = getSelectableElementAtPoint(e.clientX, e.clientY);
-
-    if (!target) return;
-
-    currentElement = getSelectionTarget(target);
-    const rect = currentElement.getBoundingClientRect();
-
-    // Update highlight position with slight padding
-    highlight.style.top = `${rect.top - 2}px`;
-    highlight.style.left = `${rect.left - 2}px`;
-    highlight.style.width = `${rect.width + 4}px`;
-    highlight.style.height = `${rect.height + 4}px`;
-    highlight.style.display = 'block';
+  function resolveSelectionAtPoint(x: number, y: number, fallback: Element | null) {
+    const target = getSelectableElementAtPoint(x, y);
+    return target ? getSelectionTarget(target) : fallback;
   }
 
-  function selectElementAtPoint(x: number, y: number) {
-    const target = getSelectableElementAtPoint(x, y);
-    currentElement = target ? getSelectionTarget(target) : currentElement;
-    cleanup();
-    resolve(currentElement);
+  function onMouseMove(e: MouseEvent) {
+    // Get the element under the cursor, ignoring our picker elements
+    currentElement = resolveSelectionAtPoint(e.clientX, e.clientY, currentElement);
+    if (!currentElement) return;
+    updateHighlight(highlight, currentElement);
+  }
+
+  function selectElementAtPoint(x: number, y: number, keepClickBlocker = false) {
+    currentElement = resolveSelectionAtPoint(x, y, currentElement);
+    finish(currentElement, keepClickBlocker);
+  }
+
+  function finish(element: Element | null, keepClickBlocker = false) {
+    if (resolved) return;
+    resolved = true;
+    cleanup(keepClickBlocker);
+    resolve(element);
   }
 
   function onPointerDown(e: PointerEvent) {
@@ -199,8 +209,7 @@ function startPicker(resolve: (element: Element | null) => void, style?: PickerS
     e.stopPropagation();
     activePointerId = e.pointerId;
     overlay.setPointerCapture?.(e.pointerId);
-    const target = getSelectableElementAtPoint(e.clientX, e.clientY);
-    currentElement = target ? getSelectionTarget(target) : currentElement;
+    currentElement = resolveSelectionAtPoint(e.clientX, e.clientY, currentElement);
   }
 
   function onPointerMove(e: PointerEvent) {
@@ -216,7 +225,7 @@ function startPicker(resolve: (element: Element | null) => void, style?: PickerS
     e.stopPropagation();
     activePointerId = null;
     overlay.releasePointerCapture?.(e.pointerId);
-    selectElementAtPoint(e.clientX, e.clientY);
+    selectElementAtPoint(e.clientX, e.clientY, true);
   }
 
   function onPointerCancel(e: PointerEvent) {
@@ -227,38 +236,128 @@ function startPicker(resolve: (element: Element | null) => void, style?: PickerS
 
   function onClick(e: MouseEvent) {
     e.preventDefault();
-    e.stopPropagation();
+    e.stopImmediatePropagation();
+    if (e.target instanceof Element && e.target.id === 'bugdrop-element-picker-cancel') {
+      finish(null);
+      return;
+    }
+    if (resolved) {
+      document.removeEventListener('click', onClick, true);
+      return;
+    }
     selectElementAtPoint(e.clientX, e.clientY);
+  }
+
+  function blockPagePointerEvent(e: PointerEvent) {
+    if (e.target instanceof Element && e.target.id === 'bugdrop-element-picker-cancel') return;
+
+    if (e.type === 'pointerdown') onPointerDown(e);
+    if (e.type === 'pointermove') onPointerMove(e);
+    if (e.type === 'pointerup') onPointerUp(e);
+    if (e.type === 'pointercancel') onPointerCancel(e);
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
   }
 
   function onKeyDown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
-      cleanup();
-      resolve(null);
+      finish(null);
     }
   }
 
-  function cleanup() {
-    overlay.removeEventListener('pointerdown', onPointerDown);
-    overlay.removeEventListener('pointermove', onPointerMove);
-    overlay.removeEventListener('pointerup', onPointerUp);
-    overlay.removeEventListener('pointercancel', onPointerCancel);
-    document.removeEventListener('mousemove', onMouseMove, true);
-    document.removeEventListener('click', onClick, true);
+  function onCancelClick(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    finish(null);
+  }
+
+  function cleanup(keepClickBlocker = false) {
+    if (clickBlockerRemovalTimer !== undefined) {
+      window.clearTimeout(clickBlockerRemovalTimer);
+      clickBlockerRemovalTimer = undefined;
+    }
+    removePickerListeners({
+      overlay,
+      onPointerDown,
+      onPointerMove,
+      onPointerUp,
+      onPointerCancel,
+      onMouseMove,
+    });
+    if (keepClickBlocker) {
+      clickBlockerRemovalTimer = window.setTimeout(() => {
+        document.removeEventListener('click', onClick, true);
+        clickBlockerRemovalTimer = undefined;
+      }, 1000);
+    } else {
+      document.removeEventListener('click', onClick, true);
+    }
     document.removeEventListener('keydown', onKeyDown);
+    removePagePointerBlockers();
+    cancelButton?.removeEventListener('click', onCancelClick);
     overlay.remove();
     highlight.remove();
     tooltip.remove();
     document.body.style.cursor = '';
   }
 
+  function addPagePointerBlockers() {
+    window.addEventListener('pointerdown', blockPagePointerEvent, true);
+    window.addEventListener('pointermove', blockPagePointerEvent, true);
+    window.addEventListener('pointerup', blockPagePointerEvent, true);
+    window.addEventListener('pointercancel', blockPagePointerEvent, true);
+  }
+
+  function removePagePointerBlockers() {
+    window.removeEventListener('pointerdown', blockPagePointerEvent, true);
+    window.removeEventListener('pointermove', blockPagePointerEvent, true);
+    window.removeEventListener('pointerup', blockPagePointerEvent, true);
+    window.removeEventListener('pointercancel', blockPagePointerEvent, true);
+  }
+
   // Set cursor and start listening
   document.body.style.cursor = 'crosshair';
-  overlay.addEventListener('pointerdown', onPointerDown);
-  overlay.addEventListener('pointermove', onPointerMove);
-  overlay.addEventListener('pointerup', onPointerUp);
-  overlay.addEventListener('pointercancel', onPointerCancel);
-  document.addEventListener('mousemove', onMouseMove, true);
+  addPagePointerBlockers();
+  addPickerListeners({
+    overlay,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onPointerCancel,
+    onMouseMove,
+  });
   document.addEventListener('click', onClick, true);
   document.addEventListener('keydown', onKeyDown);
+  cancelButton?.addEventListener('click', onCancelClick);
+}
+
+function createCancelButton(accent: string): HTMLButtonElement {
+  const cancelButton = document.createElement('button');
+  cancelButton.id = 'bugdrop-element-picker-cancel';
+  cancelButton.type = 'button';
+  cancelButton.textContent = 'Cancel';
+  cancelButton.style.cssText = `
+    align-items: center;
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: ${accent};
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-weight: 700;
+    justify-content: center;
+    margin: -10px -12px;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 10px 12px;
+    pointer-events: auto;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    touch-action: manipulation;
+    white-space: nowrap;
+    width: auto;
+  `;
+  return cancelButton;
 }
