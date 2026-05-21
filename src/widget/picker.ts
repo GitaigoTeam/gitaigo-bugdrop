@@ -235,14 +235,18 @@ function startPicker(resolve: (element: Element | null) => void, style?: PickerS
   }
 
   function onClick(e: MouseEvent) {
+    if (resolved) {
+      document.removeEventListener('click', onClick, true);
+      if (e.target instanceof Element && e.target.closest('#bugdrop-host')) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+
     e.preventDefault();
     e.stopImmediatePropagation();
     if (e.target instanceof Element && e.target.id === 'bugdrop-element-picker-cancel') {
       finish(null);
-      return;
-    }
-    if (resolved) {
-      document.removeEventListener('click', onClick, true);
       return;
     }
     selectElementAtPoint(e.clientX, e.clientY);
