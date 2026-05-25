@@ -19,6 +19,11 @@ import {
   sanitizeShadowPreset,
   sanitizeUrl,
 } from './sanitize';
+import {
+  getAuthHeaders,
+  resolveAuthTokenProvider,
+  type BugDropAuthTokenProvider,
+} from './auth-token';
 import { resolveAccentColor } from '../defaults';
 
 type FeedbackCategory = 'bug' | 'feature' | 'question';
@@ -27,6 +32,7 @@ type CategoryLabelConfig = Partial<Record<FeedbackCategory, string | string[]>>;
 interface WidgetConfig {
   repo: string;
   apiUrl: string;
+  authTokenProvider?: BugDropAuthTokenProvider;
   position: 'bottom-right' | 'bottom-left';
   theme: 'light' | 'dark' | 'auto';
   // Name/email field configuration
@@ -382,6 +388,7 @@ if (rawShowIssueLink && rawShowIssueLink !== 'public' && rawShowIssueLink !== is
 const config: WidgetConfig = {
   repo: script?.dataset.repo || '',
   apiUrl: script?.src.replace(/\/widget(?:\.v[\d.]+)?\.js$/, '/api') || '',
+  authTokenProvider: resolveAuthTokenProvider(script?.dataset.authTokenProvider),
   position: rawPosition === 'bottom-left' ? 'bottom-left' : 'bottom-right',
   theme: isValidTheme(rawTheme) ? rawTheme : 'auto', // Default to auto-detection
   // Name/email field configuration (all default to false for backwards compatibility)
@@ -1082,7 +1089,9 @@ async function checkInstallation(
   config: WidgetConfig
 ): Promise<{ status: 'installed' | 'not_installed' | 'unreachable'; appName?: string }> {
   try {
-    const response = await fetch(`${config.apiUrl}/check/${config.repo}`);
+    const response = await fetch(`${config.apiUrl}/check/${config.repo}`, {
+      headers: await getAuthHeaders(config.authTokenProvider),
+    });
     if (!response.ok) return { status: 'unreachable' };
     const data = await response.json();
     return {
@@ -1388,7 +1397,10 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
 
     const response = await fetch(`${config.apiUrl}/feedback`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await getAuthHeaders(config.authTokenProvider)),
+      },
       body: JSON.stringify({
         repo: config.repo,
         title: data.title,
