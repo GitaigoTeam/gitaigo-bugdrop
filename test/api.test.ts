@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import type { Env, FeedbackPayload } from '../src/types';
+import { createBugDropAuthTokenForTest } from '../src/lib/authToken';
 
 // Mock GitHub API functions
 const mockGetInstallationToken = vi.fn();
@@ -148,6 +149,21 @@ describe('API Routes', () => {
       expect(res.headers.get('access-control-allow-origin')).toBe('*');
     });
 
+    it('should reject tokenless check requests when check auth is required', async () => {
+      const env = {
+        ...mockEnv,
+        AUTH_TOKEN_SECRET: 'test-secret-with-at-least-32-bytes-for-hmac',
+        AUTH_TOKEN_REQUIRED_FOR_CHECK: 'true',
+      };
+      const req = new Request('http://localhost/check/testowner/testrepo');
+      const res = await app.fetch(req, env);
+      const data = await res.json();
+
+      expect(res.status).toBe(401);
+      expect(data).toEqual({ error: 'BugDrop auth token required' });
+      expect(mockGetInstallationToken).not.toHaveBeenCalled();
+    });
+
     it('should handle special characters in repo names', async () => {
       mockGetInstallationToken.mockResolvedValue('test-token');
 
@@ -202,6 +218,69 @@ describe('API Routes', () => {
         expect.stringContaining('This is a test feedback'),
         ['bug', 'bugdrop']
       );
+    });
+
+    it('should reject feedback without a bearer token when token auth is configured', async () => {
+      const env = {
+        ...mockEnv,
+        AUTH_TOKEN_SECRET: 'test-secret-with-at-least-32-bytes-for-hmac',
+        AUTH_TOKEN_AUDIENCE: 'bugdrop.example.workers.dev',
+        AUTH_TOKEN_ISSUER: 'app.example.com',
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: 'https://app.example.com' },
+        body: JSON.stringify(validPayload),
+      });
+      const res = await app.fetch(req, env);
+      const data = await res.json();
+
+      expect(res.status).toBe(401);
+      expect(data).toEqual({ error: 'BugDrop auth token required' });
+      expect(mockGetInstallationToken).not.toHaveBeenCalled();
+      expect(mockCreateIssue).not.toHaveBeenCalled();
+    });
+
+    it('should create issue with a valid bearer token when token auth is configured', async () => {
+      const env = {
+        ...mockEnv,
+        AUTH_TOKEN_SECRET: 'test-secret-with-at-least-32-bytes-for-hmac',
+        AUTH_TOKEN_AUDIENCE: 'bugdrop.example.workers.dev',
+        AUTH_TOKEN_ISSUER: 'app.example.com',
+      };
+      const now = Math.floor(Date.now() / 1000);
+      const token = await createBugDropAuthTokenForTest(
+        {
+          iss: 'app.example.com',
+          aud: 'bugdrop.example.workers.dev',
+          sub: 'user-123',
+          repo: 'testowner/testrepo',
+          iat: now,
+          exp: now + 300,
+          jti: 'jti-123',
+        },
+        env.AUTH_TOKEN_SECRET
+      );
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          Origin: 'https://app.example.com',
+        },
+        body: JSON.stringify(validPayload),
+      });
+      const res = await app.fetch(req, env);
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data).toMatchObject({
+        success: true,
+        issueNumber: 42,
+      });
+      expect(mockCreateIssue).toHaveBeenCalledOnce();
     });
 
     it('should ignore client-provided category labels unless explicitly enabled', async () => {

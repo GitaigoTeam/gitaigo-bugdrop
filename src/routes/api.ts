@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env, FeedbackCategory, FeedbackPayload } from '../types';
 import {
@@ -10,6 +10,7 @@ import {
 } from '../lib/github';
 import { rateLimit, rateLimitByRepo } from '../middleware/rateLimit';
 import { resolveAccentColor } from '../defaults';
+import { verifyBugDropAuthToken } from '../lib/authToken';
 
 const api = new Hono<{ Bindings: Env }>();
 
@@ -49,7 +50,7 @@ api.use('*', async (c, next) => {
       return originList.includes(origin) ? origin : null;
     },
     allowMethods: ['GET', 'POST', 'OPTIONS'],
-    allowHeaders: ['Content-Type'],
+    allowHeaders: ['Content-Type', 'Authorization'],
   });
 
   return corsMiddleware(c, next);
@@ -86,12 +87,18 @@ api.get('/health', c => {
 // Check if app is installed on repo
 api.get('/check/:owner/:repo', async c => {
   const { owner, repo } = c.req.param();
+  const fullRepo = `${owner}/${repo}`;
+
+  if (c.env.AUTH_TOKEN_REQUIRED_FOR_CHECK === 'true') {
+    const authError = await requireBugDropAuthToken(c, fullRepo);
+    if (authError) return authError;
+  }
 
   const token = await getInstallationToken(c.env, owner, repo);
 
   return c.json({
     installed: !!token,
-    repo: `${owner}/${repo}`,
+    repo: fullRepo,
     appName: c.env.GITHUB_APP_NAME || undefined,
   });
 });
@@ -136,6 +143,9 @@ api.post('/feedback', async c => {
       400
     );
   }
+
+  const authError = await requireBugDropAuthToken(c, payload.repo);
+  if (authError) return authError;
 
   try {
     // Get installation token
@@ -232,6 +242,33 @@ api.post('/feedback', async c => {
     );
   }
 });
+
+function getBearerToken(value: string | undefined): string | undefined {
+  return value?.match(/^Bearer\s+(.+)$/i)?.[1];
+}
+
+async function requireBugDropAuthToken(
+  c: Context<{ Bindings: Env }>,
+  repo: string
+): Promise<Response | null> {
+  if (!c.env.AUTH_TOKEN_SECRET) return null;
+
+  try {
+    await verifyBugDropAuthToken(getBearerToken(c.req.header('Authorization')), {
+      secret: c.env.AUTH_TOKEN_SECRET,
+      repo,
+      audience: c.env.AUTH_TOKEN_AUDIENCE,
+      issuer: c.env.AUTH_TOKEN_ISSUER,
+    });
+    return null;
+  } catch (error) {
+    console.warn('[BugDrop] rejected auth token', {
+      repo,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return c.json({ error: 'BugDrop auth token required' }, 401);
+  }
+}
 
 type ScreenshotValidationResult = { valid: true } | { valid: false; error: string };
 type LabelResolution = {
