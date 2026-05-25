@@ -12,7 +12,12 @@ import { rateLimit, rateLimitByRepo } from '../middleware/rateLimit';
 import { resolveAccentColor } from '../defaults';
 import { verifyBugDropAuthToken } from '../lib/authToken';
 
-const api = new Hono<{ Bindings: Env }>();
+type ApiVariables = {
+  feedbackPayload?: FeedbackPayload;
+};
+type ApiEnv = { Bindings: Env; Variables: ApiVariables };
+
+const api = new Hono<ApiEnv>();
 
 const DEFAULT_CATEGORY_LABELS: Record<FeedbackCategory, string[]> = {
   bug: ['bug'],
@@ -111,7 +116,7 @@ api.post('/feedback', async c => {
   // Parse payload
   let payload: FeedbackPayload;
   try {
-    payload = await c.req.json();
+    payload = c.get('feedbackPayload') ?? (await c.req.json());
   } catch {
     return c.json({ error: 'Invalid JSON' }, 400);
   }
@@ -247,16 +252,17 @@ api.post('/feedback', async c => {
 });
 
 async function requireBugDropFeedbackAuthToken(
-  c: Context<{ Bindings: Env }>,
+  c: Context<ApiEnv>,
   next: Next
 ): Promise<Response | void> {
   if (!c.env.AUTH_TOKEN_SECRET || c.req.method !== 'POST') return next();
 
   try {
-    const body = (await c.req.raw.clone().json()) as { repo?: unknown };
-    if (typeof body.repo !== 'string') return next();
+    const payload = (await c.req.raw.clone().json()) as FeedbackPayload;
+    c.set('feedbackPayload', payload);
+    if (typeof payload.repo !== 'string') return next();
 
-    const authError = await requireBugDropAuthToken(c, body.repo);
+    const authError = await requireBugDropAuthToken(c, payload.repo);
     if (authError) return authError;
   } catch {
     // Let the route handler return the existing invalid JSON response.
@@ -269,10 +275,7 @@ function getBearerToken(value: string | undefined): string | undefined {
   return value?.match(/^Bearer\s+(.+)$/i)?.[1];
 }
 
-async function requireBugDropAuthToken(
-  c: Context<{ Bindings: Env }>,
-  repo: string
-): Promise<Response | null> {
+async function requireBugDropAuthToken(c: Context<ApiEnv>, repo: string): Promise<Response | null> {
   if (!c.env.AUTH_TOKEN_SECRET) return null;
 
   try {

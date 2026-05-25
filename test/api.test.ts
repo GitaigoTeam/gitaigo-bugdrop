@@ -277,6 +277,42 @@ describe('API Routes', () => {
       );
     });
 
+    it('should parse protected feedback payload only once for successful requests', async () => {
+      const env = {
+        ...mockEnv,
+        AUTH_TOKEN_SECRET: 'test-secret-with-at-least-32-bytes-for-hmac',
+        AUTH_TOKEN_AUDIENCE: 'bugdrop.example.workers.dev',
+        AUTH_TOKEN_ISSUER: 'app.example.com',
+      };
+      const now = Math.floor(Date.now() / 1000);
+      const token = await createBugDropAuthTokenForTest(
+        {
+          iss: 'app.example.com',
+          aud: 'bugdrop.example.workers.dev',
+          sub: 'user-123',
+          repo: 'testowner/testrepo',
+          iat: now,
+          exp: now + 300,
+          jti: 'jti-123',
+        },
+        env.AUTH_TOKEN_SECRET
+      );
+      const request = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(validPayload),
+      });
+      const jsonSpy = vi.spyOn(request, 'json');
+
+      const res = await app.fetch(request, env);
+
+      expect(res.status).toBe(200);
+      expect(jsonSpy).not.toHaveBeenCalled();
+    });
+
     it('should create issue with a valid bearer token when token auth is configured', async () => {
       const env = {
         ...mockEnv,
