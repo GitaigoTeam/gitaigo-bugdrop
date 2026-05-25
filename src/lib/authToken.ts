@@ -1,4 +1,4 @@
-export interface BugDropAuthTokenPayload {
+interface BugDropAuthTokenPayload {
   iss?: string;
   aud?: string;
   sub: string;
@@ -10,7 +10,7 @@ export interface BugDropAuthTokenPayload {
   jti: string;
 }
 
-export interface VerifyBugDropAuthTokenOptions {
+interface VerifyBugDropAuthTokenOptions {
   secret: string;
   repo: string;
   audience?: string;
