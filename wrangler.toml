@@ -28,6 +28,7 @@ preview_id = "ff8f3809037d4403befd09369a9f7e36"
 # Secrets (set with: wrangler secret put GITHUB_APP_ID)
 # GITHUB_APP_ID
 # GITHUB_PRIVATE_KEY
+# AUTH_TOKEN_SECRET  # Optional: set to require signed host-app auth tokens for /feedback
 
 # Preview environment for live E2E tests (deployed in merge queue)
 [env.preview]

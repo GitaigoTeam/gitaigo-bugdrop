@@ -16,6 +16,7 @@ These attributes control the fundamental behavior of the widget.
 | `data-label` | `"Feedback"` | Text label displayed next to the button icon |
 | `data-category-labels` | built-in labels | Self-hosted JSON mapping from built-in categories to GitHub labels |
 | `data-button` | `"true"` | Show the floating button: `"true"` or `"false"` |
+| `data-auth-token-provider` | none | Name of a global function that returns a self-hosted auth token |
 | `data-welcome` | `"Report a bug or request a feature"` | Welcome message displayed at the top of the form |
 | `data-show-issue-link` | `"public"` | Show the GitHub issue link after submission: `"public"`, `"always"`, or `"never"` |
 
@@ -198,6 +199,37 @@ Self-hosted deployments can also let pages set labels via the `data-category-lab
 ```
 
 Only enable this when your worker's `ALLOWED_ORIGINS` is locked down to trusted domains.
+
+## Auth Token Provider
+
+Self-hosted deployments can require short-lived host-app auth tokens before BugDrop accepts feedback. This is useful when the widget is only meant for authenticated users in your product.
+
+First, define a global function that fetches a token from your own backend:
+
+```html
+<script>
+  window.getBugDropToken = async function getBugDropToken() {
+    const response = await fetch('/api/bugdrop-token', { credentials: 'include' });
+    if (!response.ok) throw new Error('Unable to create BugDrop token');
+    const { token } = await response.json();
+    return token;
+  };
+</script>
+```
+
+Then reference that function on the BugDrop script tag:
+
+```html
+<script
+  src="https://bugdrop.yourcompany.com/widget.js"
+  data-repo="owner/repo"
+  data-auth-token-provider="getBugDropToken"
+></script>
+```
+
+The provider may return either a raw token or a value already prefixed with `Bearer `. BugDrop calls it before installation checks and feedback submissions, then sends the token in the `Authorization` header.
+
+This attribute only adds the client-side header. Your self-hosted worker must also set `AUTH_TOKEN_SECRET` to enforce the token gate. See the [Self-Hosting guide](https://github.com/mean-weasel/bugdrop/blob/main/SELF_HOSTING.md) for the worker environment variables and token claim format.
 
 ### Rules and behavior
 

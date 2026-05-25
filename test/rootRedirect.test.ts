@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resolveRootRedirectUrl } from '../src/index';
+import { isWeakAuthTokenSecret, resolveRootRedirectUrl } from '../src/index';
 
 describe('resolveRootRedirectUrl', () => {
   it('uses the hosted site by default', () => {
@@ -19,5 +19,21 @@ describe('resolveRootRedirectUrl', () => {
     expect(warnSpy).toHaveBeenCalledTimes(2);
 
     warnSpy.mockRestore();
+  });
+});
+
+describe('isWeakAuthTokenSecret', () => {
+  it('does not warn when auth token enforcement is unset', () => {
+    expect(isWeakAuthTokenSecret()).toBe(false);
+    expect(isWeakAuthTokenSecret('')).toBe(false);
+  });
+
+  it('flags configured secrets shorter than 32 characters', () => {
+    expect(isWeakAuthTokenSecret('too-short')).toBe(true);
+    expect(isWeakAuthTokenSecret('x'.repeat(31))).toBe(true);
+  });
+
+  it('accepts secrets with at least 32 characters', () => {
+    expect(isWeakAuthTokenSecret('x'.repeat(32))).toBe(false);
   });
 });

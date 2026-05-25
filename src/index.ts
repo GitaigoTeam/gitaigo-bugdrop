@@ -23,6 +23,11 @@ app.use('*', async (c, next) => {
     if (c.env.ALLOWED_ORIGINS === '*' && c.env.ENVIRONMENT !== 'development') {
       console.warn('WARNING: ALLOWED_ORIGINS is set to "*" in non-development environment');
     }
+    if (isWeakAuthTokenSecret(c.env.AUTH_TOKEN_SECRET)) {
+      console.warn(
+        '[BugDrop] AUTH_TOKEN_SECRET should be a long random value of at least 32 characters.'
+      );
+    }
 
     envChecked = true;
   }
@@ -34,6 +39,10 @@ app.use('*', logger());
 
 // Mount API routes
 app.route('/api', api);
+
+export function isWeakAuthTokenSecret(secret?: string): boolean {
+  return typeof secret === 'string' && secret.length > 0 && secret.length < 32;
+}
 
 export function resolveRootRedirectUrl(rawUrl?: string): string {
   if (!rawUrl) {
