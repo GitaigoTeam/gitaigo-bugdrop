@@ -83,10 +83,12 @@ jobs:
           key: pw-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
 
       - name: Install Playwright browsers
+        timeout-minutes: 5
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Install Playwright system deps
+        timeout-minutes: 5
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
 
@@ -135,6 +137,7 @@ jobs:
   live-preview-tests:
     name: Live Preview Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [deploy-preview]
     if: github.event_name == 'merge_group'
     env:
@@ -165,10 +168,12 @@ jobs:
           key: pw-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
 
       - name: Install Playwright browsers
+        timeout-minutes: 5
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Install Playwright system deps
+        timeout-minutes: 5
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
 
@@ -239,6 +244,7 @@ jobs:
   live-preview-cross-browser-tests:
     name: Live Preview Cross-Browser (${{ matrix.browser }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [deploy-preview]
     if: github.event_name == 'merge_group'
     strategy:
@@ -273,10 +279,12 @@ jobs:
           key: pw-${{ runner.os }}-${{ matrix.browser }}-${{ steps.pw-version.outputs.version }}
 
       - name: Install Playwright browser
+        timeout-minutes: 5
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: Install Playwright system deps
+        timeout-minutes: 5
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps ${{ matrix.browser }}
 
