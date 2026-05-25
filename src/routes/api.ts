@@ -1,4 +1,4 @@
-import { Hono, type Context } from 'hono';
+import { Hono, type Context, type Next } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env, FeedbackCategory, FeedbackPayload } from '../types';
 import {
@@ -65,6 +65,9 @@ api.use(
     keyPrefix: 'ip',
   })
 );
+
+// Authenticate protected submissions before shared repo quota accounting.
+api.use('/feedback', requireBugDropFeedbackAuthToken);
 
 // Rate limit: 50 requests per hour per repo
 api.use(
@@ -242,6 +245,25 @@ api.post('/feedback', async c => {
     );
   }
 });
+
+async function requireBugDropFeedbackAuthToken(
+  c: Context<{ Bindings: Env }>,
+  next: Next
+): Promise<Response | void> {
+  if (!c.env.AUTH_TOKEN_SECRET || c.req.method !== 'POST') return next();
+
+  try {
+    const body = (await c.req.raw.clone().json()) as { repo?: unknown };
+    if (typeof body.repo !== 'string') return next();
+
+    const authError = await requireBugDropAuthToken(c, body.repo);
+    if (authError) return authError;
+  } catch {
+    // Let the route handler return the existing invalid JSON response.
+  }
+
+  return next();
+}
 
 function getBearerToken(value: string | undefined): string | undefined {
   return value?.match(/^Bearer\s+(.+)$/i)?.[1];

@@ -242,6 +242,41 @@ describe('API Routes', () => {
       expect(mockCreateIssue).not.toHaveBeenCalled();
     });
 
+    it('should reject tokenless feedback before consuming repository rate limits', async () => {
+      const rateLimit = {
+        get: vi.fn().mockResolvedValue('0'),
+        put: vi.fn().mockResolvedValue(undefined),
+      };
+      const env = {
+        ...mockEnv,
+        ENVIRONMENT: 'production',
+        AUTH_TOKEN_SECRET: 'test-secret-with-at-least-32-bytes-for-hmac',
+        RATE_LIMIT: rateLimit as unknown as KVNamespace,
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'cf-connecting-ip': '203.0.113.10',
+        },
+        body: JSON.stringify(validPayload),
+      });
+      const res = await app.fetch(req, env);
+
+      expect(res.status).toBe(401);
+      expect(rateLimit.put).toHaveBeenCalledWith(
+        expect.stringMatching(/^ip:203\.0\.113\.10:/),
+        '1',
+        expect.any(Object)
+      );
+      expect(rateLimit.put).not.toHaveBeenCalledWith(
+        expect.stringMatching(/^repo:testowner\/testrepo:/),
+        expect.any(String),
+        expect.any(Object)
+      );
+    });
+
     it('should create issue with a valid bearer token when token auth is configured', async () => {
       const env = {
         ...mockEnv,
