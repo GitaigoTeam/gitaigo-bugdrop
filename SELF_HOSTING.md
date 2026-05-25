@@ -129,6 +129,8 @@ To customize limits, edit `src/middleware/rateLimit.ts` and the middleware confi
 # Set production secrets
 wrangler secret put GITHUB_APP_ID
 wrangler secret put GITHUB_PRIVATE_KEY
+# Optional: require signed host-app auth tokens before accepting feedback
+wrangler secret put AUTH_TOKEN_SECRET
 
 # Deploy
 make deploy
@@ -166,18 +168,22 @@ The release tag (e.g., `v1.2.0`) becomes the version number for the widget files
 
 ### Environment Variables
 
-| Variable                       | Required | Description                                                           |
-| ------------------------------ | -------- | --------------------------------------------------------------------- |
-| `GITHUB_APP_ID`                | Yes      | Your GitHub App's numeric ID                                          |
-| `GITHUB_PRIVATE_KEY`           | Yes      | Private key from GitHub App settings                                  |
-| `ENVIRONMENT`                  | No       | `development` disables rate limiting; `production` enables all checks |
-| `ALLOWED_ORIGINS`              | No       | Comma-separated allowed domains (default: `*`)                        |
-| `GITHUB_APP_NAME`              | No       | Your app's URL slug for install links                                 |
-| `MAX_SCREENSHOT_SIZE_MB`       | No       | Max screenshot size in MB (default: `5`)                              |
-| `CATEGORY_LABELS`              | No       | JSON mapping from repos/categories to GitHub labels                   |
-| `ALLOW_CLIENT_CATEGORY_LABELS` | No       | Set to `true` to trust `data-category-labels` from your own pages     |
-| `ROOT_REDIRECT_URL`            | No       | Landing page URL for `/` redirects (default: `https://bugdrop.dev`)   |
-| `RATE_LIMIT`                   | No       | KV namespace binding for rate limiting (see section 5)                |
+| Variable                        | Required | Description                                                           |
+| ------------------------------- | -------- | --------------------------------------------------------------------- |
+| `GITHUB_APP_ID`                 | Yes      | Your GitHub App's numeric ID                                          |
+| `GITHUB_PRIVATE_KEY`            | Yes      | Private key from GitHub App settings                                  |
+| `ENVIRONMENT`                   | No       | `development` disables rate limiting; `production` enables all checks |
+| `ALLOWED_ORIGINS`               | No       | Comma-separated allowed domains (default: `*`)                        |
+| `GITHUB_APP_NAME`               | No       | Your app's URL slug for install links                                 |
+| `MAX_SCREENSHOT_SIZE_MB`        | No       | Max screenshot size in MB (default: `5`)                              |
+| `CATEGORY_LABELS`               | No       | JSON mapping from repos/categories to GitHub labels                   |
+| `ALLOW_CLIENT_CATEGORY_LABELS`  | No       | Set to `true` to trust `data-category-labels` from your own pages     |
+| `ROOT_REDIRECT_URL`             | No       | Landing page URL for `/` redirects (default: `https://bugdrop.dev`)   |
+| `AUTH_TOKEN_SECRET`             | No       | HMAC secret that requires signed host-app tokens for `/feedback`      |
+| `AUTH_TOKEN_AUDIENCE`           | No       | Expected token `aud` claim, usually your BugDrop worker hostname      |
+| `AUTH_TOKEN_ISSUER`             | No       | Expected token `iss` claim, usually your app hostname                 |
+| `AUTH_TOKEN_REQUIRED_FOR_CHECK` | No       | Set to `true` to require auth tokens for `/check/:owner/:repo` too    |
+| `RATE_LIMIT`                    | No       | KV namespace binding for rate limiting (see section 5)                |
 
 ### Custom Category Labels
 
@@ -228,6 +234,64 @@ GITHUB_APP_NAME = "my-bugdrop-app"
 Only list the exact origins (scheme + host) of sites where you embed the BugDrop widget. The worker validates the `Origin` header on incoming requests and rejects any not in this list.
 
 > **Note:** `ALLOWED_ORIGINS` is a CORS-level check — it only blocks browser-based cross-origin requests. Direct API calls (curl, scripts) don't send an `Origin` header and bypass CORS entirely. Rate limiting (section 5) is your primary defense against non-browser abuse.
+
+### Requiring Host-App Auth Tokens (Recommended for Private Apps)
+
+For self-hosted deployments embedded in authenticated apps, add a short-lived signed token so the worker only accepts feedback from users your app has already authorized. This is stronger than CORS alone because direct API callers must also produce a valid token.
+
+Set a long random secret on the BugDrop worker:
+
+```bash
+wrangler secret put AUTH_TOKEN_SECRET
+```
+
+Then set optional claim checks in your worker vars:
+
+```toml
+[vars]
+AUTH_TOKEN_AUDIENCE = "bugdrop.your-subdomain.workers.dev"
+AUTH_TOKEN_ISSUER = "app.yourdomain.com"
+AUTH_TOKEN_REQUIRED_FOR_CHECK = "true"
+```
+
+When `AUTH_TOKEN_SECRET` is set, `/feedback` requires an `Authorization: Bearer <token>` header. `/check/:owner/:repo` remains public by default for backwards compatibility; set `AUTH_TOKEN_REQUIRED_FOR_CHECK = "true"` if even installation status should be visible only to authenticated users.
+
+Your application should expose a same-origin endpoint that returns a token only after checking its own session:
+
+```js
+window.getBugDropToken = async function getBugDropToken() {
+  const response = await fetch('/api/bugdrop-token', { credentials: 'include' });
+  if (!response.ok) throw new Error('Unable to create BugDrop token');
+  const { token } = await response.json();
+  return token;
+};
+```
+
+Then point the widget at that global function:
+
+```html
+<script
+  src="https://bugdrop.your-subdomain.workers.dev/widget.js"
+  data-repo="owner/repo"
+  data-auth-token-provider="getBugDropToken"
+></script>
+```
+
+Tokens use a compact HMAC-SHA256 format with a `bd1` prefix. The payload is JSON with these claims:
+
+```json
+{
+  "iss": "app.yourdomain.com",
+  "aud": "bugdrop.your-subdomain.workers.dev",
+  "sub": "user_123",
+  "repo": "owner/repo",
+  "iat": 1779700000,
+  "exp": 1779700300,
+  "jti": "unique-token-id"
+}
+```
+
+Use short expirations, usually 5 minutes or less. The `repo` claim must exactly match the widget's `data-repo` value. `sub` and `jti` are not persisted by BugDrop today, but including them gives you useful audit material in your own token issuer logs.
 
 ### Root URL Redirect
 

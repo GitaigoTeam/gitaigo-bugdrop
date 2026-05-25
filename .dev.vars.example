@@ -42,5 +42,12 @@ YOUR_PRIVATE_KEY_CONTENT_HERE
 # Optional: where "/" redirects for self-hosted deployments.
 # ROOT_REDIRECT_URL=https://example.com
 
+# Optional: require short-lived host-app auth tokens before creating issues.
+# Use this for self-hosted widgets that should only accept feedback from authenticated users.
+# AUTH_TOKEN_SECRET=replace-with-a-long-random-secret-at-least-32-bytes
+# AUTH_TOKEN_AUDIENCE=bugdrop.your-subdomain.workers.dev
+# AUTH_TOKEN_ISSUER=app.yourdomain.com
+# AUTH_TOKEN_REQUIRED_FOR_CHECK=true
+
 # RATE_LIMIT is intentionally not configured here.
 # Local development runs with ENVIRONMENT=development and can work without a KV namespace.
