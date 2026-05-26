@@ -245,6 +245,19 @@ Set a long random secret on the BugDrop worker:
 wrangler secret put AUTH_TOKEN_SECRET
 ```
 
+Use the exact same secret bytes in the host app that mints BugDrop tokens. The worker and
+host-app signing secret must be byte-for-byte identical, including whitespace. Prefer a long
+random no-newline value, and avoid shell or file flows that append a trailing newline. For
+example, when setting a known value with Wrangler:
+
+```bash
+printf '%s' "$secret" | wrangler secret put AUTH_TOKEN_SECRET
+```
+
+Use an equivalent no-newline secret-setting flow for your host app platform. If your host app
+successfully returns a `bd1` token but the worker logs `Invalid token signature`, check for a
+secret mismatch, trailing newline, or quoting difference before debugging token claims.
+
 Then set optional claim checks in your worker vars:
 
 ```toml
