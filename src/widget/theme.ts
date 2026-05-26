@@ -87,8 +87,9 @@ export function applyCustomStyles(
   if (borderW !== null || borderC !== null) {
     const bw = borderW !== null ? `${borderW}px` : '1px';
     const bc = borderC || 'var(--bd-border)';
+    root.style.setProperty('--bd-border-width', bw);
     root.style.setProperty('--bd-border', bc);
-    root.style.setProperty('--bd-border-style', `${bw} solid ${bc}`);
+    root.style.setProperty('--bd-border-style', `var(--bd-border-width) solid ${bc}`);
   }
 
   // Apply shadow preset if provided
@@ -100,7 +101,7 @@ export function applyCustomStyles(
     root.style.setProperty('--bd-shadow-glow', 'none');
   } else if (shadowPreset === 'hard') {
     const shadowColor = borderC || (isDark ? '#000' : '#1a1a1a');
-    const offset = borderW !== null ? `${borderW + 2}px` : '6px';
+    const offset = borderW !== null ? `calc(var(--bd-border-width) + 2px)` : '6px';
     root.style.setProperty('--bd-shadow-sm', `${shadowColor} 2px 2px 0 0`);
     root.style.setProperty('--bd-shadow-md', `${shadowColor} ${offset} ${offset} 0 0`);
     root.style.setProperty('--bd-shadow-lg', `${shadowColor} ${offset} ${offset} 0 0`);

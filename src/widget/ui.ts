@@ -82,7 +82,8 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       --bd-radius-lg: ${radiusLg};
 
       /* Border */
-      --bd-border-style: ${borderW !== null ? `${borderW}px` : '1px'} solid var(--bd-border);
+      --bd-border-width: ${borderW !== null ? `${borderW}px` : '1px'};
+      --bd-border-style: var(--bd-border-width) solid var(--bd-border);
 
       /* Transitions */
       --bd-transition: 0.15s ease;

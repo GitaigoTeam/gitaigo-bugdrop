@@ -255,14 +255,30 @@ describe('applyCustomStyles', () => {
     it('sets --bd-border and --bd-border-style when borderWidth is provided', () => {
       const root = makeRoot();
       applyCustomStyles(root, { borderWidth: '4' }, 'light');
-      expect(root.style.getPropertyValue('--bd-border-style')).toBe('4px solid var(--bd-border)');
+      expect(root.style.getPropertyValue('--bd-border-width')).toBe('4px');
+      expect(root.style.getPropertyValue('--bd-border-style')).toBe(
+        'var(--bd-border-width) solid var(--bd-border)'
+      );
+    });
+
+    it('preserves fractional border widths in a dedicated variable', () => {
+      const root = makeRoot();
+      applyCustomStyles(root, { borderWidth: '1.5', borderColor: '#64748b' }, 'light');
+      expect(root.style.getPropertyValue('--bd-border-width')).toBe('1.5px');
+      expect(root.style.getPropertyValue('--bd-border')).toBe('#64748b');
+      expect(root.style.getPropertyValue('--bd-border-style')).toBe(
+        'var(--bd-border-width) solid #64748b'
+      );
     });
 
     it('uses explicit borderColor when provided', () => {
       const root = makeRoot();
       applyCustomStyles(root, { borderWidth: '2', borderColor: '#000' }, 'light');
+      expect(root.style.getPropertyValue('--bd-border-width')).toBe('2px');
       expect(root.style.getPropertyValue('--bd-border')).toBe('#000');
-      expect(root.style.getPropertyValue('--bd-border-style')).toBe('2px solid #000');
+      expect(root.style.getPropertyValue('--bd-border-style')).toBe(
+        'var(--bd-border-width) solid #000'
+      );
     });
 
     it('ignores invalid border width and border color values', () => {
