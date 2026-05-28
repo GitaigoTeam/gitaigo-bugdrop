@@ -83,7 +83,6 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
 
       /* Border */
       --bd-border-width: ${borderW !== null ? `${borderW}px` : '1px'};
-      --bd-border-style: var(--bd-border-width) solid var(--bd-border);
 
       /* Transitions */
       --bd-transition: 0.15s ease;
@@ -99,6 +98,7 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       --bd-text-secondary: #57534e;
       --bd-text-muted: #a8a29e;
       --bd-border: #e7e5e4;
+      --bd-border-style: var(--bd-border-width) solid var(--bd-border);
       --bd-border-focus: ${DEFAULT_ACCENT_COLOR};
       --bd-primary: ${DEFAULT_ACCENT_COLOR};
       --bd-primary-hover: ${getAccentHoverColor(DEFAULT_ACCENT_COLOR)};
