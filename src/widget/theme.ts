@@ -88,7 +88,9 @@ export function applyCustomStyles(
     const bw = borderW !== null ? `${borderW}px` : '1px';
     const bc = borderC || 'var(--bd-border)';
     root.style.setProperty('--bd-border-width', bw);
-    root.style.setProperty('--bd-border', bc);
+    if (borderC) {
+      root.style.setProperty('--bd-border', bc);
+    }
     root.style.setProperty('--bd-border-style', `var(--bd-border-width) solid ${bc}`);
   }
 

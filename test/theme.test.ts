@@ -252,10 +252,11 @@ describe('applyCustomStyles', () => {
   });
 
   describe('border', () => {
-    it('sets --bd-border and --bd-border-style when borderWidth is provided', () => {
+    it('sets border width without self-referencing the inherited border color', () => {
       const root = makeRoot();
       applyCustomStyles(root, { borderWidth: '4' }, 'light');
       expect(root.style.getPropertyValue('--bd-border-width')).toBe('4px');
+      expect(root.style.getPropertyValue('--bd-border')).toBe('');
       expect(root.style.getPropertyValue('--bd-border-style')).toBe(
         'var(--bd-border-width) solid var(--bd-border)'
       );
