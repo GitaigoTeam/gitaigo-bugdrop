@@ -154,3 +154,16 @@ installs dependencies, builds the widget, and runs all tests to verify the setup
 - Repo is in the `mean-weasel` org (transferred from `neonwatty` for merge queue support)
 - `html-to-image` library bundled into widget.js via esbuild (static import, not CDN-loaded)
 - Complex DOM pages (>3000 nodes) get reduced pixelRatio; pages with >10k nodes have Full Page and Select Area buttons hidden entirely
+
+## Burden Of Proof
+
+Before declaring work complete, try to disprove the change. Identify the
+strongest realistic failure mode, verify it with a command, test, trace,
+screenshot, audit record, diff, or direct inspection, and include that evidence
+in the final handoff.
+
+Treat `done`, `tests passed`, worker claims, passing happy-path tests, generated
+summaries, and optimistic UI as claims, not proof. Treat unverified assumptions
+as blockers or explicit follow-ups.
+
+Keep this section synchronized with `AGENTS.md` whenever either file changes.
