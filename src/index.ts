@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { logger } from 'hono/logger';
 import type { Env } from './types';
 import api from './routes/api';
+import { createBoardDogfoodToken, renderBoardDogfoodPage } from './lib/boardDogfood';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -65,6 +66,28 @@ export function resolveRootRedirectUrl(rawUrl?: string): string {
 // Redirect to landing page on Vercel
 app.get('/', c => {
   return c.redirect(resolveRootRedirectUrl(c.env.ROOT_REDIRECT_URL), 301);
+});
+
+app.get('/board-dogfood', c => {
+  const viewer = c.req.query('viewer') ?? null;
+  return c.html(renderBoardDogfoodPage(c.env, viewer));
+});
+
+app.get('/api/bugdrop-board-token', async c => {
+  try {
+    const token = await createBoardDogfoodToken(c.env, c.req.query('viewer') ?? null);
+    return c.json({ token }, 200, {
+      'Cache-Control': 'no-store',
+    });
+  } catch (error) {
+    return c.json(
+      { error: error instanceof Error ? error.message : 'BugDrop Board dogfood token failed' },
+      503,
+      {
+        'Cache-Control': 'no-store',
+      }
+    );
+  }
 });
 
 // Serve widget.js from static assets
