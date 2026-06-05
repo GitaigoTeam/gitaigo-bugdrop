@@ -3,6 +3,26 @@
   "entry": ["src/index.ts", "src/widget/index.ts", "scripts/build-widget.js"],
   "project": ["src/**/*.ts", "scripts/**/*.js"],
   "ignore": [],
-  "ignoreBinaries": ["semantic-release"],
-  "ignoreDependencies": ["esbuild", "semantic-release"]
+  "ignoreBinaries": [
+    "commitlint",
+    "eslint",
+    "husky",
+    "lint-staged",
+    "playwright",
+    "prettier",
+    "semantic-release",
+    "tsc",
+    "vitest",
+    "wrangler"
+  ],
+  "ignoreDependencies": [
+    "@commitlint/cli",
+    "esbuild",
+    "eslint",
+    "husky",
+    "lint-staged",
+    "prettier",
+    "semantic-release",
+    "wrangler"
+  ]
 }
