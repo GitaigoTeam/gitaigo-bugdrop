@@ -55,6 +55,7 @@ export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): stri
     <main>
       <h1>BugDrop Board Dogfood</h1>
       <p>Signed in as dogfood viewer ${viewer.toUpperCase()}.</p>
+      <section id="bugdrop-board-dogfood"></section>
     </main>
     <script
       src="${escapeAttribute(config.workerOrigin)}/board.js"
@@ -63,6 +64,7 @@ export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): stri
       data-token-endpoint="/api/bugdrop-board-token?viewer=${viewer}"
       data-poll-interval="750"
       data-color="#1f883d"
+      data-mount-selector="#bugdrop-board-dogfood"
     ></script>
   </body>
 </html>`;
