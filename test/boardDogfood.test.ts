@@ -31,6 +31,8 @@ describe('BugDrop Board dogfood host', () => {
     expect(html).toContain(`data-api-url="${workerOrigin}"`);
     expect(html).toContain(`data-board-id="${boardId}"`);
     expect(html).toContain('data-token-endpoint="/api/bugdrop-board-token?viewer=a"');
+    expect(html).toContain('<section id="bugdrop-board-dogfood"></section>');
+    expect(html).toContain('data-mount-selector="#bugdrop-board-dogfood"');
     expect(html).not.toContain(boardSecret);
   });
 
