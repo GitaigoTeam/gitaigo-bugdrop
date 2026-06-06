@@ -33,7 +33,35 @@ describe('BugDrop Board dogfood host', () => {
     expect(html).toContain('data-token-endpoint="/api/bugdrop-board-token?viewer=a"');
     expect(html).toContain('<section id="bugdrop-board-dogfood"></section>');
     expect(html).toContain('data-mount-selector="#bugdrop-board-dogfood"');
+    expect(html).toContain('data-config-selector="#bugdrop-board-dogfood-config"');
     expect(html).not.toContain(boardSecret);
+  });
+
+  it('renders a compact product-style customization config for the dogfood board', async () => {
+    const response = await app.fetch(
+      new Request('https://bugdrop.dev/board-dogfood?viewer=a'),
+      env
+    );
+    const html = await response.text();
+    const config = extractDogfoodConfig(html);
+
+    expect(config).toMatchObject({
+      layout: 'panel',
+      density: 'compact',
+      copy: {
+        heading: 'BugDrop roadmap queue',
+        submitLabel: 'Add request',
+        upvoteLabel: 'Prioritize',
+        upvotedLabel: 'Prioritized',
+      },
+      theme: {
+        accent: '#1f883d',
+        buttonRadius: '4px',
+        itemRadius: '4px',
+        maxWidth: '760px',
+      },
+    });
+    expect(JSON.stringify(config)).not.toContain(boardSecret);
   });
 
   it('signs a short-lived board token for viewer b without exposing the secret', async () => {
@@ -78,6 +106,14 @@ interface BoardTokenClaims {
   exp: number;
   aud: string;
   iss: string;
+}
+
+function extractDogfoodConfig(html: string): unknown {
+  const match = html.match(
+    /<script type="application\/json" id="bugdrop-board-dogfood-config">([^<]+)<\/script>/
+  );
+  expect(match?.[1]).toBeTruthy();
+  return JSON.parse(match?.[1] ?? '{}');
 }
 
 async function verifyBoardToken(token: string, secret: string): Promise<BoardTokenClaims> {

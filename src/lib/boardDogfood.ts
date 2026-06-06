@@ -4,6 +4,7 @@ const DEFAULT_BOARD_ID = 'board_mean_weasel_bugdrop_board_production_dogfood';
 const DEFAULT_WORKER_ORIGIN = 'https://board.bugdrop.dev';
 const DEFAULT_TOKEN_AUDIENCE = 'bugdrop-board';
 const DEFAULT_TOKEN_ISSUER = 'bugdrop-board-production-host';
+const BOARD_CONFIG_SCRIPT_ID = 'bugdrop-board-dogfood-config';
 const TOKEN_TTL_SECONDS = 300;
 
 interface BoardDogfoodConfig {
@@ -21,6 +22,45 @@ interface BoardTokenClaims {
   aud: string;
   iss: string;
 }
+
+const boardCustomization = {
+  layout: 'panel',
+  density: 'compact',
+  copy: {
+    heading: 'BugDrop roadmap queue',
+    titleLabel: 'Request',
+    titlePlaceholder: 'Short product request',
+    descriptionLabel: 'Context',
+    descriptionPlaceholder: 'Who needs this and what would it unlock?',
+    submitLabel: 'Add request',
+    submittingLabel: 'Adding...',
+    loadingLabel: 'Loading roadmap requests...',
+    emptyLabel: 'No requests yet. Add the first one for review.',
+    errorTitle: "We couldn't load the roadmap queue.",
+    retryLabel: 'Try again',
+    issuePrefix: 'GitHub #',
+    upvoteLabel: 'Prioritize',
+    upvotedLabel: 'Prioritized',
+  },
+  theme: {
+    accent: '#1f883d',
+    accentSoft: '#dafbe1',
+    background: '#ffffff',
+    border: '#c9d7c9',
+    buttonRadius: '4px',
+    fieldRadius: '4px',
+    focus: '#0969da',
+    fontSize: '13px',
+    headingSize: '18px',
+    itemRadius: '4px',
+    maxWidth: '760px',
+    muted: '#57606a',
+    radius: '6px',
+    shadow: '0 1px 2px rgba(27, 31, 36, 0.08)',
+    surfaceAlt: '#f6f8fa',
+    text: '#172026',
+  },
+};
 
 export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): string {
   const viewer = normalizeViewer(rawViewer);
@@ -57,6 +97,9 @@ export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): stri
       <p>Signed in as dogfood viewer ${viewer.toUpperCase()}.</p>
       <section id="bugdrop-board-dogfood"></section>
     </main>
+    <script type="application/json" id="${BOARD_CONFIG_SCRIPT_ID}">${escapeScriptJson(
+      boardCustomization
+    )}</script>
     <script
       src="${escapeAttribute(config.workerOrigin)}/board.js"
       data-board-id="${escapeAttribute(config.boardId)}"
@@ -65,6 +108,7 @@ export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): stri
       data-poll-interval="750"
       data-color="#1f883d"
       data-mount-selector="#bugdrop-board-dogfood"
+      data-config-selector="#${BOARD_CONFIG_SCRIPT_ID}"
     ></script>
   </body>
 </html>`;
@@ -143,4 +187,8 @@ function escapeAttribute(value: string): string {
     .replaceAll('"', '&quot;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;');
+}
+
+function escapeScriptJson(value: unknown): string {
+  return JSON.stringify(value).replaceAll('</', '<\\/');
 }
