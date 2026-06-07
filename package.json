@@ -21,6 +21,7 @@
     "build": "tsc",
     "build:widget": "node scripts/build-widget.js",
     "deploy": "wrangler deploy",
+    "render:board-gallery": "node scripts/render-board-gallery.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
