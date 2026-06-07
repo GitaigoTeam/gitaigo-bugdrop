@@ -73,6 +73,18 @@ app.get('/board-dogfood', c => {
   return c.html(renderBoardDogfoodPage(c.env, viewer));
 });
 
+app.get('/board', c => {
+  return serveAsset(c, '/board/index.html');
+});
+
+app.get('/board/', c => {
+  return serveAsset(c, '/board/index.html');
+});
+
+app.get('/board/assets/*', c => {
+  return c.env.ASSETS.fetch(c.req.raw);
+});
+
 app.get('/api/bugdrop-board-token', async c => {
   try {
     const token = await createBoardDogfoodToken(c.env, c.req.query('viewer') ?? null);
@@ -108,5 +120,11 @@ app.get('/test/local-config.js', async c => {
     },
   });
 });
+
+function serveAsset(c: { env: Env; req: { raw: Request } }, pathname: string): Promise<Response> {
+  const url = new URL(c.req.raw.url);
+  url.pathname = pathname;
+  return c.env.ASSETS.fetch(new Request(url, c.req.raw));
+}
 
 export default app;

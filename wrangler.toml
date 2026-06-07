@@ -4,6 +4,7 @@ compatibility_date = "2024-01-29"
 workers_dev = true
 
 routes = [
+  { pattern = "bugdrop.dev/board*", zone_name = "bugdrop.dev" },
   { pattern = "bugdrop.dev/board-dogfood*", zone_name = "bugdrop.dev" },
   { pattern = "bugdrop.dev/api/bugdrop-board-token*", zone_name = "bugdrop.dev" },
 ]
