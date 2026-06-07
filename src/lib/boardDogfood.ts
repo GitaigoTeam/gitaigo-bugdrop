@@ -24,49 +24,52 @@ interface BoardTokenClaims {
 }
 
 const boardCustomization = {
+  composer: 'collapsed',
   layout: 'kanban',
   density: 'comfortable',
+  emptyLaneDisplay: 'hidden',
+  issueLinks: 'hidden',
   copy: {
-    heading: 'BugDrop launch board',
-    titleLabel: 'Request',
-    titlePlaceholder: 'Short launch request',
+    heading: 'Ideas from users',
+    titleLabel: 'Idea',
+    titlePlaceholder: 'A short product idea',
     descriptionLabel: 'Context',
-    descriptionPlaceholder: 'Who needs this and what would it unblock?',
-    submitLabel: 'Add request',
+    descriptionPlaceholder: 'Who needs this, and what would it unlock?',
+    submitLabel: 'Add idea',
     submittingLabel: 'Adding...',
-    loadingLabel: 'Loading launch requests...',
-    emptyLabel: 'No launch requests yet. Add the first one for review.',
-    errorTitle: "We couldn't load the launch board.",
+    loadingLabel: 'Loading feature requests...',
+    emptyLabel: 'No ideas yet. Add the first one for the team to review.',
+    errorTitle: "We couldn't load feature requests.",
     retryLabel: 'Try again',
     issuePrefix: 'GitHub #',
-    upvoteLabel: 'Prioritize',
-    upvotedLabel: 'Prioritized',
+    upvoteLabel: 'Upvote',
+    upvotedLabel: 'Voted',
   },
   theme: {
-    accent: '#8b5cf6',
-    accentSoft: '#261b42',
-    background: '#0b1020',
-    border: '#2b3656',
-    buttonBackground: '#8b5cf6',
-    buttonRadius: '12px',
+    accent: '#2563eb',
+    accentSoft: '#dbeafe',
+    background: '#f8fafc',
+    border: '#d7dee8',
+    buttonBackground: '#2563eb',
+    buttonRadius: '8px',
     buttonText: '#ffffff',
-    fieldBackground: '#11172a',
-    fieldRadius: '12px',
-    fieldText: '#f8fbff',
-    focus: '#c4b5fd',
+    fieldBackground: '#ffffff',
+    fieldRadius: '8px',
+    fieldText: '#172026',
+    focus: '#1d4ed8',
     fontSize: '14px',
-    headingSize: '24px',
-    itemRadius: '16px',
-    maxWidth: '1120px',
-    muted: '#9aa8c7',
-    radius: '18px',
-    shadow: '0 24px 70px rgba(3, 7, 18, 0.32)',
-    surface: '#11172a',
-    surfaceAlt: '#171f36',
-    text: '#f8fbff',
-    upvoteBackground: '#171f36',
-    upvoteBorder: '#2b3656',
-    upvoteText: '#f8fbff',
+    headingSize: '22px',
+    itemRadius: '10px',
+    maxWidth: '100%',
+    muted: '#64748b',
+    radius: '12px',
+    shadow: 'none',
+    surface: '#ffffff',
+    surfaceAlt: '#f1f5f9',
+    text: '#172026',
+    upvoteBackground: '#eff6ff',
+    upvoteBorder: '#bfdbfe',
+    upvoteText: '#1d4ed8',
   },
 };
 
@@ -79,34 +82,122 @@ export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): stri
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>BugDrop Board Dogfood</title>
+    <title>BugDrop Feature Board Demo</title>
     <style>
+      * {
+        box-sizing: border-box;
+      }
       body {
-        background: radial-gradient(circle at top left, #261b42, transparent 34%), #080b18;
-        color: #f8fbff;
+        background: #eef2f7;
+        color: #172026;
         font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         margin: 0;
       }
       main {
-        margin: 0 auto;
-        max-width: 1180px;
-        padding: 40px 20px;
+        min-height: 100vh;
       }
       h1 {
-        font-size: 32px;
+        font-size: 28px;
         line-height: 1.2;
-        margin: 0 0 12px;
+        margin: 0;
       }
       p {
-        color: #9aa8c7;
+        color: #64748b;
+        margin: 0;
+      }
+      .demo-app {
+        display: grid;
+        grid-template-columns: 220px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+      .sidebar {
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 24px;
+      }
+      .brand {
+        font-size: 18px;
+        font-weight: 800;
+        margin-bottom: 28px;
+      }
+      .nav-item {
+        border-radius: 8px;
+        color: #cbd5e1;
+        display: block;
+        font-size: 14px;
+        font-weight: 650;
+        padding: 10px 12px;
+      }
+      .nav-item.active {
+        background: #1e293b;
+        color: #ffffff;
+      }
+      .workspace {
+        padding: 28px;
+      }
+      .topbar {
+        align-items: center;
+        display: flex;
+        gap: 16px;
+        justify-content: space-between;
+        margin: 0 0 24px;
+      }
+      .viewer {
+        background: #ffffff;
+        border: 1px solid #d7dee8;
+        border-radius: 999px;
+        color: #475569;
+        font-size: 13px;
+        font-weight: 650;
+        padding: 8px 12px;
+      }
+      .intro {
+        display: grid;
+        gap: 6px;
+        margin-bottom: 18px;
+        max-width: 720px;
+      }
+      .board-surface {
+        max-width: 1120px;
+      }
+      @media (max-width: 760px) {
+        .demo-app {
+          grid-template-columns: 1fr;
+        }
+        .sidebar {
+          display: none;
+        }
+        .workspace {
+          padding: 18px;
+        }
+        .topbar {
+          align-items: flex-start;
+          flex-direction: column;
+        }
       }
     </style>
   </head>
   <body>
     <main>
-      <h1>BugDrop Board Dogfood</h1>
-      <p>Signed in as dogfood viewer ${viewer.toUpperCase()}.</p>
-      <section id="bugdrop-board-dogfood"></section>
+      <div class="demo-app">
+        <aside class="sidebar" aria-label="Demo app navigation">
+          <div class="brand">Launch Console</div>
+          <span class="nav-item">Overview</span>
+          <span class="nav-item active">Feature requests</span>
+          <span class="nav-item">Customers</span>
+          <span class="nav-item">Settings</span>
+        </aside>
+        <section class="workspace" aria-label="Demo app workspace">
+          <div class="topbar">
+            <div class="intro">
+              <h1>Feature requests</h1>
+              <p>Add ideas, vote once on what matters, and watch requests move through the roadmap.</p>
+            </div>
+            <span class="viewer">Demo viewer ${viewer.toUpperCase()}</span>
+          </div>
+          <section class="board-surface" id="bugdrop-board-dogfood"></section>
+        </section>
+      </div>
     </main>
     <script type="application/json" id="${BOARD_CONFIG_SCRIPT_ID}">${escapeScriptJson(
       boardCustomization
@@ -117,7 +208,7 @@ export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): stri
       data-api-url="${escapeAttribute(config.workerOrigin)}"
       data-token-endpoint="/api/bugdrop-board-token?viewer=${viewer}"
       data-poll-interval="750"
-      data-color="#8b5cf6"
+      data-color="#2563eb"
       data-mount-selector="#bugdrop-board-dogfood"
       data-config-selector="#${BOARD_CONFIG_SCRIPT_ID}"
     ></script>
@@ -136,7 +227,7 @@ export async function createBoardDogfoodToken(env: Env, rawViewer: string | null
   const claims: BoardTokenClaims = {
     boardId: config.boardId,
     externalUserId: `bugdrop-dev-dogfood-${viewer}`,
-    displayName: `BugDrop Dogfood ${viewer.toUpperCase()}`,
+    displayName: `BugDrop Demo ${viewer.toUpperCase()}`,
     exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS,
     aud: config.tokenAudience,
     iss: config.tokenIssuer,

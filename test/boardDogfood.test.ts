@@ -31,13 +31,13 @@ describe('BugDrop Board dogfood host', () => {
     expect(html).toContain(`data-api-url="${workerOrigin}"`);
     expect(html).toContain(`data-board-id="${boardId}"`);
     expect(html).toContain('data-token-endpoint="/api/bugdrop-board-token?viewer=a"');
-    expect(html).toContain('<section id="bugdrop-board-dogfood"></section>');
+    expect(html).toContain('<section class="board-surface" id="bugdrop-board-dogfood"></section>');
     expect(html).toContain('data-mount-selector="#bugdrop-board-dogfood"');
     expect(html).toContain('data-config-selector="#bugdrop-board-dogfood-config"');
     expect(html).not.toContain(boardSecret);
   });
 
-  it('renders a kanban launch-board customization config for the dogfood board', async () => {
+  it('renders a clean embedded feature-board customization config for the demo board', async () => {
     const response = await app.fetch(
       new Request('https://bugdrop.dev/board-dogfood?viewer=a'),
       env
@@ -46,25 +46,44 @@ describe('BugDrop Board dogfood host', () => {
     const config = extractDogfoodConfig(html);
 
     expect(config).toMatchObject({
+      composer: 'collapsed',
       layout: 'kanban',
       density: 'comfortable',
+      emptyLaneDisplay: 'hidden',
+      issueLinks: 'hidden',
       copy: {
-        heading: 'BugDrop launch board',
-        submitLabel: 'Add request',
-        upvoteLabel: 'Prioritize',
-        upvotedLabel: 'Prioritized',
+        heading: 'Ideas from users',
+        submitLabel: 'Add idea',
+        upvoteLabel: 'Upvote',
+        upvotedLabel: 'Voted',
       },
       theme: {
-        accent: '#8b5cf6',
-        background: '#0b1020',
-        buttonRadius: '12px',
-        itemRadius: '16px',
-        maxWidth: '1120px',
-        surface: '#11172a',
-        surfaceAlt: '#171f36',
+        accent: '#2563eb',
+        background: '#f8fafc',
+        buttonRadius: '8px',
+        itemRadius: '10px',
+        maxWidth: '100%',
+        surface: '#ffffff',
+        surfaceAlt: '#f1f5f9',
       },
     });
     expect(JSON.stringify(config)).not.toContain(boardSecret);
+  });
+
+  it('frames the board as an embedded demo app instead of internal dogfood tooling', async () => {
+    const response = await app.fetch(
+      new Request('https://bugdrop.dev/board-dogfood?viewer=a'),
+      env
+    );
+    const html = await response.text();
+
+    expect(html).toContain('<title>BugDrop Feature Board Demo</title>');
+    expect(html).toContain('<div class="brand">Launch Console</div>');
+    expect(html).toContain('<h1>Feature requests</h1>');
+    expect(html).toContain('Add ideas, vote once on what matters');
+    expect(html).toContain('Demo viewer A');
+    expect(html).not.toContain('BugDrop Board Dogfood');
+    expect(html).not.toContain('Signed in as dogfood viewer');
   });
 
   it('signs a short-lived board token for viewer b without exposing the secret', async () => {
@@ -81,7 +100,7 @@ describe('BugDrop Board dogfood host', () => {
     expect(claims).toMatchObject({
       boardId,
       externalUserId: 'bugdrop-dev-dogfood-b',
-      displayName: 'BugDrop Dogfood B',
+      displayName: 'BugDrop Demo B',
       aud: 'bugdrop-board',
       iss: 'bugdrop-board-production-host',
     });
