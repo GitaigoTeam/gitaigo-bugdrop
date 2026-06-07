@@ -37,7 +37,7 @@ describe('BugDrop Board dogfood host', () => {
     expect(html).not.toContain(boardSecret);
   });
 
-  it('renders a compact product-style customization config for the dogfood board', async () => {
+  it('renders a kanban launch-board customization config for the dogfood board', async () => {
     const response = await app.fetch(
       new Request('https://bugdrop.dev/board-dogfood?viewer=a'),
       env
@@ -46,19 +46,22 @@ describe('BugDrop Board dogfood host', () => {
     const config = extractDogfoodConfig(html);
 
     expect(config).toMatchObject({
-      layout: 'panel',
-      density: 'compact',
+      layout: 'kanban',
+      density: 'comfortable',
       copy: {
-        heading: 'BugDrop roadmap queue',
+        heading: 'BugDrop launch board',
         submitLabel: 'Add request',
         upvoteLabel: 'Prioritize',
         upvotedLabel: 'Prioritized',
       },
       theme: {
-        accent: '#1f883d',
-        buttonRadius: '4px',
-        itemRadius: '4px',
-        maxWidth: '760px',
+        accent: '#8b5cf6',
+        background: '#0b1020',
+        buttonRadius: '12px',
+        itemRadius: '16px',
+        maxWidth: '1120px',
+        surface: '#11172a',
+        surfaceAlt: '#171f36',
       },
     });
     expect(JSON.stringify(config)).not.toContain(boardSecret);

@@ -24,41 +24,49 @@ interface BoardTokenClaims {
 }
 
 const boardCustomization = {
-  layout: 'panel',
-  density: 'compact',
+  layout: 'kanban',
+  density: 'comfortable',
   copy: {
-    heading: 'BugDrop roadmap queue',
+    heading: 'BugDrop launch board',
     titleLabel: 'Request',
-    titlePlaceholder: 'Short product request',
+    titlePlaceholder: 'Short launch request',
     descriptionLabel: 'Context',
-    descriptionPlaceholder: 'Who needs this and what would it unlock?',
+    descriptionPlaceholder: 'Who needs this and what would it unblock?',
     submitLabel: 'Add request',
     submittingLabel: 'Adding...',
-    loadingLabel: 'Loading roadmap requests...',
-    emptyLabel: 'No requests yet. Add the first one for review.',
-    errorTitle: "We couldn't load the roadmap queue.",
+    loadingLabel: 'Loading launch requests...',
+    emptyLabel: 'No launch requests yet. Add the first one for review.',
+    errorTitle: "We couldn't load the launch board.",
     retryLabel: 'Try again',
     issuePrefix: 'GitHub #',
     upvoteLabel: 'Prioritize',
     upvotedLabel: 'Prioritized',
   },
   theme: {
-    accent: '#1f883d',
-    accentSoft: '#dafbe1',
-    background: '#ffffff',
-    border: '#c9d7c9',
-    buttonRadius: '4px',
-    fieldRadius: '4px',
-    focus: '#0969da',
-    fontSize: '13px',
-    headingSize: '18px',
-    itemRadius: '4px',
-    maxWidth: '760px',
-    muted: '#57606a',
-    radius: '6px',
-    shadow: '0 1px 2px rgba(27, 31, 36, 0.08)',
-    surfaceAlt: '#f6f8fa',
-    text: '#172026',
+    accent: '#8b5cf6',
+    accentSoft: '#261b42',
+    background: '#0b1020',
+    border: '#2b3656',
+    buttonBackground: '#8b5cf6',
+    buttonRadius: '12px',
+    buttonText: '#ffffff',
+    fieldBackground: '#11172a',
+    fieldRadius: '12px',
+    fieldText: '#f8fbff',
+    focus: '#c4b5fd',
+    fontSize: '14px',
+    headingSize: '24px',
+    itemRadius: '16px',
+    maxWidth: '1120px',
+    muted: '#9aa8c7',
+    radius: '18px',
+    shadow: '0 24px 70px rgba(3, 7, 18, 0.32)',
+    surface: '#11172a',
+    surfaceAlt: '#171f36',
+    text: '#f8fbff',
+    upvoteBackground: '#171f36',
+    upvoteBorder: '#2b3656',
+    upvoteText: '#f8fbff',
   },
 };
 
@@ -74,20 +82,23 @@ export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): stri
     <title>BugDrop Board Dogfood</title>
     <style>
       body {
-        background: #f8fafc;
-        color: #172026;
+        background: radial-gradient(circle at top left, #261b42, transparent 34%), #080b18;
+        color: #f8fbff;
         font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         margin: 0;
       }
       main {
         margin: 0 auto;
-        max-width: 880px;
-        padding: 32px 20px;
+        max-width: 1180px;
+        padding: 40px 20px;
       }
       h1 {
-        font-size: 28px;
+        font-size: 32px;
         line-height: 1.2;
         margin: 0 0 12px;
+      }
+      p {
+        color: #9aa8c7;
       }
     </style>
   </head>
@@ -106,7 +117,7 @@ export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): stri
       data-api-url="${escapeAttribute(config.workerOrigin)}"
       data-token-endpoint="/api/bugdrop-board-token?viewer=${viewer}"
       data-poll-interval="750"
-      data-color="#1f883d"
+      data-color="#8b5cf6"
       data-mount-selector="#bugdrop-board-dogfood"
       data-config-selector="#${BOARD_CONFIG_SCRIPT_ID}"
     ></script>
