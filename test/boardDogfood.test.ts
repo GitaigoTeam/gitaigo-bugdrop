@@ -52,18 +52,20 @@ describe('BugDrop Board dogfood host', () => {
       emptyLaneDisplay: 'hidden',
       issueLinks: 'hidden',
       copy: {
-        heading: 'Ideas from beta users',
-        description:
-          'Share feedback, vote on what matters, and follow requests as they move from open to shipped.',
-        submitLabel: 'Share feedback',
+        heading: 'Beta roadmap ideas',
+        description: 'Users submit ideas, vote once, and follow progress from Open to Shipped.',
+        submitLabel: 'Add idea',
         upvoteLabel: 'Vote',
         upvotedLabel: 'Voted',
       },
       theme: {
         accent: '#0f766e',
-        background: '#f8fafc',
+        background: 'transparent',
         borderWidth: '0px',
         buttonRadius: '9px',
+        buttonPadding: '6px 10px',
+        gap: '12px',
+        itemPadding: '14px',
         itemRadius: '10px',
         maxWidth: '100%',
         surface: '#ffffff',
@@ -82,11 +84,15 @@ describe('BugDrop Board dogfood host', () => {
 
     expect(html).toContain('<title>BugDrop Feature Board Demo</title>');
     expect(html).toContain('<span class="brand-mark">N</span>Northstar');
+    expect(html).toContain('BugDrop embedded demo');
+    expect(html).toContain('This is what your users would see inside your app');
     expect(html).toContain('Closed beta feedback board');
     expect(html).toContain('<h1>Shape the roadmap</h1>');
     expect(html).toContain('Invite beta users to add ideas');
+    expect(html).toContain('Example in-app board');
     expect(html).toContain('Maya Chen, beta user');
-    expect(html).toContain('Synced with GitHub Issues');
+    expect(html).toContain('Ideas sync to GitHub Issues');
+    expect(html).toContain('Hosted or self-hosted');
     expect(html).not.toContain('Launch Console');
     expect(html).not.toContain('BugDrop Board Dogfood');
     expect(html).not.toContain('Signed in as dogfood viewer');
