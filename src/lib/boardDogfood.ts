@@ -54,7 +54,7 @@ const boardCustomization = {
     border: '#d8e2dc',
     borderWidth: '0px',
     buttonBackground: '#0f766e',
-    buttonRadius: '999px',
+    buttonRadius: '9px',
     buttonText: '#ffffff',
     fieldBackground: '#ffffff',
     fieldRadius: '8px',
