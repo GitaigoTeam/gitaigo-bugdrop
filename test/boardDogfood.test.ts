@@ -52,19 +52,22 @@ describe('BugDrop Board dogfood host', () => {
       emptyLaneDisplay: 'hidden',
       issueLinks: 'hidden',
       copy: {
-        heading: 'Ideas from users',
-        submitLabel: 'Add idea',
-        upvoteLabel: 'Upvote',
+        heading: 'Ideas from beta users',
+        description:
+          'Share feedback, vote on what matters, and follow requests as they move from open to shipped.',
+        submitLabel: 'Share feedback',
+        upvoteLabel: 'Vote',
         upvotedLabel: 'Voted',
       },
       theme: {
-        accent: '#2563eb',
+        accent: '#0f766e',
         background: '#f8fafc',
-        buttonRadius: '8px',
+        borderWidth: '0px',
+        buttonRadius: '999px',
         itemRadius: '10px',
         maxWidth: '100%',
         surface: '#ffffff',
-        surfaceAlt: '#f1f5f9',
+        surfaceAlt: '#f3f7f4',
       },
     });
     expect(JSON.stringify(config)).not.toContain(boardSecret);
@@ -78,10 +81,13 @@ describe('BugDrop Board dogfood host', () => {
     const html = await response.text();
 
     expect(html).toContain('<title>BugDrop Feature Board Demo</title>');
-    expect(html).toContain('<div class="brand">Launch Console</div>');
-    expect(html).toContain('<h1>Feature requests</h1>');
-    expect(html).toContain('Add ideas, vote once on what matters');
-    expect(html).toContain('Demo viewer A');
+    expect(html).toContain('<span class="brand-mark">N</span>Northstar');
+    expect(html).toContain('Closed beta feedback board');
+    expect(html).toContain('<h1>Shape the roadmap</h1>');
+    expect(html).toContain('Invite beta users to add ideas');
+    expect(html).toContain('Maya Chen, beta user');
+    expect(html).toContain('Synced with GitHub Issues');
+    expect(html).not.toContain('Launch Console');
     expect(html).not.toContain('BugDrop Board Dogfood');
     expect(html).not.toContain('Signed in as dogfood viewer');
   });

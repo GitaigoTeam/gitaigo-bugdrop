@@ -30,48 +30,105 @@ const boardCustomization = {
   emptyLaneDisplay: 'hidden',
   issueLinks: 'hidden',
   copy: {
-    heading: 'Ideas from users',
-    titleLabel: 'Idea',
+    heading: 'Ideas from beta users',
+    description:
+      'Share feedback, vote on what matters, and follow requests as they move from open to shipped.',
+    titleLabel: 'What should we improve?',
     titlePlaceholder: 'A short product idea',
-    descriptionLabel: 'Context',
+    descriptionLabel: 'Why does this matter?',
     descriptionPlaceholder: 'Who needs this, and what would it unlock?',
-    submitLabel: 'Add idea',
-    submittingLabel: 'Adding...',
+    submitLabel: 'Share feedback',
+    submittingLabel: 'Sharing...',
     loadingLabel: 'Loading feature requests...',
     emptyLabel: 'No ideas yet. Add the first one for the team to review.',
     errorTitle: "We couldn't load feature requests.",
     retryLabel: 'Try again',
     issuePrefix: 'GitHub #',
-    upvoteLabel: 'Upvote',
+    upvoteLabel: 'Vote',
     upvotedLabel: 'Voted',
   },
   theme: {
-    accent: '#2563eb',
-    accentSoft: '#dbeafe',
+    accent: '#0f766e',
+    accentSoft: '#ccfbf1',
     background: '#f8fafc',
-    border: '#d7dee8',
-    buttonBackground: '#2563eb',
-    buttonRadius: '8px',
+    border: '#d8e2dc',
+    borderWidth: '0px',
+    buttonBackground: '#0f766e',
+    buttonRadius: '999px',
     buttonText: '#ffffff',
     fieldBackground: '#ffffff',
     fieldRadius: '8px',
     fieldText: '#172026',
-    focus: '#1d4ed8',
+    focus: '#0f766e',
     fontSize: '14px',
     headingSize: '22px',
     itemRadius: '10px',
+    itemShadow: '0 12px 28px rgba(15, 23, 42, 0.06)',
+    padding: '0',
     maxWidth: '100%',
-    muted: '#64748b',
+    muted: '#60736f',
     radius: '12px',
     shadow: 'none',
     surface: '#ffffff',
-    surfaceAlt: '#f1f5f9',
+    surfaceAlt: '#f3f7f4',
     text: '#172026',
-    upvoteBackground: '#eff6ff',
-    upvoteBorder: '#bfdbfe',
-    upvoteText: '#1d4ed8',
+    upvoteBackground: '#ecfdf5',
+    upvoteBorder: '#99f6e4',
+    upvoteText: '#0f766e',
   },
 };
+
+const DOGFOOD_PAGE_STYLE = `
+      * { box-sizing: border-box; }
+      body {
+        background: #f4f7f5; color: #172026;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 0;
+      }
+      main { min-height: 100vh; }
+      h1 { font-size: 32px; line-height: 1.2; margin: 0; }
+      p { color: #64748b; margin: 0; }
+      .demo-app { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
+      .sidebar { background: #10201d; color: #dce8e3; padding: 24px; }
+      .brand {
+        align-items: center; display: flex; gap: 10px;
+        font-size: 18px; font-weight: 800; margin-bottom: 28px;
+      }
+      .brand-mark {
+        background: #14b8a6; border-radius: 8px; color: #ffffff;
+        display: inline-grid; font-size: 13px; height: 30px;
+        place-items: center; width: 30px;
+      }
+      .nav-item {
+        border-radius: 8px; color: #bfd0ca; display: block;
+        font-size: 14px; font-weight: 650; padding: 10px 12px;
+      }
+      .nav-item.active { background: #17342f; color: #ffffff; }
+      .workspace { padding: 30px; }
+      .topbar {
+        align-items: center; display: flex; gap: 16px;
+        justify-content: space-between; margin: 0 0 18px;
+      }
+      .viewer, .stat {
+        background: #ffffff; border: 1px solid #d8e2dc; border-radius: 999px;
+        color: #40524e; font-size: 13px; font-weight: 650;
+      }
+      .viewer { padding: 8px 12px; }
+      .kicker {
+        color: #0f766e; font-size: 12px; font-weight: 800;
+        letter-spacing: 0; text-transform: uppercase;
+      }
+      .intro { display: grid; gap: 8px; max-width: 720px; }
+      .stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 22px; }
+      .stat { padding: 7px 10px; }
+      .board-surface { max-width: 1180px; }
+      @media (max-width: 760px) {
+        .demo-app { grid-template-columns: 1fr; }
+        .sidebar { display: none; }
+        .workspace { padding: 18px; }
+        .topbar { align-items: flex-start; flex-direction: column; }
+      }
+`;
 
 export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): string {
   const viewer = normalizeViewer(rawViewer);
@@ -83,117 +140,34 @@ export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): stri
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>BugDrop Feature Board Demo</title>
-    <style>
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        background: #eef2f7;
-        color: #172026;
-        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        margin: 0;
-      }
-      main {
-        min-height: 100vh;
-      }
-      h1 {
-        font-size: 28px;
-        line-height: 1.2;
-        margin: 0;
-      }
-      p {
-        color: #64748b;
-        margin: 0;
-      }
-      .demo-app {
-        display: grid;
-        grid-template-columns: 220px minmax(0, 1fr);
-        min-height: 100vh;
-      }
-      .sidebar {
-        background: #0f172a;
-        color: #e2e8f0;
-        padding: 24px;
-      }
-      .brand {
-        font-size: 18px;
-        font-weight: 800;
-        margin-bottom: 28px;
-      }
-      .nav-item {
-        border-radius: 8px;
-        color: #cbd5e1;
-        display: block;
-        font-size: 14px;
-        font-weight: 650;
-        padding: 10px 12px;
-      }
-      .nav-item.active {
-        background: #1e293b;
-        color: #ffffff;
-      }
-      .workspace {
-        padding: 28px;
-      }
-      .topbar {
-        align-items: center;
-        display: flex;
-        gap: 16px;
-        justify-content: space-between;
-        margin: 0 0 24px;
-      }
-      .viewer {
-        background: #ffffff;
-        border: 1px solid #d7dee8;
-        border-radius: 999px;
-        color: #475569;
-        font-size: 13px;
-        font-weight: 650;
-        padding: 8px 12px;
-      }
-      .intro {
-        display: grid;
-        gap: 6px;
-        margin-bottom: 18px;
-        max-width: 720px;
-      }
-      .board-surface {
-        max-width: 1120px;
-      }
-      @media (max-width: 760px) {
-        .demo-app {
-          grid-template-columns: 1fr;
-        }
-        .sidebar {
-          display: none;
-        }
-        .workspace {
-          padding: 18px;
-        }
-        .topbar {
-          align-items: flex-start;
-          flex-direction: column;
-        }
-      }
-    </style>
+    <style>${DOGFOOD_PAGE_STYLE}</style>
   </head>
   <body>
     <main>
       <div class="demo-app">
         <aside class="sidebar" aria-label="Demo app navigation">
-          <div class="brand">Launch Console</div>
+          <div class="brand"><span class="brand-mark">N</span>Northstar</div>
           <span class="nav-item">Overview</span>
-          <span class="nav-item active">Feature requests</span>
+          <span class="nav-item">Accounts</span>
+          <span class="nav-item active">Feedback</span>
+          <span class="nav-item">Roadmap</span>
           <span class="nav-item">Customers</span>
           <span class="nav-item">Settings</span>
         </aside>
         <section class="workspace" aria-label="Demo app workspace">
           <div class="topbar">
             <div class="intro">
-              <h1>Feature requests</h1>
-              <p>Add ideas, vote once on what matters, and watch requests move through the roadmap.</p>
+              <span class="kicker">Closed beta feedback board</span>
+              <h1>Shape the roadmap</h1>
+              <p>Invite beta users to add ideas, vote once on what matters, and see what the team is reviewing, building, and shipping.</p>
             </div>
-            <span class="viewer">Demo viewer ${viewer.toUpperCase()}</span>
+            <span class="viewer">${viewerDisplayName(viewer)}</span>
+          </div>
+          <div class="stats" aria-label="Feedback board summary">
+            <span class="stat">11 requests</span>
+            <span class="stat">18 votes</span>
+            <span class="stat">Private beta workspace</span>
+            <span class="stat">Synced with GitHub Issues</span>
           </div>
           <section class="board-surface" id="bugdrop-board-dogfood"></section>
         </section>
@@ -208,12 +182,16 @@ export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): stri
       data-api-url="${escapeAttribute(config.workerOrigin)}"
       data-token-endpoint="/api/bugdrop-board-token?viewer=${viewer}"
       data-poll-interval="750"
-      data-color="#2563eb"
+      data-color="#0f766e"
       data-mount-selector="#bugdrop-board-dogfood"
       data-config-selector="#${BOARD_CONFIG_SCRIPT_ID}"
     ></script>
   </body>
 </html>`;
+}
+
+function viewerDisplayName(viewer: 'a' | 'b'): string {
+  return viewer === 'b' ? 'Jordan Lee, beta user' : 'Maya Chen, beta user';
 }
 
 export async function createBoardDogfoodToken(env: Env, rawViewer: string | null): Promise<string> {
