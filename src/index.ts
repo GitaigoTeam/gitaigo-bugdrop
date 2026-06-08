@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { logger } from 'hono/logger';
 import type { Env } from './types';
 import api from './routes/api';
-import { createBoardDogfoodToken, renderBoardDogfoodPage } from './lib/boardDogfood';
+import { createBoardDogfoodToken } from './lib/boardDogfood';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -69,8 +69,9 @@ app.get('/', c => {
 });
 
 app.get('/board-dogfood', c => {
-  const viewer = c.req.query('viewer') ?? null;
-  return c.html(renderBoardDogfoodPage(c.env, viewer));
+  const viewer = c.req.query('viewer');
+  const suffix = viewer ? `?viewer=${encodeURIComponent(viewer)}` : '';
+  return c.redirect(`/board${suffix}`, 302);
 });
 
 app.get('/board', c => {

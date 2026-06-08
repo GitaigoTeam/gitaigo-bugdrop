@@ -4,7 +4,6 @@ import type { Env } from '../src/types';
 
 const boardSecret = 'board-dogfood-secret-with-at-least-32-bytes';
 const boardId = 'board_mean_weasel_bugdrop_board_production_dogfood';
-const workerOrigin = 'https://board.bugdrop.dev';
 
 const env = {
   GITHUB_APP_ID: 'test-app-id',
@@ -18,87 +17,21 @@ const env = {
 } satisfies Env;
 
 describe('BugDrop Board dogfood host', () => {
-  it('renders the board dogfood page with production board embed config', async () => {
+  it('redirects legacy board dogfood traffic to the first-party board demo', async () => {
     const response = await app.fetch(
-      new Request('https://bugdrop.dev/board-dogfood?viewer=a'),
+      new Request('https://bugdrop.dev/board-dogfood?viewer=b'),
       env
     );
-    const html = await response.text();
 
-    expect(response.status).toBe(200);
-    expect(response.headers.get('content-type')).toContain('text/html');
-    expect(html).toContain(`src="${workerOrigin}/board.js"`);
-    expect(html).toContain(`data-api-url="${workerOrigin}"`);
-    expect(html).toContain(`data-board-id="${boardId}"`);
-    expect(html).toContain('data-token-endpoint="/api/bugdrop-board-token?viewer=a"');
-    expect(html).toContain('<section class="board-surface" id="bugdrop-board-dogfood"></section>');
-    expect(html).toContain('data-mount-selector="#bugdrop-board-dogfood"');
-    expect(html).toContain('data-config-selector="#bugdrop-board-dogfood-config"');
-    expect(html).not.toContain(boardSecret);
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe('/board?viewer=b');
   });
 
-  it('renders a clean embedded feature-board customization config for the demo board', async () => {
-    const response = await app.fetch(
-      new Request('https://bugdrop.dev/board-dogfood?viewer=a'),
-      env
-    );
-    const html = await response.text();
-    const config = extractDogfoodConfig(html);
+  it('redirects legacy board dogfood traffic without a viewer query', async () => {
+    const response = await app.fetch(new Request('https://bugdrop.dev/board-dogfood'), env);
 
-    expect(config).toMatchObject({
-      composer: 'collapsed',
-      layout: 'kanban',
-      density: 'comfortable',
-      emptyLaneDisplay: 'hidden',
-      issueLinks: 'hidden',
-      copy: {
-        heading: 'Feature requests',
-        description: 'Add ideas, vote, and track progress.',
-        submitLabel: 'Add idea',
-        upvoteLabel: 'Vote',
-        upvotedLabel: 'Voted',
-      },
-      theme: {
-        accent: '#0f766e',
-        background: 'transparent',
-        borderWidth: '0px',
-        buttonRadius: '9px',
-        buttonPadding: '6px 10px',
-        gap: '12px',
-        itemPadding: '14px',
-        itemRadius: '10px',
-        maxWidth: '100%',
-        surface: '#ffffff',
-        surfaceAlt: '#f3f7f4',
-      },
-    });
-    expect(JSON.stringify(config)).not.toContain(boardSecret);
-  });
-
-  it('frames the board as an embedded demo app instead of internal dogfood tooling', async () => {
-    const response = await app.fetch(
-      new Request('https://bugdrop.dev/board-dogfood?viewer=a'),
-      env
-    );
-    const html = await response.text();
-
-    expect(html).toContain('<title>BugDrop Feature Board Demo</title>');
-    expect(html).toContain('<span class="brand-mark">N</span>Northstar');
-    expect(html).toContain('BugDrop Board');
-    expect(html).toContain('<span class="stat">Demo</span>');
-    expect(html).toContain('<h1>Embedded feedback board</h1>');
-    expect(html).toContain('Collect feature requests, votes, and status updates inside your app.');
-    expect(html).toContain('Shown here themed for Northstar and synced to GitHub Issues.');
-    expect(html).toContain('Demo board');
-    expect(html).toContain('Maya Chen, beta user');
-    expect(html).toContain('GitHub sync');
-    expect(html).toContain('Self-hostable');
-    expect(html).not.toContain('GitHub Issues sync');
-    expect(html).not.toContain('Feature requests, embedded in your app');
-    expect(html).not.toContain('This demo shows BugDrop themed inside Northstar');
-    expect(html).not.toContain('Launch Console');
-    expect(html).not.toContain('BugDrop Board Dogfood');
-    expect(html).not.toContain('Signed in as dogfood viewer');
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe('/board');
   });
 
   it('signs a short-lived board token for viewer b without exposing the secret', async () => {
@@ -143,14 +76,6 @@ interface BoardTokenClaims {
   exp: number;
   aud: string;
   iss: string;
-}
-
-function extractDogfoodConfig(html: string): unknown {
-  const match = html.match(
-    /<script type="application\/json" id="bugdrop-board-dogfood-config">([^<]+)<\/script>/
-  );
-  expect(match?.[1]).toBeTruthy();
-  return JSON.parse(match?.[1] ?? '{}');
 }
 
 async function verifyBoardToken(token: string, secret: string): Promise<BoardTokenClaims> {

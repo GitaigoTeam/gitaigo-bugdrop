@@ -223,6 +223,23 @@
         margin-top: 34px;
       }
 
+      .live-demo {
+        padding-top: 34px;
+      }
+
+      .live-board-shell {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        margin-top: 30px;
+        padding: clamp(16px, 3vw, 28px);
+      }
+
+      .board-surface {
+        min-height: 520px;
+      }
+
       .feature {
         background: var(--surface);
         border: 1px solid var(--line);
@@ -391,7 +408,7 @@
         </a>
         <div class="nav-actions">
           <a href="https://github.com/mean-weasel/bugdrop-board">GitHub</a>
-          <a href="https://board.bugdrop.dev">Live board</a>
+          <a href="#live-demo">Live board</a>
           <a class="button secondary" href="https://github.com/mean-weasel/bugdrop-board#readme">
             Self-host
           </a>
@@ -409,7 +426,7 @@
             </p>
             <div class="hero-actions">
               <a class="button" href="https://github.com/mean-weasel/bugdrop-board">View on GitHub</a>
-              <a class="button secondary" href="https://board.bugdrop.dev">Open the dogfood board</a>
+              <a class="button secondary" href="#live-demo">Try the live board</a>
             </div>
             <div class="proof-strip" aria-label="BugDrop Board proof points">
               <div>
@@ -431,6 +448,23 @@
             <img src="/board/assets/launch-dark.png" alt="Dark launch-planning board UI" />
             <img src="/board/assets/health-portal.png" alt="Care portal board UI" />
             <img src="/board/assets/developer-portal.png" alt="Developer portal board UI" />
+          </div>
+        </section>
+
+        <section class="section live-demo" id="live-demo" aria-labelledby="live-demo-title">
+          <div class="section-header">
+            <h2 id="live-demo-title">Try the embedded board.</h2>
+            <p>
+              This is the live BugDrop Board mounted inside a BugDrop-owned page. Add ideas, vote,
+              and see the same GitHub-backed workflow a self-hosted app can install.
+            </p>
+          </div>
+          <div class="live-board-shell">
+            <section
+              class="board-surface"
+              id="bugdrop-board-demo"
+              aria-label="Live BugDrop Board demo"
+            ></section>
           </div>
         </section>
 
@@ -541,5 +575,73 @@
         GitHub-backed, polling-based, upvotes-only.
       </footer>
     </div>
+    <script type="application/json" id="bugdrop-board-demo-config">
+      {
+        "composer": "collapsed",
+        "layout": "kanban",
+        "density": "comfortable",
+        "emptyLaneDisplay": "hidden",
+        "issueLinks": "hidden",
+        "copy": {
+          "heading": "Feature requests",
+          "description": "Add ideas, vote, and track progress.",
+          "titleLabel": "What should we improve?",
+          "titlePlaceholder": "A short product idea",
+          "descriptionLabel": "Why does this matter?",
+          "descriptionPlaceholder": "Who needs this, and what would it unlock?",
+          "submitLabel": "Add idea",
+          "submittingLabel": "Adding...",
+          "loadingLabel": "Loading feature requests...",
+          "emptyLabel": "No ideas yet. Add the first one for the team to review.",
+          "errorTitle": "We couldn't load feature requests.",
+          "retryLabel": "Try again",
+          "issuePrefix": "GitHub #",
+          "upvoteLabel": "Vote",
+          "upvotedLabel": "Voted"
+        },
+        "theme": {
+          "accent": "#17864f",
+          "accentSoft": "#d9fbe7",
+          "background": "transparent",
+          "border": "#d9d4cb",
+          "borderWidth": "0px",
+          "buttonBackground": "#17864f",
+          "buttonPadding": "6px 10px",
+          "buttonRadius": "9px",
+          "buttonText": "#ffffff",
+          "fieldBackground": "#ffffff",
+          "fieldRadius": "8px",
+          "fieldText": "#171717",
+          "focus": "#17864f",
+          "fontSize": "14px",
+          "gap": "12px",
+          "headingSize": "22px",
+          "itemRadius": "10px",
+          "itemPadding": "14px",
+          "itemShadow": "0 12px 28px rgba(24, 24, 27, 0.08)",
+          "padding": "0",
+          "maxWidth": "100%",
+          "muted": "#5f5b55",
+          "radius": "12px",
+          "shadow": "none",
+          "surface": "#ffffff",
+          "surfaceAlt": "#f8f5ef",
+          "text": "#171717",
+          "upvoteBackground": "#effaf3",
+          "upvoteBorder": "#a7e8bd",
+          "upvoteText": "#0f5f3d"
+        }
+      }
+    </script>
+    <script
+      src="https://board.bugdrop.dev/board.js"
+      data-board-id="board_mean_weasel_bugdrop_board_production_dogfood"
+      data-api-url="https://board.bugdrop.dev"
+      data-token-endpoint="/api/bugdrop-board-token?viewer=a"
+      data-poll-interval="750"
+      data-color="#17864f"
+      data-mount-selector="#bugdrop-board-demo"
+      data-config-selector="#bugdrop-board-demo-config"
+    ></script>
   </body>
 </html>

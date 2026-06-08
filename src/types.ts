@@ -15,9 +15,8 @@ export interface Env {
   AUTH_TOKEN_AUDIENCE?: string; // Optional expected token audience claim
   AUTH_TOKEN_ISSUER?: string; // Optional expected token issuer claim
   AUTH_TOKEN_REQUIRED_FOR_CHECK?: string; // Optional gate for /check installation lookups
-  BUGDROP_BOARD_TOKEN_SECRET?: string; // Optional signer secret for /board-dogfood tokens
-  BUGDROP_BOARD_ID?: string; // Optional override for the dogfood board id
-  BUGDROP_BOARD_WORKER_ORIGIN?: string; // Optional override for the board Worker origin
+  BUGDROP_BOARD_TOKEN_SECRET?: string; // Optional signer secret for the /board embedded demo
+  BUGDROP_BOARD_ID?: string; // Optional override for the demo board id
   BUGDROP_BOARD_TOKEN_AUDIENCE?: string; // Optional override for board token audience
   BUGDROP_BOARD_TOKEN_ISSUER?: string; // Optional override for board token issuer
 
