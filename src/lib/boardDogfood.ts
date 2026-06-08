@@ -30,15 +30,14 @@ const boardCustomization = {
   emptyLaneDisplay: 'hidden',
   issueLinks: 'hidden',
   copy: {
-    heading: 'Ideas from beta users',
-    description:
-      'Share feedback, vote on what matters, and follow requests as they move from open to shipped.',
+    heading: 'Beta roadmap ideas',
+    description: 'Users submit ideas, vote once, and follow progress from Open to Shipped.',
     titleLabel: 'What should we improve?',
     titlePlaceholder: 'A short product idea',
     descriptionLabel: 'Why does this matter?',
     descriptionPlaceholder: 'Who needs this, and what would it unlock?',
-    submitLabel: 'Share feedback',
-    submittingLabel: 'Sharing...',
+    submitLabel: 'Add idea',
+    submittingLabel: 'Adding...',
     loadingLabel: 'Loading feature requests...',
     emptyLabel: 'No ideas yet. Add the first one for the team to review.',
     errorTitle: "We couldn't load feature requests.",
@@ -50,10 +49,11 @@ const boardCustomization = {
   theme: {
     accent: '#0f766e',
     accentSoft: '#ccfbf1',
-    background: '#f8fafc',
+    background: 'transparent',
     border: '#d8e2dc',
     borderWidth: '0px',
     buttonBackground: '#0f766e',
+    buttonPadding: '6px 10px',
     buttonRadius: '9px',
     buttonText: '#ffffff',
     fieldBackground: '#ffffff',
@@ -61,8 +61,10 @@ const boardCustomization = {
     fieldText: '#172026',
     focus: '#0f766e',
     fontSize: '14px',
+    gap: '12px',
     headingSize: '22px',
     itemRadius: '10px',
+    itemPadding: '14px',
     itemShadow: '0 12px 28px rgba(15, 23, 42, 0.06)',
     padding: '0',
     maxWidth: '100%',
@@ -118,9 +120,18 @@ const DOGFOOD_PAGE_STYLE = `
         color: #0f766e; font-size: 12px; font-weight: 800;
         letter-spacing: 0; text-transform: uppercase;
       }
+      .demo-framing {
+        color: #40524e; font-size: 14px; line-height: 1.55;
+      }
       .intro { display: grid; gap: 8px; max-width: 720px; }
+      .intro-row { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
       .stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 22px; }
       .stat { padding: 7px 10px; }
+      .board-frame { display: grid; gap: 10px; max-width: 1180px; }
+      .board-label {
+        color: #60736f; font-size: 12px; font-weight: 750;
+        letter-spacing: 0; text-transform: uppercase;
+      }
       .board-surface { max-width: 1180px; }
       @media (max-width: 760px) {
         .demo-app { grid-template-columns: 1fr; }
@@ -157,9 +168,13 @@ export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): stri
         <section class="workspace" aria-label="Demo app workspace">
           <div class="topbar">
             <div class="intro">
-              <span class="kicker">Closed beta feedback board</span>
+              <div class="intro-row">
+                <span class="kicker">BugDrop embedded demo</span>
+                <span class="stat">Closed beta feedback board</span>
+              </div>
               <h1>Shape the roadmap</h1>
               <p>Invite beta users to add ideas, vote once on what matters, and see what the team is reviewing, building, and shipping.</p>
+              <p class="demo-framing">This is what your users would see inside your app: a native-feeling BugDrop board themed for Northstar.</p>
             </div>
             <span class="viewer">${viewerDisplayName(viewer)}</span>
           </div>
@@ -167,9 +182,13 @@ export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): stri
             <span class="stat">11 requests</span>
             <span class="stat">18 votes</span>
             <span class="stat">Private beta workspace</span>
-            <span class="stat">Synced with GitHub Issues</span>
+            <span class="stat">Ideas sync to GitHub Issues</span>
+            <span class="stat">Hosted or self-hosted</span>
           </div>
-          <section class="board-surface" id="bugdrop-board-dogfood"></section>
+          <div class="board-frame">
+            <span class="board-label">Example in-app board</span>
+            <section class="board-surface" id="bugdrop-board-dogfood"></section>
+          </div>
         </section>
       </div>
     </main>
