@@ -30,8 +30,8 @@ const boardCustomization = {
   emptyLaneDisplay: 'hidden',
   issueLinks: 'hidden',
   copy: {
-    heading: 'Beta roadmap ideas',
-    description: 'Users submit ideas, vote once, and follow progress from Open to Shipped.',
+    heading: 'Feature requests',
+    description: 'Add ideas, vote once, and track what ships.',
     titleLabel: 'What should we improve?',
     titlePlaceholder: 'A short product idea',
     descriptionLabel: 'Why does this matter?',
@@ -169,12 +169,12 @@ export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): stri
           <div class="topbar">
             <div class="intro">
               <div class="intro-row">
-                <span class="kicker">BugDrop embedded demo</span>
-                <span class="stat">Closed beta feedback board</span>
+                <span class="kicker">BugDrop Board demo</span>
+                <span class="stat">Embedded widget</span>
               </div>
-              <h1>Shape the roadmap</h1>
-              <p>Invite beta users to add ideas, vote once on what matters, and see what the team is reviewing, building, and shipping.</p>
-              <p class="demo-framing">This is what your users would see inside your app: a native-feeling BugDrop board themed for Northstar.</p>
+              <h1>Feature requests, embedded in your app</h1>
+              <p>Users add ideas, vote once, and track progress from Open to Shipped.</p>
+              <p class="demo-framing">This demo shows BugDrop themed inside Northstar, a fictional customer app, with requests synced to GitHub Issues.</p>
             </div>
             <span class="viewer">${viewerDisplayName(viewer)}</span>
           </div>
@@ -182,11 +182,11 @@ export function renderBoardDogfoodPage(env: Env, rawViewer: string | null): stri
             <span class="stat">11 requests</span>
             <span class="stat">18 votes</span>
             <span class="stat">Private beta workspace</span>
-            <span class="stat">Ideas sync to GitHub Issues</span>
-            <span class="stat">Hosted or self-hosted</span>
+            <span class="stat">GitHub Issues sync</span>
+            <span class="stat">Self-hostable</span>
           </div>
           <div class="board-frame">
-            <span class="board-label">Example in-app board</span>
+            <span class="board-label">Live embedded board</span>
             <section class="board-surface" id="bugdrop-board-dogfood"></section>
           </div>
         </section>
