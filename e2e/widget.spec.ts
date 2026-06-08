@@ -355,6 +355,40 @@ test.describe('Widget Interaction', () => {
     await expect(modal).toBeVisible({ timeout: 5000 });
   });
 
+  test('rapid feedback button clicks during startup open one modal', async ({ page }) => {
+    await page.route('**/api/check**', async route => {
+      await page.waitForTimeout(500);
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      });
+    });
+
+    await page.goto('/test/');
+    await page.evaluate(() =>
+      localStorage.removeItem('bugdrop_welcomed_mean-weasel/bugdrop-widget-test')
+    );
+
+    const button = page.locator('#bugdrop-host').locator('css=.bd-trigger');
+    await expect(button).toBeVisible({ timeout: 5000 });
+
+    await button.evaluate(trigger => {
+      if (!(trigger instanceof HTMLElement)) {
+        throw new Error('BugDrop trigger not found');
+      }
+      trigger.click();
+      trigger.click();
+      trigger.click();
+    });
+
+    const modal = page.locator('#bugdrop-host').locator('css=.bd-modal');
+    await expect(modal).toHaveCount(1, { timeout: 5000 });
+    await expect(page.locator('#bugdrop-host').locator('css=.bd-title')).toHaveText(
+      'Share Your Feedback'
+    );
+  });
+
   test('element picker handles SVG elements without errors', async ({ page }) => {
     // Track console errors - specifically looking for className.split errors
     const errors: string[] = [];
