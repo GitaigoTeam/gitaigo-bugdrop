@@ -63,7 +63,7 @@ describe('BugDrop Board dogfood host', () => {
         accent: '#0f766e',
         background: '#f8fafc',
         borderWidth: '0px',
-        buttonRadius: '999px',
+        buttonRadius: '9px',
         itemRadius: '10px',
         maxWidth: '100%',
         surface: '#ffffff',
