@@ -52,8 +52,30 @@ describe('BugDrop Board dogfood host', () => {
       aud: 'bugdrop-board',
       iss: 'bugdrop-board-production-host',
     });
+    expect(claims).not.toHaveProperty('tenantId');
+    expect(claims).not.toHaveProperty('appId');
     expect(claims.exp).toBeGreaterThan(Math.floor(Date.now() / 1000));
     expect(claims.exp).toBeLessThanOrEqual(Math.floor(Date.now() / 1000) + 300);
+  });
+
+  it('adds hosted tenant and app claims when configured', async () => {
+    const response = await app.fetch(
+      new Request('https://bugdrop.dev/api/bugdrop-board-token?viewer=a'),
+      {
+        ...env,
+        BUGDROP_BOARD_TENANT_ID: 'tenant_mean_weasel',
+        BUGDROP_BOARD_APP_ID: 'app_mean_weasel_bugdrop_dogfood',
+      }
+    );
+    const body = (await response.json()) as { token: string };
+    const claims = await verifyBoardToken(body.token, boardSecret);
+
+    expect(response.status).toBe(200);
+    expect(claims).toMatchObject({
+      boardId,
+      tenantId: 'tenant_mean_weasel',
+      appId: 'app_mean_weasel_bugdrop_dogfood',
+    });
   });
 
   it('rejects token requests when the board signing secret is missing', async () => {
@@ -71,6 +93,8 @@ describe('BugDrop Board dogfood host', () => {
 
 interface BoardTokenClaims {
   boardId: string;
+  tenantId?: string;
+  appId?: string;
   externalUserId: string;
   displayName: string;
   exp: number;
