@@ -53,7 +53,7 @@ describe('BugDrop Board dogfood host', () => {
       issueLinks: 'hidden',
       copy: {
         heading: 'Feature requests',
-        description: 'Add ideas, vote once, and track what ships.',
+        description: 'Add ideas, vote, and track progress.',
         submitLabel: 'Add idea',
         upvoteLabel: 'Vote',
         upvotedLabel: 'Voted',
@@ -84,20 +84,18 @@ describe('BugDrop Board dogfood host', () => {
 
     expect(html).toContain('<title>BugDrop Feature Board Demo</title>');
     expect(html).toContain('<span class="brand-mark">N</span>Northstar');
-    expect(html).toContain('BugDrop Board demo');
-    expect(html).toContain('<h1>Feature requests, embedded in your app</h1>');
-    expect(html).toContain('Users add ideas, vote once, and track progress from Open to Shipped.');
-    expect(html).toContain(
-      'This demo shows BugDrop themed inside Northstar, a fictional customer app, with requests synced to GitHub Issues.'
-    );
-    expect(html).toContain('Live embedded board');
+    expect(html).toContain('BugDrop Board');
+    expect(html).toContain('<span class="stat">Demo</span>');
+    expect(html).toContain('<h1>Embedded feedback board</h1>');
+    expect(html).toContain('Collect feature requests, votes, and status updates inside your app.');
+    expect(html).toContain('Shown here themed for Northstar and synced to GitHub Issues.');
+    expect(html).toContain('Demo board');
     expect(html).toContain('Maya Chen, beta user');
-    expect(html).toContain('Embedded widget');
-    expect(html).toContain('GitHub Issues sync');
+    expect(html).toContain('GitHub sync');
     expect(html).toContain('Self-hostable');
-    expect(html).not.toContain('Closed beta feedback board');
-    expect(html).not.toContain('Shape the roadmap');
-    expect(html).not.toContain('This is what your users would see inside your app');
+    expect(html).not.toContain('GitHub Issues sync');
+    expect(html).not.toContain('Feature requests, embedded in your app');
+    expect(html).not.toContain('This demo shows BugDrop themed inside Northstar');
     expect(html).not.toContain('Launch Console');
     expect(html).not.toContain('BugDrop Board Dogfood');
     expect(html).not.toContain('Signed in as dogfood viewer');
