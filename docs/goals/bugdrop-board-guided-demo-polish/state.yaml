@@ -5,7 +5,7 @@ goal:
   slug: "bugdrop-board-guided-demo-polish"
   kind: specific
   tranche: "Apply UX critique to the live demo, ship, and prove production."
-  status: active
+  status: done
   oracle:
     signal: "Production desktop/mobile walkthrough proves smoother embedded-app intro, clearer kanban scanning, and visible upvote counts."
     cadence: "after implementation, after CI, after merge/deploy, and at final production proof"
@@ -36,7 +36,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/bugdrop-board-guided-demo-polish/"
     command: "npx goalbuddy board docs/goals/bugdrop-board-guided-demo-polish"
 
-active_task: T003
+active_task: null
 
 tasks:
   - id: T001
@@ -76,7 +76,7 @@ tasks:
   - id: T003
     type: worker
     assignee: PM
-    status: active
+    status: done
     objective: "Implement and ship the guided demo polish with focused tests, PRs, CI, merge, deploy proof, and screenshots."
     constraints:
       - "No product behavior changes beyond backwards-compatible presentation/customization."
@@ -87,3 +87,24 @@ tasks:
       - "Kanban cards show compact vote action/counts."
       - "Lane headers and cards are calmer and more scannable."
       - "Production screenshot is attached to the final handoff."
+    receipt:
+      result: done
+      summary: "Shipped the guided demo polish across bugdrop-board and bugdrop. Production now renders a Northstar closed-beta workspace with concise introduction copy, summary chips, compact kanban vote/count pills, hidden GitHub links, balanced lanes, and no desktop/mobile overflow."
+      pull_requests:
+        - "https://github.com/mean-weasel/bugdrop-board/pull/65"
+        - "https://github.com/mean-weasel/bugdrop/pull/206"
+      deploy_runs:
+        - "https://github.com/mean-weasel/bugdrop-board/actions/runs/27109046825"
+        - "https://github.com/mean-weasel/bugdrop/actions/runs/27109183446"
+      production_proof:
+        url: "https://bugdrop.dev/board-dogfood"
+        screenshots:
+          - "/Users/neonwatty/Desktop/bugdrop/test-results/production-board-guided-demo-polish/desktop.png"
+          - "/Users/neonwatty/Desktop/bugdrop/test-results/production-board-guided-demo-polish/mobile.png"
+        assertions:
+          - "Body contains Northstar, Closed beta feedback board, Shape the roadmap, Maya Chen, beta user, and Synced with GitHub Issues."
+          - "Board contains Ideas from beta users, the lifecycle intro, Share feedback composer, and Open/Planned/Building/Shipped lanes."
+          - "Vote controls render compact counts such as Voted 2 and Vote 1."
+          - "GitHub link count is 0."
+          - "Desktop overflow is 0 and mobile overflow is 0."
+          - "Browser pageerror/console error list is empty."
