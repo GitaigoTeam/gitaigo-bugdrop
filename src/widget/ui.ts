@@ -585,6 +585,126 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       cursor: not-allowed;
     }
 
+    .bd-evidence-block {
+      margin: 8px 0 16px;
+    }
+
+    .bd-evidence-row {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .bd-screenshot-control {
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-top: 3px;
+    }
+
+    .bd-checkbox {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--bd-primary);
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+
+    .bd-checkbox-label {
+      color: var(--bd-text-secondary);
+      cursor: pointer;
+      font-size: 0.95rem;
+      line-height: 1.35;
+      user-select: none;
+    }
+
+    .bd-upload-group {
+      min-width: 0;
+      justify-self: end;
+    }
+
+    .bd-upload-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .bd-upload-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 32px;
+      padding: 6px 9px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .bd-upload-icon {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 auto;
+    }
+
+    .bd-upload-input {
+      display: none;
+    }
+
+    .bd-upload-list {
+      display: grid;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .bd-upload-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto 28px;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 5px 5px 5px 10px;
+      background: var(--bd-bg-secondary);
+      border: var(--bd-border-style);
+      border-radius: var(--bd-radius-sm);
+    }
+
+    .bd-upload-item__name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--bd-text-primary);
+      font-size: 13px;
+    }
+
+    .bd-upload-item__meta {
+      color: var(--bd-text-secondary);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .bd-upload-remove {
+      width: 28px;
+      height: 28px;
+      display: inline-grid;
+      place-items: center;
+      border: none;
+      border-radius: var(--bd-radius-sm);
+      background: transparent;
+      color: var(--bd-text-secondary);
+      cursor: pointer;
+      font-size: 20px;
+      line-height: 1;
+      transition: background var(--bd-transition), color var(--bd-transition);
+    }
+
+    .bd-upload-remove:hover {
+      background: var(--bd-bg-tertiary);
+      color: var(--bd-text-primary);
+    }
+
     /* Loading States */
     .bd-btn--loading {
       color: transparent !important;
@@ -1053,6 +1173,17 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
 
       .bd-textarea {
         min-height: 120px;
+      }
+
+      .bd-evidence-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+      }
+
+      .bd-upload-button {
+        min-height: 34px;
+        padding: 7px 10px;
+        font-size: 14px;
       }
 
       .bd-actions {

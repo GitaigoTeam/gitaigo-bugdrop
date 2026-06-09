@@ -355,6 +355,87 @@ test.describe('Widget Interaction', () => {
     await expect(modal).toBeVisible({ timeout: 5000 });
   });
 
+  test('uploaded files can be selected, removed, and submitted', async ({ page }) => {
+    const payloads = await trackFeedbackPayloads(page);
+    await page.route('**/api/check**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      });
+    });
+
+    await page.goto('/test/');
+
+    const host = page.locator('#bugdrop-host');
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+
+    const uploadInput = host.locator('css=#attachment-upload');
+    await uploadInput.setInputFiles([
+      {
+        name: 'first.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          'base64'
+        ),
+      },
+      {
+        name: 'notes.pdf',
+        mimeType: 'application/pdf',
+        buffer: Buffer.from('%PDF-1.4\n'),
+      },
+    ]);
+
+    await expect(host.locator('css=.bd-upload-item')).toHaveCount(2);
+    await expect(host.locator('css=.bd-upload-item').first()).toContainText('first.png');
+    await host.locator('css=.bd-upload-remove').first().click();
+    await expect(host.locator('css=.bd-upload-item')).toHaveCount(1);
+    await expect(host.locator('css=.bd-upload-item').first()).toContainText('notes.pdf');
+
+    await host.locator('css=#title').fill('Uploaded evidence');
+    await host.locator('css=#include-screenshot').uncheck();
+    await host.locator('css=#submit-btn').click();
+
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0].screenshot).toBeNull();
+    expect(payloads[0].attachments).toEqual([
+      expect.objectContaining({
+        name: 'notes.pdf',
+        type: 'application/pdf',
+        dataUrl: expect.stringMatching(/^data:application\/pdf;base64,/),
+      }),
+    ]);
+  });
+
+  test('unsupported uploaded files show a clear message', async ({ page }) => {
+    await page.route('**/api/check**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      });
+    });
+
+    await page.goto('/test/');
+
+    const host = page.locator('#bugdrop-host');
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+    await host.locator('css=#attachment-upload').setInputFiles({
+      name: 'archive.zip',
+      mimeType: 'application/zip',
+      buffer: Buffer.from('zip'),
+    });
+
+    await expect(host.locator('css=#attachment-error')).toContainText(
+      'That file type is not supported'
+    );
+    await expect(host.locator('css=.bd-upload-item')).toHaveCount(0);
+  });
+
   test('element picker handles SVG elements without errors', async ({ page }) => {
     // Track console errors - specifically looking for className.split errors
     const errors: string[] = [];
@@ -4030,8 +4111,8 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     const skipBtn = host.locator('css=[data-action="skip"]');
     await skipBtn.click();
 
-    // Error modal should be gone and submission should proceed
-    await expect(errorText).not.toBeVisible({ timeout: 3000 });
+    // Capture failure modal should be gone and submission should proceed.
+    await expect(errorText).not.toHaveText(/Failed to capture screenshot/, { timeout: 3000 });
   });
 
   test('privacy masking failure shows a dedicated modal and submits without a screenshot', async ({

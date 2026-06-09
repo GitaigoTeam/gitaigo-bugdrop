@@ -38,6 +38,7 @@ export interface FeedbackPayload {
   categoryLabels?: CategoryLabelConfig; // Optional self-host category-to-GitHub-label mapping
   screenshot?: string; // base64 data URL
   annotations?: string; // base64 annotated image
+  attachments?: FeedbackAttachment[];
   submitter?: {
     // Optional submitter info (configured per widget)
     name?: string;
@@ -57,6 +58,13 @@ export interface FeedbackPayload {
     devicePixelRatio?: number;
     language?: string;
   };
+}
+
+export interface FeedbackAttachment {
+  name: string;
+  type: string;
+  size: number;
+  dataUrl: string;
 }
 
 export interface GitHubIssue {
