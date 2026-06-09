@@ -1,4 +1,4 @@
-export type ConsoleLogLevel = 'log' | 'info' | 'warn' | 'error';
+type ConsoleLogLevel = 'log' | 'info' | 'warn' | 'error';
 
 export interface ConsoleLogEntry {
   level: ConsoleLogLevel;
