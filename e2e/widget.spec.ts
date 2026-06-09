@@ -404,12 +404,14 @@ test.describe('Widget Interaction', () => {
     });
 
     await page.goto('/test/');
+    const host = page.locator('#bugdrop-host');
+    await host.locator('css=.bd-trigger').waitFor({ state: 'visible', timeout: 5000 });
+
     await page.evaluate(() => {
       console.log('customer dashboard failed to save');
       console.warn('retry count token=abc123456789abcdefghijklmnopqrstuvwxyz');
     });
 
-    const host = page.locator('#bugdrop-host');
     await host.locator('css=.bd-trigger').click();
     await host.locator('css=[data-action="continue"]').click();
     await host.locator('css=#title').fill('Console log test');
