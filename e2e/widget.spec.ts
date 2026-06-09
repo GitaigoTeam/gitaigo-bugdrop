@@ -355,6 +355,84 @@ test.describe('Widget Interaction', () => {
     await expect(modal).toBeVisible({ timeout: 5000 });
   });
 
+  test('console logs checkbox is unchecked by default', async ({ page }) => {
+    await page.route('**/api/check**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      });
+    });
+
+    await page.goto('/test/');
+
+    const host = page.locator('#bugdrop-host');
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+
+    const consoleLogsCheckbox = host.locator('css=#send-console-logs');
+    await expect(consoleLogsCheckbox).toBeVisible({ timeout: 5000 });
+    await expect(consoleLogsCheckbox).not.toBeChecked();
+  });
+
+  test('console logs checkbox can default to checked from script settings', async ({ page }) => {
+    await page.route('**/api/check**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      });
+    });
+
+    await page.goto('/test/?sendConsoleLogs=true');
+
+    const host = page.locator('#bugdrop-host');
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+
+    await expect(host.locator('css=#send-console-logs')).toBeChecked({ timeout: 5000 });
+  });
+
+  test('checked console logs option submits captured browser logs', async ({ page }) => {
+    const payloads = await trackFeedbackPayloads(page);
+    await page.route('**/api/check**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      });
+    });
+
+    await page.goto('/test/');
+    await page.evaluate(() => {
+      console.log('customer dashboard failed to save');
+      console.warn('retry count token=abc123456789abcdefghijklmnopqrstuvwxyz');
+    });
+
+    const host = page.locator('#bugdrop-host');
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+    await host.locator('css=#title').fill('Console log test');
+    await host.locator('css=#include-screenshot').uncheck();
+    await host.locator('css=#send-console-logs').check();
+    await host.locator('css=#submit-btn').click();
+
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0].consoleLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: 'log',
+          message: expect.stringContaining('customer dashboard failed to save'),
+        }),
+        expect.objectContaining({
+          level: 'warn',
+          message: expect.stringContaining('[redacted]'),
+        }),
+      ])
+    );
+  });
+
   test('element picker handles SVG elements without errors', async ({ page }) => {
     // Track console errors - specifically looking for className.split errors
     const errors: string[] = [];

@@ -36,6 +36,7 @@ export interface FeedbackPayload {
   categoryLabels?: CategoryLabelConfig; // Optional self-host category-to-GitHub-label mapping
   screenshot?: string; // base64 data URL
   annotations?: string; // base64 annotated image
+  consoleLogs?: ConsoleLogEntry[];
   submitter?: {
     // Optional submitter info (configured per widget)
     name?: string;
@@ -55,6 +56,15 @@ export interface FeedbackPayload {
     devicePixelRatio?: number;
     language?: string;
   };
+}
+
+export interface ConsoleLogEntry {
+  level: 'log' | 'info' | 'warn' | 'error';
+  message: string;
+  timestamp: string;
+  sourceUrl?: string;
+  lineNumber?: number;
+  columnNumber?: number;
 }
 
 export interface GitHubIssue {
