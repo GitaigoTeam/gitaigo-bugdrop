@@ -9,6 +9,10 @@ import { DEFAULT_ACCENT_COLOR, getAccentHoverColor } from '../defaults';
 
 declare const __BUGDROP_VERSION__: string;
 
+const MODAL_VIEWPORT_MARGIN_PX = 8;
+const DISABLE_MODAL_DRAG_MEDIA_QUERY = '(hover: none), (pointer: coarse)';
+const MOBILE_MODAL_MEDIA_QUERY = '(max-width: 640px)';
+
 interface WidgetConfig {
   repo: string;
   apiUrl: string;
@@ -419,6 +423,16 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       animation: bd-slideUp var(--bd-transition-slow);
     }
 
+    .bd-modal--positioned {
+      position: fixed;
+      margin: 0;
+      animation: none;
+    }
+
+    .bd-modal--dragging {
+      user-select: none;
+    }
+
     .bd-modal--annotator {
       width: min(96vw, 1100px);
       max-width: 1100px;
@@ -426,6 +440,7 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
 
     /* Modal Header */
     .bd-header {
+      position: relative;
       padding: 16px 20px;
       border-bottom: var(--bd-border-style);
       display: flex;
@@ -433,6 +448,38 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       align-items: center;
       background: var(--bd-bg-primary);
       animation: bd-fadeIn 0.2s ease 0.05s both;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .bd-modal-drag-indicator {
+      position: absolute;
+      top: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 28px;
+      height: 10px;
+      display: grid;
+      grid-template-columns: repeat(3, 4px);
+      grid-auto-rows: 4px;
+      gap: 3px 5px;
+      justify-content: center;
+      align-content: center;
+      color: var(--bd-text-muted);
+      opacity: 0.8;
+      pointer-events: none;
+    }
+
+    .bd-modal-drag-indicator span {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .bd-modal--dragging .bd-header {
+      cursor: grabbing;
     }
 
     .bd-title {
@@ -1005,6 +1052,11 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
         animation: bd-slideUpMobile var(--bd-transition-slow);
       }
 
+      .bd-modal--positioned {
+        position: static;
+        width: 100%;
+      }
+
       .bd-modal--annotator {
         width: calc(100% - 16px);
         max-width: calc(100% - 16px);
@@ -1121,6 +1173,16 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
         transform: scale(1);
       }
 
+      .bd-header {
+        cursor: default;
+        user-select: auto;
+        touch-action: auto;
+      }
+
+      .bd-modal-drag-indicator {
+        display: none;
+      }
+
       .bd-btn:hover {
         background: inherit;
       }
@@ -1194,6 +1256,10 @@ export function createModal(
   overlay.innerHTML = `
     <div class="${modalClasses}">
       <div class="bd-header">
+        <span class="bd-modal-drag-indicator" aria-hidden="true">
+          <span></span><span></span><span></span>
+          <span></span><span></span><span></span>
+        </span>
         <h2 class="bd-title">${escapeHtml(title)}</h2>
         <button class="bd-close">&times;</button>
       </div>
@@ -1205,7 +1271,154 @@ export function createModal(
   `;
 
   container.appendChild(overlay);
+  attachModalDragBehavior(overlay);
   return overlay;
+}
+
+function attachModalDragBehavior(overlay: HTMLElement): void {
+  if (
+    typeof window.matchMedia !== 'function' ||
+    window.matchMedia(DISABLE_MODAL_DRAG_MEDIA_QUERY).matches
+  ) {
+    return;
+  }
+
+  const modal = overlay.querySelector<HTMLElement>('.bd-modal');
+  const header = overlay.querySelector<HTMLElement>('.bd-header');
+  if (!modal || !header) return;
+  const modalEl = modal;
+  const headerEl = header;
+
+  let pointerId: number | null = null;
+  let startPointerX = 0;
+  let startPointerY = 0;
+  let startLeft = 0;
+  let startTop = 0;
+
+  let cleanupComplete = false;
+  let removalObserver: MutationObserver | null = null;
+
+  const cleanup = () => {
+    if (cleanupComplete) return;
+    cleanupComplete = true;
+    endDrag();
+    window.removeEventListener('resize', handleResize);
+    window.visualViewport?.removeEventListener('resize', handleResize);
+    removalObserver?.disconnect();
+  };
+
+  function clampPosition(left: number, top: number): { left: number; top: number } {
+    const rect = modalEl.getBoundingClientRect();
+    const maxLeft = Math.max(
+      MODAL_VIEWPORT_MARGIN_PX,
+      window.innerWidth - rect.width - MODAL_VIEWPORT_MARGIN_PX
+    );
+    const maxTop = Math.max(
+      MODAL_VIEWPORT_MARGIN_PX,
+      window.innerHeight - rect.height - MODAL_VIEWPORT_MARGIN_PX
+    );
+
+    return {
+      left: Math.min(Math.max(left, MODAL_VIEWPORT_MARGIN_PX), maxLeft),
+      top: Math.min(Math.max(top, MODAL_VIEWPORT_MARGIN_PX), maxTop),
+    };
+  }
+
+  function setModalPosition(left: number, top: number): void {
+    const position = clampPosition(left, top);
+    modalEl.style.left = `${position.left}px`;
+    modalEl.style.top = `${position.top}px`;
+  }
+
+  function handleResize(): void {
+    if (!overlay.isConnected) {
+      cleanup();
+      return;
+    }
+
+    if (!modalEl.classList.contains('bd-modal--positioned')) return;
+    if (window.matchMedia(MOBILE_MODAL_MEDIA_QUERY).matches) {
+      resetPositionedModal();
+      return;
+    }
+
+    reflowPositionedModalWidth();
+    const rect = modalEl.getBoundingClientRect();
+    setModalPosition(rect.left, rect.top);
+  }
+
+  function reflowPositionedModalWidth(): void {
+    modalEl.style.removeProperty('width');
+    modalEl.style.removeProperty('max-width');
+    const rect = modalEl.getBoundingClientRect();
+    modalEl.style.width = `${rect.width}px`;
+    modalEl.style.maxWidth = 'none';
+  }
+
+  function resetPositionedModal(): void {
+    modalEl.classList.remove('bd-modal--positioned', 'bd-modal--dragging');
+    modalEl.style.removeProperty('left');
+    modalEl.style.removeProperty('top');
+    modalEl.style.removeProperty('width');
+    modalEl.style.removeProperty('max-width');
+  }
+
+  function endDrag(): void {
+    if (pointerId === null) return;
+    pointerId = null;
+    modalEl.classList.remove('bd-modal--dragging');
+    window.removeEventListener('pointermove', handlePointerMove);
+    window.removeEventListener('pointerup', handlePointerUp);
+    window.removeEventListener('pointercancel', handlePointerCancel);
+  }
+
+  function handlePointerMove(e: PointerEvent): void {
+    if (pointerId !== e.pointerId) return;
+    setModalPosition(startLeft + e.clientX - startPointerX, startTop + e.clientY - startPointerY);
+  }
+
+  function handlePointerUp(e: PointerEvent): void {
+    if (pointerId !== e.pointerId) return;
+    endDrag();
+  }
+
+  function handlePointerCancel(e: PointerEvent): void {
+    if (pointerId !== e.pointerId) return;
+    endDrag();
+  }
+
+  headerEl.addEventListener('pointerdown', e => {
+    if ((e.target as HTMLElement).closest('button, a, input, textarea, select, label')) return;
+
+    e.preventDefault();
+    const rect = modalEl.getBoundingClientRect();
+
+    pointerId = e.pointerId;
+    startPointerX = e.clientX;
+    startPointerY = e.clientY;
+    startLeft = rect.left;
+    startTop = rect.top;
+
+    modalEl.classList.add('bd-modal--positioned', 'bd-modal--dragging');
+    modalEl.style.width = `${rect.width}px`;
+    modalEl.style.maxWidth = 'none';
+    setModalPosition(startLeft, startTop);
+
+    headerEl.setPointerCapture(e.pointerId);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
+  });
+
+  window.addEventListener('resize', handleResize);
+  window.visualViewport?.addEventListener('resize', handleResize);
+
+  if (overlay.parentNode) {
+    removalObserver = new MutationObserver(() => {
+      if (!overlay.isConnected) cleanup();
+    });
+    removalObserver.observe(overlay.parentNode, { childList: true });
+  }
 }
 
 export function showSuccessModal(
