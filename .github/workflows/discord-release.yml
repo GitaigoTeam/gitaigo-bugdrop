@@ -1,0 +1,92 @@
+name: Discord Release Notification
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+jobs:
+  notify-discord:
+    name: Notify Discord
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send release notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "DISCORD_RELEASE_WEBHOOK_URL is not set; skipping Discord notification."
+            exit 0
+          fi
+
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+          const release = event.release;
+          const releaseName = release.name || release.tag_name;
+          const repository = process.env.GITHUB_REPOSITORY;
+          const body = (release.body || '').trim();
+          const maxDescriptionLength = 3500;
+          const description =
+            body.length > maxDescriptionLength
+              ? `${body.slice(0, maxDescriptionLength - 20).trimEnd()}...`
+              : body || 'Release notes are available on GitHub.';
+
+          const payload = {
+            username: 'GitHub Releases',
+            allowed_mentions: {
+              parse: [],
+            },
+            content: `BugDrop ${release.tag_name} is out.`,
+            embeds: [
+              {
+                title: releaseName,
+                url: release.html_url,
+                description,
+                color: 0x238636,
+                fields: [
+                  {
+                    name: 'Repository',
+                    value: repository,
+                    inline: true,
+                  },
+                  {
+                    name: 'Tag',
+                    value: `\`${release.tag_name}\``,
+                    inline: true,
+                  },
+                ],
+                footer: {
+                  text: `Published by ${release.author?.login || 'GitHub'}`,
+                },
+                timestamp: release.published_at,
+              },
+            ],
+          };
+
+          async function main() {
+            const response = await fetch(process.env.DISCORD_WEBHOOK_URL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+              const responseBody = await response.text();
+              throw new Error(
+                `Discord webhook failed with ${response.status}: ${responseBody}`,
+              );
+            }
+          }
+
+          main().catch((error) => {
+            console.error(error.message);
+            process.exit(1);
+          });
+          NODE
