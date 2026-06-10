@@ -19,6 +19,7 @@ These attributes control the fundamental behavior of the widget.
 | `data-auth-token-provider` | none | Name of a global function that returns a self-hosted auth token |
 | `data-welcome` | `"Report a bug or request a feature"` | Welcome message displayed at the top of the form |
 | `data-show-issue-link` | `"public"` | Show the GitHub issue link after submission: `"public"`, `"always"`, or `"never"` |
+| `data-send-console-logs` | `"false"` | Start the "Send Console Logs" checkbox checked |
 
 ### Basic Example
 
@@ -110,6 +111,21 @@ Control whether the feedback form collects the submitter's name and email addres
 ```
 
 When submitter information is collected, it is included in the GitHub Issue body so your team knows who reported the issue.
+
+## Console Logs
+
+BugDrop can include recent browser console output in the GitHub Issue. The feedback form shows a "Send Console Logs" checkbox. It is unchecked by default.
+
+```html
+<!-- Start with Send Console Logs checked -->
+<script
+  src="https://bugdrop.neonwatty.workers.dev/widget.js"
+  data-repo="owner/repo"
+  data-send-console-logs="true"
+></script>
+```
+
+When the checkbox is checked, the issue body includes a collapsed console-log section. BugDrop limits the amount of output and redacts obvious secret-like values such as passwords, tokens, cookies, authorization headers, and long random strings.
 
 ## Dismissible Button
 

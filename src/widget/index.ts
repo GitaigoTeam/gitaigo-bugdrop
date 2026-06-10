@@ -24,6 +24,11 @@ import {
   resolveAuthTokenProvider,
   type BugDropAuthTokenProvider,
 } from './auth-token';
+import {
+  getConsoleLogSnapshot,
+  startConsoleLogCapture,
+  type ConsoleLogEntry,
+} from './console-logs';
 import { resolveAccentColor } from '../defaults';
 
 type FeedbackCategory = 'bug' | 'feature' | 'question';
@@ -70,6 +75,7 @@ interface WidgetConfig {
   screenshotScale?: number; // Minimum pixel ratio for captures (default: 2)
   elementContextMaxArea?: number; // Max ancestor capture area as a viewport multiplier
   issueLinkVisibility: IssueLinkVisibility;
+  sendConsoleLogs: boolean;
 }
 
 // BugDrop JavaScript API interface
@@ -98,6 +104,7 @@ interface FeedbackData {
   elementSelector: string | null;
   fullElementSelector: string | null;
   selectedElementHighlightColor: string | null;
+  sendConsoleLogs: boolean;
   name?: string;
   email?: string;
 }
@@ -440,7 +447,10 @@ const config: WidgetConfig = {
   screenshotScale,
   elementContextMaxArea,
   issueLinkVisibility,
+  sendConsoleLogs: script?.dataset.sendConsoleLogs === 'true',
 };
+
+startConsoleLogCapture();
 
 // Validate config
 if (!config.repo) {
@@ -1081,6 +1091,7 @@ async function openFeedbackFlow(
       selectedElementHighlightColor: screenshotResult.elementSelector
         ? resolveAccentColor(config.accentColor)
         : null,
+      sendConsoleLogs: formResult.sendConsoleLogs,
     });
     break;
   }
@@ -1192,6 +1203,7 @@ interface FeedbackFormResult {
   name?: string;
   email?: string;
   includeScreenshot: boolean;
+  sendConsoleLogs: boolean;
 }
 
 function showFeedbackFormWithScreenshotOption(
@@ -1253,6 +1265,7 @@ function showFeedbackFormWithScreenshotOption(
           ${nameFieldHtml}
           ${emailFieldHtml}
           ${getScreenshotFormControl(config, initialValues)}
+          ${getConsoleLogsFormControl(config, initialValues)}
           <div class="bd-actions">
             <button type="button" class="bd-btn bd-btn-secondary" data-action="cancel">Cancel</button>
             <button type="submit" class="bd-btn bd-btn-primary" id="submit-btn">${config.screenshotMode === 'auto' ? 'Submit' : 'Continue'}</button>
@@ -1269,6 +1282,7 @@ function showFeedbackFormWithScreenshotOption(
     const screenshotCheckbox = modal.querySelector(
       '#include-screenshot'
     ) as HTMLInputElement | null;
+    const consoleLogsCheckbox = modal.querySelector('#send-console-logs') as HTMLInputElement;
     const closeBtn = modal.querySelector('.bd-close') as HTMLElement;
     const cancelBtn = modal.querySelector('[data-action="cancel"]') as HTMLElement;
 
@@ -1323,6 +1337,7 @@ function showFeedbackFormWithScreenshotOption(
         name: nameInput?.value.trim() || undefined,
         email: emailInput?.value.trim() || undefined,
         includeScreenshot,
+        sendConsoleLogs: consoleLogsCheckbox.checked,
       });
     });
 
@@ -1371,6 +1386,22 @@ function getScreenshotFormControl(
   `;
 }
 
+function getConsoleLogsFormControl(
+  config: WidgetConfig,
+  initialValues?: FeedbackFormResult | null
+): string {
+  const sendConsoleLogs = initialValues?.sendConsoleLogs ?? config.sendConsoleLogs;
+
+  return `
+    <div class="bd-form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
+      <input type="checkbox" id="send-console-logs" ${sendConsoleLogs ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: var(--bd-primary); cursor: pointer;" />
+      <label for="send-console-logs" style="font-size: 0.95rem; color: var(--bd-text-secondary); cursor: pointer; user-select: none;">
+        Send Console Logs
+      </label>
+    </div>
+  `;
+}
+
 function getCategoryChecked(
   initialValues: FeedbackFormResult | null | undefined,
   category: FeedbackCategory
@@ -1398,6 +1429,9 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
     // Collect system info
     const systemInfo = getSystemInfo();
     const domNodeCount = getDomNodeCount();
+    const consoleLogs: ConsoleLogEntry[] | undefined = data.sendConsoleLogs
+      ? getConsoleLogSnapshot()
+      : undefined;
 
     const response = await fetch(`${config.apiUrl}/feedback`, {
       method: 'POST',
@@ -1412,6 +1446,7 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
         category: data.category,
         categoryLabels: config.categoryLabels,
         screenshot: data.screenshot,
+        consoleLogs,
         submitter,
         metadata: {
           url: systemInfo.url, // Redacted URL (no query params)
