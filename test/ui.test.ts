@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
-import { injectStyles } from '../src/widget/ui';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createModal, injectStyles } from '../src/widget/ui';
+
+const originalMatchMedia = window.matchMedia;
+
+afterEach(() => {
+  window.matchMedia = originalMatchMedia;
+  vi.restoreAllMocks();
+  document.body.innerHTML = '';
+});
 
 describe('widget UI styles', () => {
   it('defines the default border style where the border color is available', () => {
@@ -22,5 +30,29 @@ describe('widget UI styles', () => {
     expect(rootBlock).toContain(
       '--bd-border-style: var(--bd-border-width) solid var(--bd-border);'
     );
+  });
+
+  it('opens modals when matchMedia is unavailable', () => {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    delete (window as Partial<Window>).matchMedia;
+
+    expect(() => createModal(root, 'Feedback', '<p>Body</p>')).not.toThrow();
+    expect(root.querySelector('.bd-modal')).not.toBeNull();
+  });
+
+  it('cleans up modal resize listeners when the modal is removed', async () => {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: false }) as unknown as typeof matchMedia;
+    const addListener = vi.spyOn(window, 'addEventListener');
+    const removeListener = vi.spyOn(window, 'removeEventListener');
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+
+    const modal = createModal(root, 'Feedback', '<p>Body</p>');
+    modal.remove();
+    await new Promise(resolve => window.setTimeout(resolve, 0));
+
+    expect(addListener).toHaveBeenCalledWith('resize', expect.any(Function));
+    expect(removeListener).toHaveBeenCalledWith('resize', expect.any(Function));
   });
 });
