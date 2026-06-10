@@ -18,6 +18,10 @@ on:
         description: Optional public image URL to include in the embed
         required: false
         type: string
+      mention_user_id:
+        description: Optional Discord user ID allowed for a real mention; use {mention} in message
+        required: false
+        type: string
       dry_run:
         description: Print the Discord payload without posting
         required: false
@@ -92,7 +96,13 @@ jobs:
                 ? `${body.slice(0, maxDescriptionLength - 20).trimEnd()}...`
                 : body || 'Release notes are available on GitHub.';
             const imageUrl = (inputs.image_url || '').trim();
-            const content = (inputs.message || '').trim() || `BugDrop ${release.tag_name} is out.`;
+            const mentionUserId = (inputs.mention_user_id || '').trim();
+            const mentionText = mentionUserId ? `<@${mentionUserId}>` : '';
+            const content =
+              ((inputs.message || '').trim() || `BugDrop ${release.tag_name} is out.`).replaceAll(
+                '{mention}',
+                mentionText,
+              );
 
             const embed = {
               title: releaseName,
@@ -127,6 +137,7 @@ jobs:
               username: 'GitHub Releases',
               allowed_mentions: {
                 parse: [],
+                users: mentionUserId ? [mentionUserId] : [],
               },
               content,
               embeds: [embed],
