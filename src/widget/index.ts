@@ -1018,6 +1018,10 @@ async function openFeedbackFlow(
   config: WidgetConfig,
   opts?: { skipWelcome?: boolean }
 ) {
+  if (_isModalOpen) {
+    return;
+  }
+
   // Mark modal as open
   _isModalOpen = true;
 
