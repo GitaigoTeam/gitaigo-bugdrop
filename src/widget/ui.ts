@@ -10,6 +10,8 @@ import { DEFAULT_ACCENT_COLOR, getAccentHoverColor } from '../defaults';
 declare const __BUGDROP_VERSION__: string;
 
 const MODAL_VIEWPORT_MARGIN_PX = 8;
+const DISABLE_MODAL_DRAG_MEDIA_QUERY = '(hover: none), (pointer: coarse)';
+const MOBILE_MODAL_MEDIA_QUERY = '(max-width: 640px)';
 
 interface WidgetConfig {
   repo: string;
@@ -1274,7 +1276,12 @@ export function createModal(
 }
 
 function attachModalDragBehavior(overlay: HTMLElement): void {
-  if (window.matchMedia('(hover: none), (pointer: coarse)').matches) return;
+  if (
+    typeof window.matchMedia !== 'function' ||
+    window.matchMedia(DISABLE_MODAL_DRAG_MEDIA_QUERY).matches
+  ) {
+    return;
+  }
 
   const modal = overlay.querySelector<HTMLElement>('.bd-modal');
   const header = overlay.querySelector<HTMLElement>('.bd-header');
@@ -1288,9 +1295,16 @@ function attachModalDragBehavior(overlay: HTMLElement): void {
   let startLeft = 0;
   let startTop = 0;
 
-  const cleanupResize = () => {
+  let cleanupComplete = false;
+  let removalObserver: MutationObserver | null = null;
+
+  const cleanup = () => {
+    if (cleanupComplete) return;
+    cleanupComplete = true;
+    endDrag();
     window.removeEventListener('resize', handleResize);
     window.visualViewport?.removeEventListener('resize', handleResize);
+    removalObserver?.disconnect();
   };
 
   function clampPosition(left: number, top: number): { left: number; top: number } {
@@ -1318,13 +1332,35 @@ function attachModalDragBehavior(overlay: HTMLElement): void {
 
   function handleResize(): void {
     if (!overlay.isConnected) {
-      cleanupResize();
+      cleanup();
       return;
     }
 
     if (!modalEl.classList.contains('bd-modal--positioned')) return;
+    if (window.matchMedia(MOBILE_MODAL_MEDIA_QUERY).matches) {
+      resetPositionedModal();
+      return;
+    }
+
+    reflowPositionedModalWidth();
     const rect = modalEl.getBoundingClientRect();
     setModalPosition(rect.left, rect.top);
+  }
+
+  function reflowPositionedModalWidth(): void {
+    modalEl.style.removeProperty('width');
+    modalEl.style.removeProperty('max-width');
+    const rect = modalEl.getBoundingClientRect();
+    modalEl.style.width = `${rect.width}px`;
+    modalEl.style.maxWidth = 'none';
+  }
+
+  function resetPositionedModal(): void {
+    modalEl.classList.remove('bd-modal--positioned', 'bd-modal--dragging');
+    modalEl.style.removeProperty('left');
+    modalEl.style.removeProperty('top');
+    modalEl.style.removeProperty('width');
+    modalEl.style.removeProperty('max-width');
   }
 
   function endDrag(): void {
@@ -1376,6 +1412,13 @@ function attachModalDragBehavior(overlay: HTMLElement): void {
 
   window.addEventListener('resize', handleResize);
   window.visualViewport?.addEventListener('resize', handleResize);
+
+  if (overlay.parentNode) {
+    removalObserver = new MutationObserver(() => {
+      if (!overlay.isConnected) cleanup();
+    });
+    removalObserver.observe(overlay.parentNode, { childList: true });
+  }
 }
 
 export function showSuccessModal(

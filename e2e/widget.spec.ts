@@ -416,6 +416,46 @@ test.describe('Widget Interaction', () => {
     expect(indicatorBox!.y).toBeLessThan(modalBox!.y + 16);
   });
 
+  test('dragged feedback modal releases fixed sizing on mobile resize', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/test/');
+
+    const button = page.locator('#bugdrop-host').locator('css=.bd-trigger');
+    await expect(button).toBeVisible({ timeout: 5000 });
+    await button.click();
+
+    const modal = page.locator('#bugdrop-host').locator('css=.bd-modal');
+    await expect(modal).toBeVisible({ timeout: 5000 });
+
+    await dragModalHeader(page, -90, 70);
+    await page.setViewportSize({ width: 390, height: 720 });
+
+    const afterResize = await modal.boundingBox();
+    expect(afterResize).not.toBeNull();
+    expect(afterResize!.x).toBeGreaterThanOrEqual(0);
+    expect(afterResize!.width).toBeLessThanOrEqual(390);
+  });
+
+  test('dragged feedback modal reflows fixed sizing on narrow desktop resize', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/test/');
+
+    const button = page.locator('#bugdrop-host').locator('css=.bd-trigger');
+    await expect(button).toBeVisible({ timeout: 5000 });
+    await button.click();
+
+    const modal = page.locator('#bugdrop-host').locator('css=.bd-modal');
+    await expect(modal).toBeVisible({ timeout: 5000 });
+
+    await dragModalHeader(page, -90, 70);
+    await page.setViewportSize({ width: 660, height: 720 });
+
+    const afterResize = await modal.boundingBox();
+    expect(afterResize).not.toBeNull();
+    expect(afterResize!.width).toBeLessThanOrEqual(594);
+    expect(afterResize!.x + afterResize!.width).toBeLessThanOrEqual(660);
+  });
+
   test('element picker handles SVG elements without errors', async ({ page }) => {
     // Track console errors - specifically looking for className.split errors
     const errors: string[] = [];
