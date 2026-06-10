@@ -20,6 +20,8 @@ ENVIRONMENT = "development"
 ALLOWED_ORIGINS = "*"  # "*" for dev, comma-separated URLs for production
 GITHUB_APP_NAME = "neonwatty-bugdrop"  # Your GitHub App's URL slug
 MAX_SCREENSHOT_SIZE_MB = "5"  # Maximum screenshot size in MB
+BUGDROP_BOARD_TENANT_ID = "tenant_mean_weasel"
+BUGDROP_BOARD_APP_ID = "app_mean_weasel_bugdrop_dogfood"
 
 # Production configuration example (uncomment and customize for deployment)
 # [env.production.vars]

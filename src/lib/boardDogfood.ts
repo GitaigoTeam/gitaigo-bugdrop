@@ -7,12 +7,16 @@ const TOKEN_TTL_SECONDS = 300;
 
 interface BoardDogfoodConfig {
   boardId: string;
+  tenantId?: string;
+  appId?: string;
   tokenAudience: string;
   tokenIssuer: string;
 }
 
 interface BoardTokenClaims {
   boardId: string;
+  tenantId?: string;
+  appId?: string;
   externalUserId: string;
   displayName: string;
   exp: number;
@@ -30,6 +34,8 @@ export async function createBoardDogfoodToken(env: Env, rawViewer: string | null
   const config = dogfoodConfig(env);
   const claims: BoardTokenClaims = {
     boardId: config.boardId,
+    ...(config.tenantId ? { tenantId: config.tenantId } : {}),
+    ...(config.appId ? { appId: config.appId } : {}),
     externalUserId: `bugdrop-dev-dogfood-${viewer}`,
     displayName: `BugDrop Demo ${viewer.toUpperCase()}`,
     exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS,
@@ -44,6 +50,8 @@ export async function createBoardDogfoodToken(env: Env, rawViewer: string | null
 function dogfoodConfig(env: Env): BoardDogfoodConfig {
   return {
     boardId: envValue(env.BUGDROP_BOARD_ID) ?? DEFAULT_BOARD_ID,
+    tenantId: envValue(env.BUGDROP_BOARD_TENANT_ID),
+    appId: envValue(env.BUGDROP_BOARD_APP_ID),
     tokenAudience: envValue(env.BUGDROP_BOARD_TOKEN_AUDIENCE) ?? DEFAULT_TOKEN_AUDIENCE,
     tokenIssuer: envValue(env.BUGDROP_BOARD_TOKEN_ISSUER) ?? DEFAULT_TOKEN_ISSUER,
   };

@@ -17,6 +17,8 @@ export interface Env {
   AUTH_TOKEN_REQUIRED_FOR_CHECK?: string; // Optional gate for /check installation lookups
   BUGDROP_BOARD_TOKEN_SECRET?: string; // Optional signer secret for the /board embedded demo
   BUGDROP_BOARD_ID?: string; // Optional override for the demo board id
+  BUGDROP_BOARD_TENANT_ID?: string; // Optional hosted beta tenant claim for the demo board token
+  BUGDROP_BOARD_APP_ID?: string; // Optional hosted beta app claim for the demo board token
   BUGDROP_BOARD_TOKEN_AUDIENCE?: string; // Optional override for board token audience
   BUGDROP_BOARD_TOKEN_ISSUER?: string; // Optional override for board token issuer
 
