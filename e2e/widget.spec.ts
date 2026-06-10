@@ -5330,6 +5330,12 @@ test.describe('Screenshot Mode Configuration', () => {
     const host = await openForm(page);
 
     await expect(host.locator('css=#include-screenshot')).not.toBeAttached();
+    await host.locator('css=#attachment-upload').setInputFiles({
+      name: 'notes.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4\n'),
+    });
+    await expect(host.locator('css=.bd-upload-item')).toContainText('notes.pdf');
     await host.locator('css=#submit-btn').click();
 
     await expect(host.locator('css=[data-action="skip"]')).not.toBeAttached();
@@ -5339,7 +5345,15 @@ test.describe('Screenshot Mode Configuration', () => {
     await host.locator('css=[data-action="done"]').click();
 
     await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
-    expect(getPayload()?.screenshot).toEqual(expect.stringMatching(/^data:image\/png;base64,/));
+    const payload = getPayload();
+    expect(payload?.screenshot).toEqual(expect.stringMatching(/^data:image\/png;base64,/));
+    expect(payload?.attachments).toEqual([
+      expect.objectContaining({
+        name: 'notes.pdf',
+        type: 'application/pdf',
+        dataUrl: expect.stringMatching(/^data:application\/pdf;base64,/),
+      }),
+    ]);
   });
 
   test('annotation actions use distinct labels and submit from one primary action', async ({

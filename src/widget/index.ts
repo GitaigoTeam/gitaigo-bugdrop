@@ -1341,9 +1341,8 @@ function showFeedbackFormWithScreenshotOption(
         'input[name="category"]:checked'
       ) as HTMLInputElement;
       const category = (categoryInput?.value || 'bug') as FeedbackCategory;
-      const hasUploads = attachments.length > 0;
       const includeScreenshot =
-        config.screenshotMode === 'optional' ? (screenshotCheckbox?.checked ?? false) : !hasUploads;
+        config.screenshotMode === 'optional' ? (screenshotCheckbox?.checked ?? false) : true;
       if (config.screenshotMode === 'optional' && includeScreenshot) {
         clearComplexScreenshotsSkipped(config.repo);
       }
