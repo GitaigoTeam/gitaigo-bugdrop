@@ -52,6 +52,7 @@ That's it! Users can now click the bug button to submit feedback as GitHub Issue
 | `data-label`                    | Any string                                           | `Feedback`       |
 | `data-category-labels`          | JSON mapping for self-hosted category labels         | built-in labels  |
 | `data-button`                   | `true`, `false`                                      | `true`           |
+| `data-send-console-logs`        | `true`, `false`                                      | `false`          |
 | `data-element-context-max-area` | Viewport-area multiplier for Select Element context  | `0`              |
 
 See [full documentation](https://bugdrop.dev/docs/configuration) for all options including styling, submitter info, and dismissible button.

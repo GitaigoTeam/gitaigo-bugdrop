@@ -1581,6 +1581,51 @@ describe('API Routes', () => {
       expect(issueBody).toContain('Submitted via');
     });
 
+    it('should include redacted console logs in the issue body when submitted', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      mockCreateIssue.mockResolvedValue({
+        number: 42,
+        html_url: 'https://github.com/testowner/testrepo/issues/42',
+      });
+
+      const payloadWithConsoleLogs = {
+        ...validPayload,
+        consoleLogs: [
+          {
+            level: 'error',
+            message: 'Checkout failed with token=[redacted]',
+            sourceUrl: 'https://example.test/app.js?token=abc123456789abcdefghijklmnopqrstuvwxyz',
+            lineNumber: 12,
+            columnNumber: 4,
+            timestamp: '2026-06-08T10:00:00.000Z',
+          },
+          {
+            level: 'warn',
+            message: '{"token":"abc123","password":"hunter2","cookie":"sid=short"}',
+            timestamp: '2026-06-08T10:00:01.000Z',
+          },
+        ],
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadWithConsoleLogs),
+      });
+      await app.fetch(req, mockEnv);
+
+      const issueBody = mockCreateIssue.mock.calls[0][4];
+      expect(issueBody).toContain('<summary>Console Logs</summary>');
+      expect(issueBody).toContain('[error] Checkout failed with token=[redacted]');
+      expect(issueBody).toContain('https://example.test/app.js?token=[redacted]:12:4');
+      expect(issueBody).toContain(
+        '[warn] {"token":"[redacted]","password":"[redacted]","cookie":"[redacted]"}'
+      );
+      expect(issueBody).not.toContain('abc123');
+      expect(issueBody).not.toContain('hunter2');
+      expect(issueBody).not.toContain('sid=short');
+    });
+
     it('should omit full CSS path row when metadata is absent', async () => {
       mockGetInstallationToken.mockResolvedValue('test-token');
       mockCreateIssue.mockResolvedValue({

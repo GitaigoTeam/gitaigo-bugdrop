@@ -1,6 +1,13 @@
 import { Hono, type Context, type Next } from 'hono';
 import { cors } from 'hono/cors';
-import type { Env, FeedbackAttachment, FeedbackCategory, FeedbackPayload } from '../types';
+import type {
+  ConsoleLogEntry,
+  Env,
+  FeedbackAttachment,
+  FeedbackCategory,
+  FeedbackPayload,
+} from '../types';
+import { redactConsoleLogMessage } from '../widget/console-log-redaction';
 import {
   getInstallationToken,
   createIssue,
@@ -39,6 +46,9 @@ const ALLOWED_ATTACHMENT_TYPES = new Set([
   'video/webm',
   'video/quicktime',
 ]);
+const MAX_CONSOLE_LOG_ENTRIES = 50;
+const MAX_CONSOLE_LOG_BODY_CHARS = 12_000;
+const MAX_CONSOLE_LOG_MESSAGE_CHARS = 1_000;
 // GitHub enforces a 50-char limit on label names; keep validation in lockstep
 // so over-long configured labels surface as a clear local warning rather than
 // going out, getting rejected, and triggering the GitHub-error fallback path.
@@ -744,6 +754,12 @@ function formatIssueBody(
     sections.push('');
   }
 
+  const consoleLogsSection = formatConsoleLogsSection(payload.consoleLogs);
+  if (consoleLogsSection) {
+    sections.push(consoleLogsSection);
+    sections.push('');
+  }
+
   // System Info
   sections.push('<details>');
   sections.push('<summary>System Info</summary>');
@@ -826,6 +842,70 @@ function formatMarkdownInlineCode(value: string): string {
   const longestBacktickRun = Math.max(...inlineSafeValue.match(/`+/g)!.map(match => match.length));
   const fence = '`'.repeat(longestBacktickRun + 1);
   return `${fence} ${inlineSafeValue} ${fence}`;
+}
+
+function formatConsoleLogsSection(entries: ConsoleLogEntry[] | undefined): string | null {
+  if (!Array.isArray(entries) || entries.length === 0) return null;
+
+  const logs = entries.slice(0, MAX_CONSOLE_LOG_ENTRIES).map(formatConsoleLogEntry).filter(Boolean);
+  if (logs.length === 0) return null;
+
+  if (entries.length > MAX_CONSOLE_LOG_ENTRIES) {
+    logs.push(
+      `Console logs truncated: showing ${MAX_CONSOLE_LOG_ENTRIES} of ${entries.length} entries.`
+    );
+  }
+
+  let body = logs.join('\n');
+  if (body.length > MAX_CONSOLE_LOG_BODY_CHARS) {
+    body = `${body.slice(0, MAX_CONSOLE_LOG_BODY_CHARS)}\nConsole logs truncated because the output was too large.`;
+  }
+
+  return [
+    '<details>',
+    '<summary>Console Logs</summary>',
+    '',
+    formatFencedBlock(body),
+    '</details>',
+  ].join('\n');
+}
+
+function formatConsoleLogEntry(entry: ConsoleLogEntry): string {
+  if (!entry || typeof entry.message !== 'string') return '';
+
+  const level = isConsoleLogLevel(entry.level) ? entry.level : 'log';
+  const timestamp =
+    typeof entry.timestamp === 'string' ? normalizeMarkdownValue(entry.timestamp) : '';
+  const source = formatConsoleLogSource(entry);
+  const message = redactConsoleLogMessage(normalizeMarkdownValue(entry.message)).slice(
+    0,
+    MAX_CONSOLE_LOG_MESSAGE_CHARS
+  );
+  const prefix = timestamp ? `${timestamp} [${level}]` : `[${level}]`;
+  return `${prefix} ${message}${source}`;
+}
+
+function formatConsoleLogSource(entry: ConsoleLogEntry): string {
+  if (!entry.sourceUrl) return '';
+
+  const source = redactConsoleLogMessage(normalizeMarkdownValue(entry.sourceUrl));
+  const line = Number.isFinite(entry.lineNumber) ? entry.lineNumber : undefined;
+  const column = Number.isFinite(entry.columnNumber) ? entry.columnNumber : undefined;
+
+  if (line !== undefined && column !== undefined) return ` (${source}:${line}:${column})`;
+  if (line !== undefined) return ` (${source}:${line})`;
+  return ` (${source})`;
+}
+
+function isConsoleLogLevel(value: unknown): value is ConsoleLogEntry['level'] {
+  return value === 'log' || value === 'info' || value === 'warn' || value === 'error';
+}
+
+function formatFencedBlock(value: string): string {
+  const matches = value.match(/`+/g);
+  const longestBacktickRun = matches ? Math.max(...matches.map(match => match.length)) : 0;
+  const fence = '`'.repeat(Math.max(3, longestBacktickRun + 1));
+  return `${fence}\n${value}\n${fence}`;
 }
 
 function normalizeMarkdownValue(value: string): string {

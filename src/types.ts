@@ -39,6 +39,7 @@ export interface FeedbackPayload {
   screenshot?: string; // base64 data URL
   annotations?: string; // base64 annotated image
   attachments?: FeedbackAttachment[];
+  consoleLogs?: ConsoleLogEntry[];
   submitter?: {
     // Optional submitter info (configured per widget)
     name?: string;
@@ -65,6 +66,15 @@ export interface FeedbackAttachment {
   type: string;
   size: number;
   dataUrl: string;
+}
+
+export interface ConsoleLogEntry {
+  level: 'log' | 'info' | 'warn' | 'error';
+  message: string;
+  timestamp: string;
+  sourceUrl?: string;
+  lineNumber?: number;
+  columnNumber?: number;
 }
 
 export interface GitHubIssue {

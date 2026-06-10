@@ -1482,7 +1482,8 @@ function attachModalDragBehavior(overlay: HTMLElement): void {
     modalEl.style.removeProperty('width');
     modalEl.style.removeProperty('max-width');
     const rect = modalEl.getBoundingClientRect();
-    modalEl.style.width = `${rect.width}px`;
+    const maxResponsiveWidth = Math.floor(window.innerWidth * 0.9);
+    modalEl.style.width = `${Math.min(rect.width, maxResponsiveWidth)}px`;
     modalEl.style.maxWidth = 'none';
   }
 

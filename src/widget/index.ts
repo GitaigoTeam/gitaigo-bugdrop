@@ -24,6 +24,11 @@ import {
   resolveAuthTokenProvider,
   type BugDropAuthTokenProvider,
 } from './auth-token';
+import {
+  getConsoleLogSnapshot,
+  startConsoleLogCapture,
+  type ConsoleLogEntry,
+} from './console-logs';
 import { resolveAccentColor } from '../defaults';
 
 type FeedbackCategory = 'bug' | 'feature' | 'question';
@@ -76,6 +81,7 @@ interface WidgetConfig {
   screenshotScale?: number; // Minimum pixel ratio for captures (default: 2)
   elementContextMaxArea?: number; // Max ancestor capture area as a viewport multiplier
   issueLinkVisibility: IssueLinkVisibility;
+  sendConsoleLogs: boolean;
 }
 
 // BugDrop JavaScript API interface
@@ -105,6 +111,7 @@ interface FeedbackData {
   elementSelector: string | null;
   fullElementSelector: string | null;
   selectedElementHighlightColor: string | null;
+  sendConsoleLogs: boolean;
   name?: string;
   email?: string;
 }
@@ -459,7 +466,10 @@ const config: WidgetConfig = {
   screenshotScale,
   elementContextMaxArea,
   issueLinkVisibility,
+  sendConsoleLogs: script?.dataset.sendConsoleLogs === 'true',
 };
+
+startConsoleLogCapture();
 
 // Validate config
 if (!config.repo) {
@@ -1027,6 +1037,10 @@ async function openFeedbackFlow(
   config: WidgetConfig,
   opts?: { skipWelcome?: boolean }
 ) {
+  if (_isModalOpen) {
+    return;
+  }
+
   // Mark modal as open
   _isModalOpen = true;
 
@@ -1097,6 +1111,7 @@ async function openFeedbackFlow(
       selectedElementHighlightColor: screenshotResult.elementSelector
         ? resolveAccentColor(config.accentColor)
         : null,
+      sendConsoleLogs: formResult.sendConsoleLogs,
     });
     break;
   }
@@ -1209,6 +1224,7 @@ interface FeedbackFormResult {
   email?: string;
   includeScreenshot: boolean;
   attachments: FeedbackAttachment[];
+  sendConsoleLogs: boolean;
 }
 
 function showFeedbackFormWithScreenshotOption(
@@ -1279,6 +1295,7 @@ function showFeedbackFormWithScreenshotOption(
               initialValues?.attachments.length ? '' : ''
             }</div>
             <p id="attachment-error" class="bd-field-error" hidden></p>
+            ${getConsoleLogsFormControl(config, initialValues)}
           </div>
           <div class="bd-actions">
             <button type="button" class="bd-btn bd-btn-secondary" data-action="cancel">Cancel</button>
@@ -1300,6 +1317,7 @@ function showFeedbackFormWithScreenshotOption(
     const uploadButton = modal.querySelector('[data-action="choose-uploads"]') as HTMLButtonElement;
     const uploadList = modal.querySelector('#attachment-list') as HTMLElement;
     const uploadError = modal.querySelector('#attachment-error') as HTMLElement;
+    const consoleLogsCheckbox = modal.querySelector('#send-console-logs') as HTMLInputElement;
     const closeBtn = modal.querySelector('.bd-close') as HTMLElement;
     const cancelBtn = modal.querySelector('[data-action="cancel"]') as HTMLElement;
     let attachments = [...(initialValues?.attachments ?? [])];
@@ -1356,6 +1374,7 @@ function showFeedbackFormWithScreenshotOption(
         email: emailInput?.value.trim() || undefined,
         includeScreenshot,
         attachments,
+        sendConsoleLogs: consoleLogsCheckbox.checked,
       });
     });
 
@@ -1529,6 +1548,22 @@ function getScreenshotFormControl(
   `;
 }
 
+function getConsoleLogsFormControl(
+  config: WidgetConfig,
+  initialValues?: FeedbackFormResult | null
+): string {
+  const sendConsoleLogs = initialValues?.sendConsoleLogs ?? config.sendConsoleLogs;
+
+  return `
+    <div class="bd-form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
+      <input type="checkbox" id="send-console-logs" ${sendConsoleLogs ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: var(--bd-primary); cursor: pointer;" />
+      <label for="send-console-logs" style="font-size: 0.95rem; color: var(--bd-text-secondary); cursor: pointer; user-select: none;">
+        Send Console Logs
+      </label>
+    </div>
+  `;
+}
+
 function getCategoryChecked(
   initialValues: FeedbackFormResult | null | undefined,
   category: FeedbackCategory
@@ -1556,6 +1591,9 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
     // Collect system info
     const systemInfo = getSystemInfo();
     const domNodeCount = getDomNodeCount();
+    const consoleLogs: ConsoleLogEntry[] | undefined = data.sendConsoleLogs
+      ? getConsoleLogSnapshot()
+      : undefined;
 
     const response = await fetch(`${config.apiUrl}/feedback`, {
       method: 'POST',
@@ -1571,6 +1609,7 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
         categoryLabels: config.categoryLabels,
         screenshot: data.screenshot,
         attachments: data.attachments,
+        consoleLogs,
         submitter,
         metadata: {
           url: systemInfo.url, // Redacted URL (no query params)

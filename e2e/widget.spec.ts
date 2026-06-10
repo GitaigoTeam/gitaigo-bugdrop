@@ -372,6 +372,128 @@ test.describe('Widget Interaction', () => {
     await expect(modal).toBeVisible({ timeout: 5000 });
   });
 
+  test('rapid feedback button clicks during startup open one modal', async ({ page }) => {
+    await page.route('**/api/check**', async route => {
+      await page.waitForTimeout(500);
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      });
+    });
+
+    await page.goto('/test/');
+    await page.evaluate(() =>
+      localStorage.removeItem('bugdrop_welcomed_mean-weasel/bugdrop-widget-test')
+    );
+
+    const button = page.locator('#bugdrop-host').locator('css=.bd-trigger');
+    await expect(button).toBeVisible({ timeout: 5000 });
+
+    await button.evaluate(trigger => {
+      if (!(trigger instanceof HTMLElement)) {
+        throw new Error('BugDrop trigger not found');
+      }
+      trigger.click();
+      trigger.click();
+      trigger.click();
+    });
+
+    const modal = page.locator('#bugdrop-host').locator('css=.bd-modal');
+    await expect(modal).toHaveCount(1, { timeout: 5000 });
+    await expect(page.locator('#bugdrop-host').locator('css=.bd-title')).toHaveText(
+      'Share Your Feedback'
+    );
+  });
+
+  test('console logs checkbox is unchecked by default', async ({ page }) => {
+    await page.route('**/api/check**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      });
+    });
+
+    await page.goto('/test/');
+
+    const host = page.locator('#bugdrop-host');
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+
+    const consoleLogsCheckbox = host.locator('css=#send-console-logs');
+    await expect(consoleLogsCheckbox).toBeVisible({ timeout: 5000 });
+    await expect(consoleLogsCheckbox).not.toBeChecked();
+  });
+
+  test('console logs checkbox can default to checked from script settings', async ({ page }) => {
+    await page.route('**/api/check**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      });
+    });
+
+    await page.goto('/test/?sendConsoleLogs=true');
+
+    const host = page.locator('#bugdrop-host');
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+
+    await expect(host.locator('css=#send-console-logs')).toBeChecked({ timeout: 5000 });
+  });
+
+  test('checked console logs option submits captured browser logs', async ({ page }) => {
+    const payloads = await trackFeedbackPayloads(page);
+    await page.route('**/api/check**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ installed: true }),
+      });
+    });
+
+    await page.goto('/test/');
+    const host = page.locator('#bugdrop-host');
+    await host.locator('css=.bd-trigger').waitFor({ state: 'visible', timeout: 5000 });
+
+    await page.evaluate(() => {
+      console.log('customer dashboard failed to save');
+      console.warn('retry count', {
+        token: 'abc123456789abcdefghijklmnopqrstuvwxyz',
+        password: 'hunter2',
+        cookie: 'sid=short',
+      });
+    });
+
+    await host.locator('css=.bd-trigger').click();
+    await host.locator('css=[data-action="continue"]').click();
+    await host.locator('css=#title').fill('Console log test');
+    await host.locator('css=#include-screenshot').uncheck();
+    await host.locator('css=#send-console-logs').check();
+    await host.locator('css=#submit-btn').click();
+
+    await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
+    expect(payloads).toHaveLength(1);
+    const logs = payloads[0].consoleLogs;
+    expect(logs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: 'log',
+          message: expect.stringContaining('customer dashboard failed to save'),
+        }),
+        expect.objectContaining({
+          level: 'warn',
+          message: expect.stringContaining('[redacted]'),
+        }),
+      ])
+    );
+    expect(JSON.stringify(logs)).not.toContain('abc123456789abcdefghijklmnopqrstuvwxyz');
+    expect(JSON.stringify(logs)).not.toContain('hunter2');
+    expect(JSON.stringify(logs)).not.toContain('sid=short');
+  });
+
   test('uploaded files can be selected, removed, and submitted', async ({ page }) => {
     const payloads = await trackFeedbackPayloads(page);
     await page.route('**/api/check**', async route => {
@@ -383,7 +505,6 @@ test.describe('Widget Interaction', () => {
     });
 
     await page.goto('/test/');
-
     const host = page.locator('#bugdrop-host');
     await host.locator('css=.bd-trigger').click();
     await host.locator('css=[data-action="continue"]').click();
