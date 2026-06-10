@@ -1,11 +1,18 @@
 import { Hono, type Context, type Next } from 'hono';
 import { cors } from 'hono/cors';
-import type { ConsoleLogEntry, Env, FeedbackCategory, FeedbackPayload } from '../types';
+import type {
+  ConsoleLogEntry,
+  Env,
+  FeedbackAttachment,
+  FeedbackCategory,
+  FeedbackPayload,
+} from '../types';
 import { redactConsoleLogMessage } from '../widget/console-log-redaction';
 import {
   getInstallationToken,
   createIssue,
   uploadScreenshotAsAsset,
+  uploadAttachmentAsAsset,
   isRepoPublic,
   GitHubLabelError,
 } from '../lib/github';
@@ -28,6 +35,17 @@ const DEFAULT_CATEGORY_LABELS: Record<FeedbackCategory, string[]> = {
 
 const CATEGORY_KEYS: FeedbackCategory[] = ['bug', 'feature', 'question'];
 const MAX_LABELS_PER_CATEGORY = 5;
+const MAX_ATTACHMENTS = 5;
+const ALLOWED_ATTACHMENT_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'application/pdf',
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+]);
 const MAX_CONSOLE_LOG_ENTRIES = 50;
 const MAX_CONSOLE_LOG_BODY_CHARS = 12_000;
 const MAX_CONSOLE_LOG_MESSAGE_CHARS = 1_000;
@@ -144,6 +162,10 @@ api.post('/feedback', async c => {
       return c.json({ error: validation.error }, 400);
     }
   }
+  const attachmentValidation = validateAttachments(payload.attachments, maxSizeMB);
+  if (!attachmentValidation.valid) {
+    return c.json({ error: attachmentValidation.error }, 400);
+  }
 
   // Parse owner/repo
   const [owner, repo] = payload.repo.split('/');
@@ -184,6 +206,11 @@ api.post('/feedback', async c => {
         // Continue without screenshot rather than failing the whole submission
       }
     }
+    const uploadedAttachments: UploadedAttachment[] = [];
+    for (const attachment of payload.attachments ?? []) {
+      const url = await uploadAttachmentAsAsset(token, owner, repo, attachment);
+      uploadedAttachments.push({ ...attachment, url });
+    }
 
     const labelResolution = resolveCategoryLabels(payload, c.env, payload.repo);
     if (labelResolution.warnings.length > 0) {
@@ -199,7 +226,12 @@ api.post('/feedback', async c => {
     // Check repo visibility (for UI to decide whether to show issue link)
     const isPublic = await isRepoPublic(token, owner, repo);
 
-    let body = formatIssueBody(payload, screenshotUrl, labelResolution.warnings);
+    let body = formatIssueBody(
+      payload,
+      screenshotUrl,
+      uploadedAttachments,
+      labelResolution.warnings
+    );
     let issue;
     try {
       issue = await createIssue(token, owner, repo, payload.title, body, labelResolution.labels);
@@ -213,7 +245,7 @@ api.post('/feedback', async c => {
         ...labelResolution.warnings,
         `GitHub rejected the configured labels (${formatLabelList(labelResolution.labels)}), so BugDrop retried with default labels (${formatLabelList(fallbackLabels)}).`,
       ];
-      body = formatIssueBody(payload, screenshotUrl, warning);
+      body = formatIssueBody(payload, screenshotUrl, uploadedAttachments, warning);
       try {
         issue = await createIssue(token, owner, repo, payload.title, body, fallbackLabels);
       } catch (fallbackError) {
@@ -305,6 +337,7 @@ type LabelResolution = {
   warnings: string[];
   usedCustomLabels: boolean;
 };
+type UploadedAttachment = FeedbackAttachment & { url: string };
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -351,6 +384,80 @@ function validateScreenshotDataUrl(dataUrl: string, maxSizeMB: number): Screensh
       valid: false,
       error: 'Invalid screenshot format. Expected PNG image data.',
     };
+  }
+
+  return { valid: true };
+}
+
+function validateAttachments(
+  attachments: FeedbackAttachment[] | undefined,
+  maxSizeMB: number
+): ScreenshotValidationResult {
+  if (attachments === undefined) return { valid: true };
+  if (!Array.isArray(attachments)) {
+    return { valid: false, error: 'Invalid upload format. Expected a list of files.' };
+  }
+  if (attachments.length > MAX_ATTACHMENTS) {
+    return { valid: false, error: `Too many files. Upload up to ${MAX_ATTACHMENTS} files.` };
+  }
+
+  for (const attachment of attachments) {
+    const validation = validateAttachment(attachment, maxSizeMB);
+    if (!validation.valid) return validation;
+  }
+
+  return { valid: true };
+}
+
+function validateAttachment(
+  attachment: FeedbackAttachment,
+  maxSizeMB: number
+): ScreenshotValidationResult {
+  if (!isPlainObject(attachment)) {
+    return { valid: false, error: 'Invalid upload format. Expected file details.' };
+  }
+
+  const name = attachment.name;
+  const type = attachment.type;
+  const size = attachment.size;
+  const dataUrl = attachment.dataUrl;
+  if (
+    typeof name !== 'string' ||
+    !name.trim() ||
+    hasControlChars(name) ||
+    typeof type !== 'string' ||
+    typeof dataUrl !== 'string' ||
+    typeof size !== 'number' ||
+    !Number.isFinite(size)
+  ) {
+    return { valid: false, error: 'Invalid upload format. Expected file name, type, and data.' };
+  }
+
+  if (!ALLOWED_ATTACHMENT_TYPES.has(type)) {
+    return { valid: false, error: `Unsupported file type: ${type || 'unknown'}.` };
+  }
+
+  const match = dataUrl.match(/^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/);
+  if (!match || match[1] !== type || !match[2]) {
+    return { valid: false, error: 'Invalid upload format. Expected a matching file data URL.' };
+  }
+
+  const estimatedSizeBytes =
+    Math.floor((match[2].length * 3) / 4) -
+    (match[2].endsWith('==') ? 2 : match[2].endsWith('=') ? 1 : 0);
+  const largerSizeBytes = Math.max(estimatedSizeBytes, size);
+  const estimatedSizeMB = largerSizeBytes / (1024 * 1024);
+  if (estimatedSizeMB > maxSizeMB) {
+    return {
+      valid: false,
+      error: `File is too large: ${estimatedSizeMB.toFixed(1)}MB exceeds ${maxSizeMB}MB limit.`,
+    };
+  }
+
+  try {
+    base64ToBytes(match[2]);
+  } catch {
+    return { valid: false, error: 'Invalid upload format. Expected valid file data.' };
   }
 
   return { valid: true };
@@ -587,6 +694,7 @@ function hasPngSignature(bytes: Uint8Array): boolean {
 function formatIssueBody(
   payload: FeedbackPayload,
   screenshotDataUrl?: string,
+  uploadedAttachments: UploadedAttachment[] = [],
   labelWarnings: string[] = []
 ): string {
   const sections: string[] = [];
@@ -621,6 +729,19 @@ function formatIssueBody(
       sections.push(
         `_Selected element is indicated by the rounded highlight border (${formatMarkdownInlineCode(getSelectedElementHighlightColor(payload))})._`
       );
+    }
+    sections.push('');
+  }
+
+  if (uploadedAttachments.length > 0) {
+    sections.push('## Attachments');
+    for (const attachment of uploadedAttachments) {
+      const safeName = normalizeMarkdownValue(attachment.name);
+      if (attachment.type.startsWith('image/')) {
+        sections.push(`![${safeName}](${attachment.url})`);
+      } else {
+        sections.push(`- [${safeName}](${attachment.url})`);
+      }
     }
     sections.push('');
   }

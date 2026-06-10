@@ -33,6 +33,12 @@ import { resolveAccentColor } from '../defaults';
 
 type FeedbackCategory = 'bug' | 'feature' | 'question';
 type CategoryLabelConfig = Partial<Record<FeedbackCategory, string | string[]>>;
+type FeedbackAttachment = {
+  name: string;
+  type: string;
+  size: number;
+  dataUrl: string;
+};
 
 interface WidgetConfig {
   repo: string;
@@ -101,6 +107,7 @@ interface FeedbackData {
   description: string;
   category: FeedbackCategory;
   screenshot: string | null;
+  attachments: FeedbackAttachment[];
   elementSelector: string | null;
   fullElementSelector: string | null;
   selectedElementHighlightColor: string | null;
@@ -117,6 +124,18 @@ const BUGDROP_COMPLEX_SCREENSHOT_SKIPPED_PREFIX = 'bugdrop_complex_screenshot_sk
 const COMPLEX_SCREENSHOT_SKIP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TRIGGER_VIEWPORT_MARGIN_PX = 8;
 const TRIGGER_KEYBOARD_MOVE_PX = 16;
+const MAX_UPLOAD_FILES = 5;
+const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024;
+const ACCEPTED_UPLOAD_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'application/pdf',
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+];
 
 // Parse user agent to extract browser info
 function parseBrowser(ua: string): { name: string; version: string } {
@@ -1086,6 +1105,7 @@ async function openFeedbackFlow(
       name: formResult.name,
       email: formResult.email,
       screenshot: screenshotResult.screenshot,
+      attachments: formResult.attachments,
       elementSelector: screenshotResult.elementSelector,
       fullElementSelector: screenshotResult.fullElementSelector,
       selectedElementHighlightColor: screenshotResult.elementSelector
@@ -1203,6 +1223,7 @@ interface FeedbackFormResult {
   name?: string;
   email?: string;
   includeScreenshot: boolean;
+  attachments: FeedbackAttachment[];
   sendConsoleLogs: boolean;
 }
 
@@ -1264,8 +1285,18 @@ function showFeedbackFormWithScreenshotOption(
           </div>
           ${nameFieldHtml}
           ${emailFieldHtml}
-          ${getScreenshotFormControl(config, initialValues)}
-          ${getConsoleLogsFormControl(config, initialValues)}
+          <div class="bd-evidence-block">
+            <div class="bd-evidence-row">
+              ${getScreenshotFormControl(config, initialValues)}
+              ${getUploadFormControl()}
+            </div>
+            <input type="file" id="attachment-upload" accept="${ACCEPTED_UPLOAD_TYPES.join(',')}" multiple class="bd-upload-input" />
+            <div id="attachment-list" class="bd-upload-list" aria-live="polite">${
+              initialValues?.attachments.length ? '' : ''
+            }</div>
+            <p id="attachment-error" class="bd-field-error" hidden></p>
+            ${getConsoleLogsFormControl(config, initialValues)}
+          </div>
           <div class="bd-actions">
             <button type="button" class="bd-btn bd-btn-secondary" data-action="cancel">Cancel</button>
             <button type="submit" class="bd-btn bd-btn-primary" id="submit-btn">${config.screenshotMode === 'auto' ? 'Submit' : 'Continue'}</button>
@@ -1282,9 +1313,14 @@ function showFeedbackFormWithScreenshotOption(
     const screenshotCheckbox = modal.querySelector(
       '#include-screenshot'
     ) as HTMLInputElement | null;
+    const uploadInput = modal.querySelector('#attachment-upload') as HTMLInputElement;
+    const uploadButton = modal.querySelector('[data-action="choose-uploads"]') as HTMLButtonElement;
+    const uploadList = modal.querySelector('#attachment-list') as HTMLElement;
+    const uploadError = modal.querySelector('#attachment-error') as HTMLElement;
     const consoleLogsCheckbox = modal.querySelector('#send-console-logs') as HTMLInputElement;
     const closeBtn = modal.querySelector('.bd-close') as HTMLElement;
     const cancelBtn = modal.querySelector('[data-action="cancel"]') as HTMLElement;
+    let attachments = [...(initialValues?.attachments ?? [])];
 
     const closeModal = () => {
       modal.remove();
@@ -1337,6 +1373,7 @@ function showFeedbackFormWithScreenshotOption(
         name: nameInput?.value.trim() || undefined,
         email: emailInput?.value.trim() || undefined,
         includeScreenshot,
+        attachments,
         sendConsoleLogs: consoleLogsCheckbox.checked,
       });
     });
@@ -1345,7 +1382,132 @@ function showFeedbackFormWithScreenshotOption(
     titleInput.addEventListener('input', () => titleInput.classList.remove('bd-input--error'));
     nameInput?.addEventListener('input', () => nameInput.classList.remove('bd-input--error'));
     emailInput?.addEventListener('input', () => emailInput.classList.remove('bd-input--error'));
+
+    const rerenderUploads = () => {
+      renderUploadList(uploadList, attachments, index => {
+        attachments = attachments.filter((_, itemIndex) => itemIndex !== index);
+        rerenderUploads();
+      });
+    };
+
+    uploadButton.addEventListener('click', () => uploadInput.click());
+    uploadInput.addEventListener('change', async () => {
+      const files = Array.from(uploadInput.files ?? []);
+      uploadInput.value = '';
+      uploadError.textContent = '';
+      uploadError.hidden = true;
+
+      const remainingSlots = MAX_UPLOAD_FILES - attachments.length;
+      if (files.length > remainingSlots) {
+        showUploadError(
+          uploadError,
+          `Upload up to ${MAX_UPLOAD_FILES} files. Remove a file before adding another.`
+        );
+        return;
+      }
+
+      for (const file of files) {
+        const validationError = validateUploadFile(file);
+        if (validationError) {
+          showUploadError(uploadError, validationError);
+          return;
+        }
+      }
+
+      try {
+        const nextAttachments = await Promise.all(files.map(fileToAttachment));
+        attachments = [...attachments, ...nextAttachments];
+        rerenderUploads();
+      } catch {
+        showUploadError(uploadError, 'Could not read that file. Try another one.');
+      }
+    });
+
+    rerenderUploads();
   });
+}
+
+function getUploadFormControl(): string {
+  return `
+    <div class="bd-upload-group">
+      <div class="bd-upload-row" aria-label="Uploads">
+        <button type="button" class="bd-btn bd-btn-secondary bd-upload-button" data-action="choose-uploads" aria-label="Upload files">
+          <svg class="bd-upload-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M8 11V3" />
+            <path d="M4.5 6.5 8 3l3.5 3.5" />
+            <path d="M3 12.5h10" />
+          </svg>
+          Upload
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function validateUploadFile(file: File): string | null {
+  if (!ACCEPTED_UPLOAD_TYPES.includes(file.type)) {
+    return 'That file type is not supported. Upload an image, PDF, or short video.';
+  }
+  if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+    return `File is too large. Upload files up to ${formatFileSize(MAX_UPLOAD_SIZE_BYTES)}.`;
+  }
+  return null;
+}
+
+function showUploadError(target: HTMLElement, message: string) {
+  target.textContent = message;
+  target.hidden = false;
+}
+
+function renderUploadList(
+  target: HTMLElement,
+  attachments: FeedbackAttachment[],
+  onRemove: (index: number) => void
+) {
+  target.innerHTML = attachments
+    .map(
+      (attachment, index) => `
+        <div class="bd-upload-item">
+          <span class="bd-upload-item__name">${escapeHtml(attachment.name)}</span>
+          <span class="bd-upload-item__meta">${formatFileSize(attachment.size)}</span>
+          <button type="button" class="bd-upload-remove" data-index="${index}" aria-label="Remove ${escapeHtml(attachment.name)}">&times;</button>
+        </div>
+      `
+    )
+    .join('');
+
+  target.querySelectorAll('.bd-upload-remove').forEach(button => {
+    button.addEventListener('click', () => {
+      const index = Number((button as HTMLElement).dataset.index);
+      if (Number.isInteger(index)) onRemove(index);
+    });
+  });
+}
+
+function fileToAttachment(file: File): Promise<FeedbackAttachment> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      if (typeof reader.result !== 'string') {
+        reject(new Error('Could not read file.'));
+        return;
+      }
+      resolve({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        dataUrl: reader.result,
+      });
+    });
+    reader.addEventListener('error', () => reject(new Error('Could not read file.')));
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MB`;
 }
 
 function getScreenshotFormControl(
@@ -1377,9 +1539,9 @@ function getScreenshotFormControl(
     (!isFullPageDisabled() || !hasSkippedComplexScreenshots(config.repo));
 
   return `
-    <div class="bd-form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
-      <input type="checkbox" id="include-screenshot" ${includeScreenshot ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: var(--bd-primary); cursor: pointer;" />
-      <label for="include-screenshot" style="font-size: 0.95rem; color: var(--bd-text-secondary); cursor: pointer; user-select: none;">
+    <div class="bd-screenshot-control">
+      <input type="checkbox" id="include-screenshot" ${includeScreenshot ? 'checked' : ''} class="bd-checkbox" />
+      <label for="include-screenshot" class="bd-checkbox-label">
         📸 Include a screenshot
       </label>
     </div>
@@ -1446,6 +1608,7 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
         category: data.category,
         categoryLabels: config.categoryLabels,
         screenshot: data.screenshot,
+        attachments: data.attachments,
         consoleLogs,
         submitter,
         metadata: {

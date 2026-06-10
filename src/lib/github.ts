@@ -1,5 +1,5 @@
 import { generateGitHubAppJWT } from './jwt';
-import type { Env, GitHubIssue } from '../types';
+import type { Env, FeedbackAttachment, GitHubIssue } from '../types';
 
 const GITHUB_API = 'https://api.github.com';
 
@@ -202,9 +202,6 @@ export async function uploadScreenshotAsAsset(
   repo: string,
   base64DataUrl: string
 ): Promise<string> {
-  // Ensure the screenshot branch exists
-  await ensureScreenshotBranch(token, owner, repo);
-
   // Remove data URL prefix and extract the base64 content
   const content = base64DataUrl.replace(/^data:image\/\w+;base64,/, '');
 
@@ -212,11 +209,52 @@ export async function uploadScreenshotAsAsset(
   const timestamp = Date.now();
   const filename = `.bugdrop/screenshots/${timestamp}.png`;
 
+  return uploadBase64Asset(
+    token,
+    owner,
+    repo,
+    filename,
+    content,
+    `Add BugDrop screenshot ${timestamp}`
+  );
+}
+
+export async function uploadAttachmentAsAsset(
+  token: string,
+  owner: string,
+  repo: string,
+  attachment: FeedbackAttachment
+): Promise<string> {
+  const timestamp = Date.now();
+  const filename = `.bugdrop/uploads/${timestamp}-${sanitizeAttachmentFilename(attachment.name)}`;
+  const content = attachment.dataUrl.replace(/^data:[^;]+;base64,/, '');
+
+  return uploadBase64Asset(
+    token,
+    owner,
+    repo,
+    filename,
+    content,
+    `Add BugDrop upload ${timestamp}`
+  );
+}
+
+async function uploadBase64Asset(
+  token: string,
+  owner: string,
+  repo: string,
+  filename: string,
+  content: string,
+  message: string
+): Promise<string> {
+  // Ensure the screenshot branch exists
+  await ensureScreenshotBranch(token, owner, repo);
+
   const response = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/contents/${filename}`, {
     method: 'PUT',
     headers: headers(token),
     body: JSON.stringify({
-      message: `Add BugDrop screenshot ${timestamp}`,
+      message,
       content: content,
       branch: SCREENSHOT_BRANCH,
     }),
@@ -229,4 +267,15 @@ export async function uploadScreenshotAsAsset(
 
   const data = (await response.json()) as { content: { html_url: string } };
   return data.content.html_url + '?raw=true';
+}
+
+function sanitizeAttachmentFilename(name: string): string {
+  const safe = name
+    .trim()
+    .replace(/[/\\]/g, '-')
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+
+  return safe || 'upload';
 }

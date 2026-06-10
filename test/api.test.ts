@@ -7,6 +7,7 @@ import { createBugDropAuthTokenForTest } from '../src/lib/authToken';
 const mockGetInstallationToken = vi.fn();
 const mockCreateIssue = vi.fn();
 const mockUploadScreenshotAsAsset = vi.fn();
+const mockUploadAttachmentAsAsset = vi.fn();
 const mockIsRepoPublic = vi.fn();
 
 class TestGitHubLabelError extends Error {
@@ -22,6 +23,7 @@ vi.mock('../src/lib/github', () => ({
   getInstallationToken: (...args: unknown[]) => mockGetInstallationToken(...args),
   createIssue: (...args: unknown[]) => mockCreateIssue(...args),
   uploadScreenshotAsAsset: (...args: unknown[]) => mockUploadScreenshotAsAsset(...args),
+  uploadAttachmentAsAsset: (...args: unknown[]) => mockUploadAttachmentAsAsset(...args),
   isRepoPublic: (...args: unknown[]) => mockIsRepoPublic(...args),
   GitHubLabelError: TestGitHubLabelError,
 }));
@@ -51,6 +53,7 @@ describe('API Routes', () => {
     mockGetInstallationToken.mockReset();
     mockCreateIssue.mockReset();
     mockUploadScreenshotAsAsset.mockReset();
+    mockUploadAttachmentAsAsset.mockReset();
     mockIsRepoPublic.mockReset();
     // Set default mock return values
     mockGetInstallationToken.mockResolvedValue('test-token');
@@ -1215,6 +1218,126 @@ describe('API Routes', () => {
         expect.stringContaining(uploadedUrl),
         ['bug', 'bugdrop']
       );
+    });
+
+    it('should upload selected files and include attachment links in issue body', async () => {
+      const uploadedImageUrl =
+        'https://raw.githubusercontent.com/testowner/testrepo/main/.bugdrop/uploads/photo.png';
+      const uploadedPdfUrl =
+        'https://raw.githubusercontent.com/testowner/testrepo/main/.bugdrop/uploads/notes.pdf';
+      mockUploadAttachmentAsAsset
+        .mockResolvedValueOnce(uploadedImageUrl)
+        .mockResolvedValueOnce(uploadedPdfUrl);
+
+      const payloadWithAttachments = {
+        ...validPayload,
+        attachments: [
+          {
+            name: 'photo.png',
+            type: 'image/png',
+            size: 68,
+            dataUrl: validPngDataUrl,
+          },
+          {
+            name: 'notes.pdf',
+            type: 'application/pdf',
+            size: 12,
+            dataUrl: 'data:application/pdf;base64,JVBERi0xLjQK',
+          },
+        ],
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadWithAttachments),
+      });
+      const res = await app.fetch(req, mockEnv);
+
+      expect(res.status).toBe(200);
+      expect(mockUploadAttachmentAsAsset).toHaveBeenCalledTimes(2);
+      expect(mockUploadAttachmentAsAsset).toHaveBeenNthCalledWith(
+        1,
+        'test-token',
+        'testowner',
+        'testrepo',
+        expect.objectContaining({
+          name: 'photo.png',
+          type: 'image/png',
+          dataUrl: validPngDataUrl,
+        })
+      );
+      expect(mockUploadAttachmentAsAsset).toHaveBeenNthCalledWith(
+        2,
+        'test-token',
+        'testowner',
+        'testrepo',
+        expect.objectContaining({
+          name: 'notes.pdf',
+          type: 'application/pdf',
+          dataUrl: 'data:application/pdf;base64,JVBERi0xLjQK',
+        })
+      );
+
+      const issueBody = mockCreateIssue.mock.calls[0][4];
+      expect(issueBody).toContain('## Attachments');
+      expect(issueBody).toContain(`![photo.png](${uploadedImageUrl})`);
+      expect(issueBody).toContain(`[notes.pdf](${uploadedPdfUrl})`);
+    });
+
+    it('should reject unsupported uploaded file types', async () => {
+      const payloadWithUnsupportedAttachment = {
+        ...validPayload,
+        attachments: [
+          {
+            name: 'archive.zip',
+            type: 'application/zip',
+            size: 12,
+            dataUrl: 'data:application/zip;base64,UEsDBAo=',
+          },
+        ],
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadWithUnsupportedAttachment),
+      });
+      const res = await app.fetch(req, mockEnv);
+      const data = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(data.error).toContain('Unsupported file type');
+      expect(mockUploadAttachmentAsAsset).not.toHaveBeenCalled();
+      expect(mockCreateIssue).not.toHaveBeenCalled();
+    });
+
+    it('should reject uploaded files exceeding the size limit', async () => {
+      const payloadWithLargeAttachment = {
+        ...validPayload,
+        attachments: [
+          {
+            name: 'large.png',
+            type: 'image/png',
+            size: 6 * 1024 * 1024,
+            dataUrl: validPngDataUrl,
+          },
+        ],
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadWithLargeAttachment),
+      });
+      const res = await app.fetch(req, mockEnv);
+      const data = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(data.error).toContain('File is too large');
+      expect(data.error).toContain('exceeds 5MB limit');
+      expect(mockUploadAttachmentAsAsset).not.toHaveBeenCalled();
+      expect(mockCreateIssue).not.toHaveBeenCalled();
     });
 
     it('should add a selected-element screenshot caption when an element was chosen', async () => {
