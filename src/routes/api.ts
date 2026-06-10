@@ -1,6 +1,7 @@
 import { Hono, type Context, type Next } from 'hono';
 import { cors } from 'hono/cors';
 import type { ConsoleLogEntry, Env, FeedbackCategory, FeedbackPayload } from '../types';
+import { redactConsoleLogMessage } from '../widget/console-log-redaction';
 import {
   getInstallationToken,
   createIssue,
@@ -30,10 +31,6 @@ const MAX_LABELS_PER_CATEGORY = 5;
 const MAX_CONSOLE_LOG_ENTRIES = 50;
 const MAX_CONSOLE_LOG_BODY_CHARS = 12_000;
 const MAX_CONSOLE_LOG_MESSAGE_CHARS = 1_000;
-const SECRET_WORD_PATTERN =
-  /\b(password|passwd|pwd|token|api[_-]?key|secret|authorization|auth|cookie)\b(\s*[:=]\s*)(["']?)[^"',\s}&]+/gi;
-const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
-const LONG_SECRET_PATTERN = /\b[A-Za-z0-9+/_=-]{32,}\b/g;
 // GitHub enforces a 50-char limit on label names; keep validation in lockstep
 // so over-long configured labels surface as a clear local warning rather than
 // going out, getting rejected, and triggering the GitHub-error fallback path.
@@ -781,13 +778,6 @@ function formatConsoleLogSource(entry: ConsoleLogEntry): string {
 
 function isConsoleLogLevel(value: unknown): value is ConsoleLogEntry['level'] {
   return value === 'log' || value === 'info' || value === 'warn' || value === 'error';
-}
-
-function redactConsoleLogMessage(value: string): string {
-  return value
-    .replace(BEARER_PATTERN, 'Bearer [redacted]')
-    .replace(SECRET_WORD_PATTERN, '$1$2$3[redacted]')
-    .replace(LONG_SECRET_PATTERN, '[redacted]');
 }
 
 function formatFencedBlock(value: string): string {

@@ -1,3 +1,5 @@
+import { redactConsoleLogMessage } from './console-log-redaction';
+
 type ConsoleLogLevel = 'log' | 'info' | 'warn' | 'error';
 
 export interface ConsoleLogEntry {
@@ -11,10 +13,6 @@ export interface ConsoleLogEntry {
 
 const MAX_ENTRIES = 50;
 const MAX_MESSAGE_LENGTH = 1000;
-const SECRET_WORD_PATTERN =
-  /\b(password|passwd|pwd|token|api[_-]?key|secret|authorization|auth|cookie)\b(\s*[:=]\s*)(["']?)[^"',\s}&]+/gi;
-const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
-const LONG_SECRET_PATTERN = /\b[A-Za-z0-9+/_=-]{32,}\b/g;
 
 const capturedLogs: ConsoleLogEntry[] = [];
 let hasStarted = false;
@@ -89,13 +87,6 @@ function formatConsoleValue(value: unknown): string {
   } catch {
     return String(value);
   }
-}
-
-function redactConsoleLogMessage(value: string): string {
-  return value
-    .replace(BEARER_PATTERN, 'Bearer [redacted]')
-    .replace(SECRET_WORD_PATTERN, '$1$2$3[redacted]')
-    .replace(LONG_SECRET_PATTERN, '[redacted]');
 }
 
 function getConsoleSource(): Pick<ConsoleLogEntry, 'sourceUrl' | 'lineNumber' | 'columnNumber'> {

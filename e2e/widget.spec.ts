@@ -409,7 +409,11 @@ test.describe('Widget Interaction', () => {
 
     await page.evaluate(() => {
       console.log('customer dashboard failed to save');
-      console.warn('retry count token=abc123456789abcdefghijklmnopqrstuvwxyz');
+      console.warn('retry count', {
+        token: 'abc123456789abcdefghijklmnopqrstuvwxyz',
+        password: 'hunter2',
+        cookie: 'sid=short',
+      });
     });
 
     await host.locator('css=.bd-trigger').click();
@@ -421,7 +425,8 @@ test.describe('Widget Interaction', () => {
 
     await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 10000 });
     expect(payloads).toHaveLength(1);
-    expect(payloads[0].consoleLogs).toEqual(
+    const logs = payloads[0].consoleLogs;
+    expect(logs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           level: 'log',
@@ -433,6 +438,9 @@ test.describe('Widget Interaction', () => {
         }),
       ])
     );
+    expect(JSON.stringify(logs)).not.toContain('abc123456789abcdefghijklmnopqrstuvwxyz');
+    expect(JSON.stringify(logs)).not.toContain('hunter2');
+    expect(JSON.stringify(logs)).not.toContain('sid=short');
   });
 
   test('element picker handles SVG elements without errors', async ({ page }) => {

@@ -1478,7 +1478,7 @@ describe('API Routes', () => {
           },
           {
             level: 'warn',
-            message: 'Retrying cart request',
+            message: '{"token":"abc123","password":"hunter2","cookie":"sid=short"}',
             timestamp: '2026-06-08T10:00:01.000Z',
           },
         ],
@@ -1495,7 +1495,12 @@ describe('API Routes', () => {
       expect(issueBody).toContain('<summary>Console Logs</summary>');
       expect(issueBody).toContain('[error] Checkout failed with token=[redacted]');
       expect(issueBody).toContain('https://example.test/app.js?token=[redacted]:12:4');
-      expect(issueBody).toContain('[warn] Retrying cart request');
+      expect(issueBody).toContain(
+        '[warn] {"token":"[redacted]","password":"[redacted]","cookie":"[redacted]"}'
+      );
+      expect(issueBody).not.toContain('abc123');
+      expect(issueBody).not.toContain('hunter2');
+      expect(issueBody).not.toContain('sid=short');
     });
 
     it('should omit full CSS path row when metadata is absent', async () => {
