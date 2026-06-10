@@ -291,7 +291,7 @@ async function requireBugDropFeedbackAuthToken(
   c: Context<ApiEnv>,
   next: Next
 ): Promise<Response | void> {
-  if (!c.env.AUTH_TOKEN_SECRET || c.req.method !== 'POST') return next();
+  if (!hasBugDropAuthTokenSecret(c.env) || c.req.method !== 'POST') return next();
 
   try {
     const payload = (await c.req.raw.clone().json()) as FeedbackPayload;
@@ -312,15 +312,16 @@ function getBearerToken(value: string | undefined): string | undefined {
 }
 
 async function requireBugDropAuthToken(c: Context<ApiEnv>, repo: string): Promise<Response | null> {
-  if (!c.env.AUTH_TOKEN_SECRET) return null;
+  const secrets = getBugDropAuthTokenSecrets(c.env);
+  if (secrets.length === 0) return null;
 
   try {
-    await verifyBugDropAuthToken(getBearerToken(c.req.header('Authorization')), {
-      secret: c.env.AUTH_TOKEN_SECRET,
-      repo,
-      audience: c.env.AUTH_TOKEN_AUDIENCE,
-      issuer: c.env.AUTH_TOKEN_ISSUER,
-    });
+    await verifyBugDropAuthTokenWithAnySecret(
+      getBearerToken(c.req.header('Authorization')),
+      secrets,
+      c,
+      repo
+    );
     return null;
   } catch (error) {
     console.warn('[BugDrop] rejected auth token', {
@@ -329,6 +330,51 @@ async function requireBugDropAuthToken(c: Context<ApiEnv>, repo: string): Promis
     });
     return c.json({ error: 'BugDrop auth token required' }, 401);
   }
+}
+
+function hasBugDropAuthTokenSecret(env: Env): boolean {
+  return getBugDropAuthTokenSecrets(env).length > 0;
+}
+
+function getBugDropAuthTokenSecrets(env: Env): string[] {
+  return [
+    env.AUTH_TOKEN_SECRET,
+    ...splitAdditionalAuthTokenSecrets(env.AUTH_TOKEN_ADDITIONAL_SECRETS),
+  ]
+    .map(secret => secret?.trim())
+    .filter((secret): secret is string => Boolean(secret));
+}
+
+function splitAdditionalAuthTokenSecrets(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(/[,\n]/)
+    .map(secret => secret.trim())
+    .filter(Boolean);
+}
+
+async function verifyBugDropAuthTokenWithAnySecret(
+  token: string | undefined,
+  secrets: string[],
+  c: Context<ApiEnv>,
+  repo: string
+): Promise<void> {
+  let lastError: unknown;
+  for (const secret of secrets) {
+    try {
+      await verifyBugDropAuthToken(token, {
+        secret,
+        repo,
+        audience: c.env.AUTH_TOKEN_AUDIENCE,
+        issuer: c.env.AUTH_TOKEN_ISSUER,
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error('Missing BugDrop auth token');
 }
 
 type ScreenshotValidationResult = { valid: true } | { valid: false; error: string };

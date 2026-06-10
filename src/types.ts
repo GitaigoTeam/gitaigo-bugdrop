@@ -12,6 +12,7 @@ export interface Env {
   ALLOW_CLIENT_CATEGORY_LABELS?: string; // Self-host escape hatch for script-tag mappings
   ROOT_REDIRECT_URL?: string; // Optional landing page for self-hosted deployments
   AUTH_TOKEN_SECRET?: string; // Optional HMAC secret for host-app submission tokens
+  AUTH_TOKEN_ADDITIONAL_SECRETS?: string; // Optional comma/newline-separated extra HMAC secrets
   AUTH_TOKEN_AUDIENCE?: string; // Optional expected token audience claim
   AUTH_TOKEN_ISSUER?: string; // Optional expected token issuer claim
   AUTH_TOKEN_REQUIRED_FOR_CHECK?: string; // Optional gate for /check installation lookups
