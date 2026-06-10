@@ -167,6 +167,42 @@ describe('API Routes', () => {
       expect(mockGetInstallationToken).not.toHaveBeenCalled();
     });
 
+    it('should accept check tokens signed by an additional configured secret', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      const env = {
+        ...mockEnv,
+        AUTH_TOKEN_SECRET: 'primary-secret-with-at-least-32-bytes',
+        AUTH_TOKEN_ADDITIONAL_SECRETS: 'deckchecker-secret-with-at-least-32-bytes',
+        AUTH_TOKEN_REQUIRED_FOR_CHECK: 'true',
+      };
+      const now = Math.floor(Date.now() / 1000);
+      const token = await createBugDropAuthTokenForTest(
+        {
+          sub: 'user-123',
+          repo: 'testowner/testrepo',
+          iat: now,
+          exp: now + 300,
+          jti: 'jti-123',
+        },
+        'deckchecker-secret-with-at-least-32-bytes'
+      );
+
+      const req = new Request('http://localhost/check/testowner/testrepo', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const res = await app.fetch(req, env);
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data).toMatchObject({
+        installed: true,
+        repo: 'testowner/testrepo',
+      });
+      expect(mockGetInstallationToken).toHaveBeenCalledWith(env, 'testowner', 'testrepo');
+    });
+
     it('should handle special characters in repo names', async () => {
       mockGetInstallationToken.mockResolvedValue('test-token');
 
@@ -343,6 +379,48 @@ describe('API Routes', () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
           Origin: 'https://app.example.com',
+        },
+        body: JSON.stringify(validPayload),
+      });
+      const res = await app.fetch(req, env);
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data).toMatchObject({
+        success: true,
+        issueNumber: 42,
+      });
+      expect(mockCreateIssue).toHaveBeenCalledOnce();
+    });
+
+    it('should create issue with a bearer token signed by an additional configured secret', async () => {
+      const env = {
+        ...mockEnv,
+        AUTH_TOKEN_SECRET: 'primary-secret-with-at-least-32-bytes',
+        AUTH_TOKEN_ADDITIONAL_SECRETS:
+          'other-rotating-secret-with-at-least-32-bytes, deckchecker-secret-with-at-least-32-bytes',
+        AUTH_TOKEN_AUDIENCE: 'bugdrop.example.workers.dev',
+        AUTH_TOKEN_ISSUER: 'app.example.com',
+      };
+      const now = Math.floor(Date.now() / 1000);
+      const token = await createBugDropAuthTokenForTest(
+        {
+          iss: 'app.example.com',
+          aud: 'bugdrop.example.workers.dev',
+          sub: 'user-123',
+          repo: 'testowner/testrepo',
+          iat: now,
+          exp: now + 300,
+          jti: 'jti-123',
+        },
+        'deckchecker-secret-with-at-least-32-bytes'
+      );
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(validPayload),
       });

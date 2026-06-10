@@ -168,22 +168,23 @@ The release tag (e.g., `v1.2.0`) becomes the version number for the widget files
 
 ### Environment Variables
 
-| Variable                        | Required | Description                                                           |
-| ------------------------------- | -------- | --------------------------------------------------------------------- |
-| `GITHUB_APP_ID`                 | Yes      | Your GitHub App's numeric ID                                          |
-| `GITHUB_PRIVATE_KEY`            | Yes      | Private key from GitHub App settings                                  |
-| `ENVIRONMENT`                   | No       | `development` disables rate limiting; `production` enables all checks |
-| `ALLOWED_ORIGINS`               | No       | Comma-separated allowed domains (default: `*`)                        |
-| `GITHUB_APP_NAME`               | No       | Your app's URL slug for install links                                 |
-| `MAX_SCREENSHOT_SIZE_MB`        | No       | Max screenshot size in MB (default: `5`)                              |
-| `CATEGORY_LABELS`               | No       | JSON mapping from repos/categories to GitHub labels                   |
-| `ALLOW_CLIENT_CATEGORY_LABELS`  | No       | Set to `true` to trust `data-category-labels` from your own pages     |
-| `ROOT_REDIRECT_URL`             | No       | Landing page URL for `/` redirects (default: `https://bugdrop.dev`)   |
-| `AUTH_TOKEN_SECRET`             | No       | HMAC secret that requires signed host-app tokens for `/feedback`      |
-| `AUTH_TOKEN_AUDIENCE`           | No       | Expected token `aud` claim, usually your BugDrop worker hostname      |
-| `AUTH_TOKEN_ISSUER`             | No       | Expected token `iss` claim, usually your app hostname                 |
-| `AUTH_TOKEN_REQUIRED_FOR_CHECK` | No       | Set to `true` to require auth tokens for `/check/:owner/:repo` too    |
-| `RATE_LIMIT`                    | No       | KV namespace binding for rate limiting (see section 5)                |
+| Variable                        | Required | Description                                                                                   |
+| ------------------------------- | -------- | --------------------------------------------------------------------------------------------- |
+| `GITHUB_APP_ID`                 | Yes      | Your GitHub App's numeric ID                                                                  |
+| `GITHUB_PRIVATE_KEY`            | Yes      | Private key from GitHub App settings                                                          |
+| `ENVIRONMENT`                   | No       | `development` disables rate limiting; `production` enables all checks                         |
+| `ALLOWED_ORIGINS`               | No       | Comma-separated allowed domains (default: `*`)                                                |
+| `GITHUB_APP_NAME`               | No       | Your app's URL slug for install links                                                         |
+| `MAX_SCREENSHOT_SIZE_MB`        | No       | Max screenshot size in MB (default: `5`)                                                      |
+| `CATEGORY_LABELS`               | No       | JSON mapping from repos/categories to GitHub labels                                           |
+| `ALLOW_CLIENT_CATEGORY_LABELS`  | No       | Set to `true` to trust `data-category-labels` from your own pages                             |
+| `ROOT_REDIRECT_URL`             | No       | Landing page URL for `/` redirects (default: `https://bugdrop.dev`)                           |
+| `AUTH_TOKEN_SECRET`             | No       | HMAC secret that requires signed host-app tokens for `/feedback`                              |
+| `AUTH_TOKEN_ADDITIONAL_SECRETS` | No       | Comma/newline-separated extra HMAC secrets accepted during rotation or multi-app self-hosting |
+| `AUTH_TOKEN_AUDIENCE`           | No       | Expected token `aud` claim, usually your BugDrop worker hostname                              |
+| `AUTH_TOKEN_ISSUER`             | No       | Expected token `iss` claim, usually your app hostname                                         |
+| `AUTH_TOKEN_REQUIRED_FOR_CHECK` | No       | Set to `true` to require auth tokens for `/check/:owner/:repo` too                            |
+| `RATE_LIMIT`                    | No       | KV namespace binding for rate limiting (see section 5)                                        |
 
 ### Custom Category Labels
 
@@ -267,7 +268,9 @@ AUTH_TOKEN_ISSUER = "app.yourdomain.com"
 AUTH_TOKEN_REQUIRED_FOR_CHECK = "true"
 ```
 
-When `AUTH_TOKEN_SECRET` is set, `/feedback` requires an `Authorization: Bearer <token>` header. `/check/:owner/:repo` remains public by default for backwards compatibility; set `AUTH_TOKEN_REQUIRED_FOR_CHECK = "true"` if even installation status should be visible only to authenticated users.
+When `AUTH_TOKEN_SECRET` or `AUTH_TOKEN_ADDITIONAL_SECRETS` is set, `/feedback` requires an `Authorization: Bearer <token>` header. `/check/:owner/:repo` remains public by default for backwards compatibility; set `AUTH_TOKEN_REQUIRED_FOR_CHECK = "true"` if even installation status should be visible only to authenticated users.
+
+Use `AUTH_TOKEN_ADDITIONAL_SECRETS` when rotating tokens or when one self-hosted worker is shared by multiple authenticated host apps. Keep the existing `AUTH_TOKEN_SECRET` as the primary secret, then add comma- or newline-separated additional secrets so newly migrated apps can verify without breaking apps that still sign with the primary value.
 
 Your application should expose a same-origin endpoint that returns a token only after checking its own session:
 

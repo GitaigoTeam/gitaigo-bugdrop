@@ -222,6 +222,8 @@ If you run your own instance of BugDrop:
 
 For private or authenticated applications, self-hosted workers can require a signed token on feedback submissions. Set `AUTH_TOKEN_SECRET` on the BugDrop worker, mint short-lived tokens from your own backend after checking the user's session, and configure the widget with `data-auth-token-provider`.
 
+When rotating secrets or sharing one worker across multiple authenticated host apps, keep the current `AUTH_TOKEN_SECRET` in place and add comma- or newline-separated verifier secrets with `AUTH_TOKEN_ADDITIONAL_SECRETS`. BugDrop accepts tokens signed by any configured secret, so one app can migrate without breaking another app that still signs with the primary secret.
+
 This protects the feedback endpoint from direct API calls that bypass browser CORS. CORS still matters for browser isolation, but it is not an authentication boundary. The token should include the exact target repository and expire quickly, usually within 5 minutes.
 
 If installation status is also sensitive, set `AUTH_TOKEN_REQUIRED_FOR_CHECK = "true"` so the widget's `/check/:owner/:repo` request requires the same token.

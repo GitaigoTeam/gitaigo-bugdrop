@@ -29,6 +29,11 @@ app.use('*', async (c, next) => {
         '[BugDrop] AUTH_TOKEN_SECRET should be a long random value of at least 32 characters.'
       );
     }
+    if (hasWeakAdditionalAuthTokenSecret(c.env.AUTH_TOKEN_ADDITIONAL_SECRETS)) {
+      console.warn(
+        '[BugDrop] AUTH_TOKEN_ADDITIONAL_SECRETS contains a value shorter than 32 characters.'
+      );
+    }
 
     envChecked = true;
   }
@@ -43,6 +48,14 @@ app.route('/api', api);
 
 export function isWeakAuthTokenSecret(secret?: string): boolean {
   return typeof secret === 'string' && secret.length > 0 && secret.length < 32;
+}
+
+export function hasWeakAdditionalAuthTokenSecret(value?: string): boolean {
+  if (!value) return false;
+  return value
+    .split(/[,\n]/)
+    .map(secret => secret.trim())
+    .some(isWeakAuthTokenSecret);
 }
 
 export function resolveRootRedirectUrl(rawUrl?: string): string {
