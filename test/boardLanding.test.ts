@@ -52,6 +52,24 @@ describe('BugDrop Board landing page', () => {
     expect(html).toContain('BugDrop Board');
   });
 
+  it('declares a social preview image for Discord and other unfurlers', () => {
+    expect(boardLandingHtml).toContain(
+      '<link rel="canonical" href="https://bugdrop.dev/board/" />'
+    );
+    expect(boardLandingHtml).toContain('<meta property="og:type" content="website" />');
+    expect(boardLandingHtml).toContain(
+      '<meta property="og:image" content="https://bugdrop.dev/board/assets/launch-dark.png" />'
+    );
+    expect(boardLandingHtml).toContain('<meta property="og:image:width" content="1280" />');
+    expect(boardLandingHtml).toContain('<meta property="og:image:height" content="720" />');
+    expect(boardLandingHtml).toContain(
+      '<meta name="twitter:card" content="summary_large_image" />'
+    );
+    expect(boardLandingHtml).toContain(
+      '<meta name="twitter:image" content="https://bugdrop.dev/board/assets/launch-dark.png" />'
+    );
+  });
+
   it('embeds the live first-party board in the static page without dogfood framing', () => {
     expect(boardLandingHtml).toContain('id="live-demo"');
     expect(boardLandingHtml).toContain('Try the embedded board.');
