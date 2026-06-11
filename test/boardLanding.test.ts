@@ -4,6 +4,14 @@ import app from '../src/index';
 import type { Env } from '../src/types';
 
 const boardLandingHtml = readFileSync('public/board/index.html', 'utf8');
+const boardOgImage = readFileSync('public/board/assets/bugdrop-board-og.png');
+
+function readPngDimensions(image: Buffer): { width: number; height: number } {
+  return {
+    width: image.readUInt32BE(16),
+    height: image.readUInt32BE(20),
+  };
+}
 
 function createEnv(): Env {
   return {
@@ -58,16 +66,18 @@ describe('BugDrop Board landing page', () => {
     );
     expect(boardLandingHtml).toContain('<meta property="og:type" content="website" />');
     expect(boardLandingHtml).toContain(
-      '<meta property="og:image" content="https://bugdrop.dev/board/assets/launch-dark.png" />'
+      '<meta property="og:image" content="https://bugdrop.dev/board/assets/bugdrop-board-og.png" />'
     );
-    expect(boardLandingHtml).toContain('<meta property="og:image:width" content="1280" />');
-    expect(boardLandingHtml).toContain('<meta property="og:image:height" content="720" />');
+    expect(boardLandingHtml).toContain('<meta property="og:image:width" content="1200" />');
+    expect(boardLandingHtml).toContain('<meta property="og:image:height" content="630" />');
     expect(boardLandingHtml).toContain(
       '<meta name="twitter:card" content="summary_large_image" />'
     );
     expect(boardLandingHtml).toContain(
-      '<meta name="twitter:image" content="https://bugdrop.dev/board/assets/launch-dark.png" />'
+      '<meta name="twitter:image" content="https://bugdrop.dev/board/assets/bugdrop-board-og.png" />'
     );
+
+    expect(readPngDimensions(boardOgImage)).toEqual({ width: 1200, height: 630 });
   });
 
   it('embeds the live first-party board in the static page without dogfood framing', () => {
