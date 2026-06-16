@@ -737,7 +737,7 @@ function hasPngSignature(bytes: Uint8Array): boolean {
 /**
  * Format the issue body with markdown
  */
-function formatIssueBody(
+export function formatIssueBody(
   payload: FeedbackPayload,
   screenshotDataUrl?: string,
   uploadedAttachments: UploadedAttachment[] = [],
@@ -757,6 +757,28 @@ function formatIssueBody(
     }
     sections.push(parts.join(' '));
     sections.push('');
+  }
+
+  // Reporter context (from host app meta)
+  if (payload.meta) {
+    const rows: Array<[string, unknown]> = [
+      ['User ID', payload.meta.user_id],
+      ['Role', payload.meta.role],
+      ['Level', payload.meta.level],
+      ['Route', payload.meta.route],
+      ['App version', payload.meta.app_version],
+      ['Env', payload.meta.env],
+    ];
+    const renderedRows = rows
+      .filter(([, v]) => v !== undefined && v !== null && String(v) !== '')
+      .map(([k, v]) => `| **${k}** | ${normalizeMarkdownValue(String(v))} |`);
+    if (renderedRows.length > 0) {
+      sections.push('## Reporter context');
+      sections.push('| Field | Value |');
+      sections.push('|----------|-------|');
+      sections.push(...renderedRows);
+      sections.push('');
+    }
   }
 
   // Description

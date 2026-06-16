@@ -31,6 +31,20 @@ import {
 } from './console-logs';
 import { resolveAccentColor } from '../defaults';
 
+// Reporter context forwarded from the host app via window.__bugdropMeta.
+// Mirrors FeedbackPayload['meta'] in ../types, kept local so the widget build
+// (tsconfig.widget.json) does not pull in Cloudflare Worker types.
+type BugDropMeta = {
+  user_id?: string | number;
+  role?: string;
+  level?: string;
+  email?: string;
+  full_name?: string;
+  route?: string;
+  app_version?: string;
+  env?: string;
+};
+
 type FeedbackCategory = 'bug' | 'feature' | 'question';
 type CategoryLabelConfig = Partial<Record<FeedbackCategory, string | string[]>>;
 type FeedbackAttachment = {
@@ -1585,8 +1599,14 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
   );
 
   try {
-    // Build submitter info if provided
-    const submitter = data.name || data.email ? { name: data.name, email: data.email } : undefined;
+    // Build submitter info if provided, falling back to host app meta
+    const bugdropMeta = (window as Window & { __bugdropMeta?: BugDropMeta }).__bugdropMeta;
+    const submitter =
+      data.name || data.email
+        ? { name: data.name, email: data.email }
+        : bugdropMeta?.full_name || bugdropMeta?.email
+          ? { name: bugdropMeta.full_name, email: bugdropMeta.email }
+          : undefined;
 
     // Collect system info
     const systemInfo = getSystemInfo();
@@ -1611,6 +1631,7 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
         attachments: data.attachments,
         consoleLogs,
         submitter,
+        meta: bugdropMeta,
         metadata: {
           url: systemInfo.url, // Redacted URL (no query params)
           userAgent: navigator.userAgent,

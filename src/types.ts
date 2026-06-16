@@ -46,6 +46,17 @@ export interface FeedbackPayload {
     name?: string;
     email?: string;
   };
+  meta?: {
+    // Optional reporter context forwarded from the host app (window.__bugdropMeta)
+    user_id?: string | number;
+    role?: string;
+    level?: string;
+    email?: string;
+    full_name?: string;
+    route?: string;
+    app_version?: string;
+    env?: string;
+  };
   metadata: {
     url: string;
     userAgent: string;
