@@ -17,6 +17,8 @@ const UNQUOTED_SECRET_PATTERN = new RegExp(
 );
 const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 const LONG_SECRET_PATTERN = /\b[A-Za-z0-9+/_=-]{32,}\b/g;
+const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+const CODICE_FISCALE_PATTERN = /\b[A-Za-z]{6}\d{2}[A-Za-z]\d{2}[A-Za-z]\d{3}[A-Za-z]\b/g;
 
 export function redactConsoleLogMessage(value: string): string {
   return value
@@ -25,5 +27,7 @@ export function redactConsoleLogMessage(value: string): string {
     .replace(QUOTED_SECRET_PATTERN, '$1$2[redacted]$2')
     .replace(UNTERMINATED_QUOTED_SECRET_PATTERN, '$1$2[redacted]')
     .replace(UNQUOTED_SECRET_PATTERN, '$1[redacted]')
-    .replace(LONG_SECRET_PATTERN, '[redacted]');
+    .replace(LONG_SECRET_PATTERN, '[redacted]')
+    .replace(EMAIL_PATTERN, '[redacted-email]')
+    .replace(CODICE_FISCALE_PATTERN, '[redacted-cf]');
 }

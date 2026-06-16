@@ -49,4 +49,29 @@ describe('console log redaction', () => {
       'Authorization: Bearer [redacted]'
     );
   });
+
+  it('redacts email addresses', () => {
+    const result = redactConsoleLogMessage('mario.rossi@example.com');
+    expect(result).toBe('[redacted-email]');
+    expect(result).not.toContain('mario.rossi');
+    expect(result).not.toContain('example.com');
+  });
+
+  it('redacts only the email within a larger string', () => {
+    const result = redactConsoleLogMessage('contact mario.rossi@example.com for details');
+    expect(result).toBe('contact [redacted-email] for details');
+    expect(result).not.toContain('mario.rossi@example.com');
+  });
+
+  it('redacts Italian codice fiscale', () => {
+    const result = redactConsoleLogMessage('CF: RSSMRA85T10A562S');
+    expect(result).toBe('CF: [redacted-cf]');
+    expect(result).not.toContain('RSSMRA85T10A562S');
+  });
+
+  it('leaves clean messages unchanged', () => {
+    expect(redactConsoleLogMessage('just a normal log line with no secrets')).toBe(
+      'just a normal log line with no secrets'
+    );
+  });
 });
