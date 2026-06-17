@@ -1273,23 +1273,6 @@ function showFeedbackFormWithScreenshotOption(
       `
         <form id="feedback-form">
           <div class="bd-form-group">
-            <label class="bd-label">Tipo</label>
-            <div class="bd-category-selector" style="display: flex; gap: 8px; margin-top: 6px;">
-              <label class="bd-category-option" style="flex: 1; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: var(--bd-border-style); border-radius: var(--bd-radius-sm); cursor: pointer; transition: all 0.15s ease;">
-                <input type="radio" name="category" value="bug" ${getCategoryChecked(initialValues, 'bug')} style="accent-color: var(--bd-primary);" />
-                <span style="font-size: 0.9rem;">🐛 Problema</span>
-              </label>
-              <label class="bd-category-option" style="flex: 1; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: var(--bd-border-style); border-radius: var(--bd-radius-sm); cursor: pointer; transition: all 0.15s ease;">
-                <input type="radio" name="category" value="feature" ${getCategoryChecked(initialValues, 'feature')} style="accent-color: var(--bd-primary);" />
-                <span style="font-size: 0.9rem;">✨ Idea</span>
-              </label>
-              <label class="bd-category-option" style="flex: 1; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: var(--bd-border-style); border-radius: var(--bd-radius-sm); cursor: pointer; transition: all 0.15s ease;">
-                <input type="radio" name="category" value="question" ${getCategoryChecked(initialValues, 'question')} style="accent-color: var(--bd-primary);" />
-                <span style="font-size: 0.9rem;">❓ Domanda</span>
-              </label>
-            </div>
-          </div>
-          <div class="bd-form-group">
             <label class="bd-label" for="title">Titolo *</label>
             <input type="text" id="title" class="bd-input" required placeholder="Descrivi in breve" value="${escapeHtml(initialValues?.title || '')}" />
           </div>
@@ -1582,13 +1565,6 @@ function getConsoleLogsFormControl(
       </label>
     </div>
   `;
-}
-
-function getCategoryChecked(
-  initialValues: FeedbackFormResult | null | undefined,
-  category: FeedbackCategory
-): string {
-  return (initialValues?.category || 'bug') === category ? 'checked' : '';
 }
 
 async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: FeedbackData) {
