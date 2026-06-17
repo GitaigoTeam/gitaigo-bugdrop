@@ -1,12 +1,12 @@
-name = "bugdrop"
+name = "gitaigo-bugdrop"
 main = "src/index.ts"
 compatibility_date = "2024-01-29"
 workers_dev = true
+account_id = "b02ae19d18b201b3d91ae9f017338555"
 
+# Custom domain: wrangler provisions the DNS record + TLS cert automatically.
 routes = [
-  { pattern = "bugdrop.dev/board*", zone_name = "bugdrop.dev" },
-  { pattern = "bugdrop.dev/board-dogfood*", zone_name = "bugdrop.dev" },
-  { pattern = "bugdrop.dev/api/bugdrop-board-token*", zone_name = "bugdrop.dev" },
+  { pattern = "bugdrop.gitaigo.it", custom_domain = true },
 ]
 
 # Static assets directory (for widget.js)
@@ -16,42 +16,17 @@ binding = "ASSETS"
 
 # Environment variables
 [vars]
-ENVIRONMENT = "development"
-ALLOWED_ORIGINS = "*"  # "*" for dev, comma-separated URLs for production
-GITHUB_APP_NAME = "neonwatty-bugdrop"  # Your GitHub App's URL slug
-MAX_SCREENSHOT_SIZE_MB = "5"  # Maximum screenshot size in MB
-BUGDROP_BOARD_TENANT_ID = "tenant_mean_weasel"
-BUGDROP_BOARD_APP_ID = "app_mean_weasel_bugdrop_dogfood"
-
-# Production configuration example (uncomment and customize for deployment)
-# [env.production.vars]
-# ENVIRONMENT = "production"
-# ALLOWED_ORIGINS = "https://yourdomain.com,https://app.yourdomain.com"
-
-# Rate limiting KV namespace
-[[kv_namespaces]]
-binding = "RATE_LIMIT"
-id = "e6454ed79f514ed3a9e24eea99dd6cd3"
-preview_id = "ff8f3809037d4403befd09369a9f7e36"
-
-# Secrets (set with: wrangler secret put GITHUB_APP_ID)
-# GITHUB_APP_ID
-# GITHUB_PRIVATE_KEY
-# AUTH_TOKEN_SECRET  # Optional: set to require signed host-app auth tokens for /feedback
-# BUGDROP_BOARD_TOKEN_SECRET  # Optional: enables /board embedded demo token signing
-
-# Preview environment for live E2E tests (deployed in merge queue)
-[env.preview]
-name = "bugdrop-preview"
-workers_dev = true
-routes = []
-
-[env.preview.vars]
-ENVIRONMENT = "preview"
-ALLOWED_ORIGINS = "*"
-GITHUB_APP_NAME = "neonwatty-bugdrop"
+ENVIRONMENT = "production"
+# Origins of the gitaigo frontend that may call this worker (no "*" in production)
+ALLOWED_ORIGINS = "https://gitaigo.it,https://gitaigo.test,http://localhost:3001,http://localhost:3000"
+GITHUB_APP_NAME = "gitaigo-bugdrop"
 MAX_SCREENSHOT_SIZE_MB = "5"
 
-[[env.preview.kv_namespaces]]
-binding = "RATE_LIMIT"
-id = "cdb88fa95d6348d6ab84037751853d5d"
+# Rate limiting is OFF: no RATE_LIMIT KV binding → middleware calls next() (see
+# src/middleware/rateLimit.ts). The widget is auth-gated in the host app, so spam
+# risk is low. To enable later: create a KV namespace in this account and add a
+# [[kv_namespaces]] block binding RATE_LIMIT.
+
+# Secrets (set with wrangler secret put — NOT stored here):
+#   GITHUB_APP_ID
+#   GITHUB_PRIVATE_KEY   (decode from Keychain hex: security ... -w | xxd -r -p)
