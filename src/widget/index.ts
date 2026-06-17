@@ -1568,6 +1568,12 @@ function getConsoleLogsFormControl(
 ): string {
   const sendConsoleLogs = initialValues?.sendConsoleLogs ?? config.sendConsoleLogs;
 
+  // Forced on via data-send-console-logs="true": always send, hide the toggle.
+  // Keep a hidden checked input so the submit handler still reads .checked = true.
+  if (config.sendConsoleLogs) {
+    return `<input type="checkbox" id="send-console-logs" checked hidden />`;
+  }
+
   return `
     <div class="bd-form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
       <input type="checkbox" id="send-console-logs" ${sendConsoleLogs ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: var(--bd-primary); cursor: pointer;" />
