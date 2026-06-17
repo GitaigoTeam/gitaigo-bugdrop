@@ -25,40 +25,40 @@ export function showScreenshotOptions(
   let redactionNote = '';
   if (nativeViewportAvailable) {
     redactionNote = redactionNoteHtml(
-      'Browser viewport capture cannot apply automatic private-field masks. Select Element to preserve automatic masking, or review and cover sensitive areas before sending.'
+      'La cattura della schermata visibile non può oscurare automaticamente i campi privati. Scegli "Seleziona elemento" per mantenere l\'oscuramento, oppure controlla e copri le aree sensibili prima di inviare.'
     );
   } else if (getRedactionCount() > 0) {
     redactionNote = redactionNoteHtml(
-      'This site marked some fields for redaction. Review the screenshot before sending.'
+      'Alcuni campi sono contrassegnati da oscurare. Controlla lo screenshot prima di inviare.'
     );
   }
 
   return new Promise(resolve => {
     const complexNote = fullPageDisabled
-      ? `<p style="margin: 0 0 12px; padding: 8px 12px; background: var(--bd-bg-secondary, #f5f5f5); border-radius: 6px; font-size: 13px; color: var(--bd-text-secondary);">${nativeViewportAvailable ? 'This page is too complex for full-page or area capture. Capture the visible viewport or select a specific element instead.' : 'This page is too complex for full-page or area capture. Select a specific element instead.'}</p>`
+      ? `<p style="margin: 0 0 12px; padding: 8px 12px; background: var(--bd-bg-secondary, #f5f5f5); border-radius: 6px; font-size: 13px; color: var(--bd-text-secondary);">${nativeViewportAvailable ? 'Questa pagina è troppo complessa per la cattura completa o ad area. Cattura la schermata visibile o seleziona un elemento.' : 'Questa pagina è troppo complessa per la cattura completa o ad area. Seleziona un elemento.'}</p>`
       : '';
 
     let primaryCaptureButton = '';
     if (!fullPageDisabled) {
       primaryCaptureButton =
-        '<button class="bd-btn bd-btn-primary" data-action="capture">Full Page</button>';
+        '<button class="bd-btn bd-btn-primary" data-action="capture">Pagina intera</button>';
     } else if (nativeViewportAvailable) {
       primaryCaptureButton =
-        '<button class="bd-btn bd-btn-primary" data-action="viewport">Capture Viewport</button>';
+        '<button class="bd-btn bd-btn-primary" data-action="viewport">Schermata visibile</button>';
     }
 
     const modal = createModal(
       root,
-      'Capture Screenshot',
+      'Cattura uno screenshot',
       `
-        <p style="margin: 0 0 16px; color: var(--bd-text-secondary);">Choose what to capture:</p>
+        <p style="margin: 0 0 16px; color: var(--bd-text-secondary);">Scegli cosa catturare:</p>
         ${complexNote}
         ${redactionNote}
         <div class="bd-actions bd-screenshot-actions">
           ${primaryCaptureButton}
-          ${fullPageDisabled ? '' : '<button class="bd-btn bd-btn-secondary" data-action="area">Select Area</button>'}
-          <button class="bd-btn bd-btn-secondary" data-action="element">Select Element</button>
-          ${allowSkip ? '<button class="bd-btn bd-btn-quiet" data-action="skip">Skip Screenshot</button>' : ''}
+          ${fullPageDisabled ? '' : '<button class="bd-btn bd-btn-secondary" data-action="area">Seleziona area</button>'}
+          <button class="bd-btn bd-btn-secondary" data-action="element">Seleziona elemento</button>
+          ${allowSkip ? '<button class="bd-btn bd-btn-quiet" data-action="skip">Salta lo screenshot</button>' : ''}
         </div>
       `
     );

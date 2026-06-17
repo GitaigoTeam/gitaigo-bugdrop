@@ -53,11 +53,11 @@ export async function capturePromiseWithLoading(
       ? null
       : createModal(
           root,
-          'Capturing...',
+          'Acquisizione...',
           `
             <div style="display: flex; flex-direction: column; align-items: center; padding: 20px;">
               <div class="bd-spinner bd-spinner--lg"></div>
-              <p class="bd-loading-text" style="margin-top: 12px;">Capturing screenshot...</p>
+              <p class="bd-loading-text" style="margin-top: 12px;">Sto catturando lo screenshot...</p>
             </div>
           `
         );
@@ -78,17 +78,17 @@ export async function capturePromiseWithLoading(
     return new Promise(resolve => {
       const errorModal = createModal(
         root,
-        'Capture Failed',
+        'Acquisizione non riuscita',
         `
           <div class="bd-error-message">
             <svg class="bd-error-message__icon" viewBox="0 0 16 16" fill="currentColor">
               <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0-9.5a.75.75 0 0 0-.75.75v2.5a.75.75 0 0 0 1.5 0v-2.5A.75.75 0 0 0 8 5.5zm0 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
             </svg>
-            <span class="bd-error-message__text">Failed to capture screenshot. The page may be too complex or browser restrictions may apply.</span>
+            <span class="bd-error-message__text">Impossibile catturare lo screenshot. La pagina potrebbe essere troppo complessa.</span>
           </div>
           <div class="bd-actions">
-            <button class="bd-btn bd-btn-secondary" data-action="skip">${allowSkip ? 'Skip Screenshot' : 'Choose Another Method'}</button>
-            <button class="bd-btn bd-btn-primary" data-action="retry">Try Again</button>
+            <button class="bd-btn bd-btn-secondary" data-action="skip">${allowSkip ? 'Salta lo screenshot' : 'Scegli un altro metodo'}</button>
+            <button class="bd-btn bd-btn-primary" data-action="retry">Riprova</button>
           </div>
         `,
         true
@@ -121,16 +121,16 @@ function showMaskFailureModal(root: HTMLElement): Promise<CaptureWithLoadingResu
   return new Promise(resolve => {
     const modal = createModal(
       root,
-      'Privacy masking failed',
+      'Oscuramento non riuscito',
       `
         <div class="bd-error-message">
           <svg class="bd-error-message__icon" viewBox="0 0 16 16" fill="currentColor">
             <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0-9.5a.75.75 0 0 0-.75.75v2.5a.75.75 0 0 0 1.5 0v-2.5A.75.75 0 0 0 8 5.5zm0 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
           </svg>
-          <span class="bd-error-message__text">Automatic redaction of private fields could not be applied. To protect your data, this screenshot was discarded. You can still submit feedback without one.</span>
+          <span class="bd-error-message__text">Non è stato possibile oscurare automaticamente i campi privati. Per proteggere i tuoi dati lo screenshot è stato scartato. Puoi comunque inviare il feedback senza.</span>
         </div>
         <div class="bd-actions">
-          <button class="bd-btn bd-btn-primary" data-action="skip">Continue without screenshot</button>
+          <button class="bd-btn bd-btn-primary" data-action="skip">Continua senza screenshot</button>
         </div>
       `,
       true

@@ -498,7 +498,7 @@ if (!config.repo) {
 
 // Build the trigger button label text
 function getTriggerLabel(config: WidgetConfig): string {
-  return config.label !== undefined ? config.label : 'Feedback';
+  return config.label !== undefined ? config.label : 'Segnala';
 }
 
 function appendTriggerContent(trigger: HTMLElement, config: WidgetConfig): void {
@@ -543,7 +543,7 @@ function createTriggerDragHandle(): HTMLElement {
   const handle = document.createElement('span');
   handle.className = 'bd-trigger-drag-handle';
   handle.setAttribute('aria-hidden', 'true');
-  handle.title = 'Drag feedback button';
+  handle.title = 'Trascina il pulsante';
   handle.innerHTML = `
     <svg viewBox="0 0 12 24" aria-hidden="true" focusable="false">
       <circle cx="4" cy="5" r="1.5" fill="currentColor"></circle>
@@ -746,7 +746,7 @@ function createPullTab(root: HTMLElement, config: WidgetConfig): HTMLElement {
   tab.innerHTML = '<span class="bd-pull-tab-chevron">‹</span>';
   tab.setAttribute('role', 'button');
   tab.setAttribute('tabindex', '0');
-  tab.setAttribute('aria-label', 'Show feedback button');
+  tab.setAttribute('aria-label', 'Mostra il pulsante');
 
   const handleRestore = () => {
     // Clear dismissed state
@@ -820,14 +820,14 @@ function initWidget(config: WidgetConfig) {
     const trigger = document.createElement('button');
     trigger.className = getTriggerClassName(config);
     appendTriggerContent(trigger, config);
-    trigger.setAttribute('aria-label', 'Report a bug or send feedback');
+    trigger.setAttribute('aria-label', 'Segnala un problema o invia un feedback');
 
     // Add close button if dismissible
     if (config.buttonDismissible) {
       const closeBtn = document.createElement('button');
       closeBtn.className = 'bd-trigger-close';
       closeBtn.textContent = '×';
-      closeBtn.setAttribute('aria-label', 'Dismiss feedback button');
+      closeBtn.setAttribute('aria-label', 'Nascondi il pulsante');
       trigger.appendChild(closeBtn);
 
       // Handle close button click
@@ -994,13 +994,13 @@ function createTriggerButton(root: HTMLElement, config: WidgetConfig, isRestorin
   const trigger = document.createElement('button');
   trigger.className = getTriggerClassName(config, isRestoring);
   appendTriggerContent(trigger, config);
-  trigger.setAttribute('aria-label', 'Report a bug or send feedback');
+  trigger.setAttribute('aria-label', 'Segnala un problema o invia un feedback');
 
   if (config.buttonDismissible) {
     const closeBtn = document.createElement('button');
     closeBtn.className = 'bd-trigger-close';
     closeBtn.textContent = '×';
-    closeBtn.setAttribute('aria-label', 'Dismiss feedback button');
+    closeBtn.setAttribute('aria-label', 'Nascondi il pulsante');
     trigger.appendChild(closeBtn);
 
     closeBtn.addEventListener('click', e => {
@@ -1068,7 +1068,7 @@ async function openFeedbackFlow(
     showInstallPrompt(
       root,
       config,
-      'Unable to reach BugDrop API. Check your network connection or script tag URL.',
+      'Impossibile contattare il servizio. Controlla la connessione e riprova.',
       appName
     );
     return;
@@ -1164,16 +1164,16 @@ function showInstallPrompt(
       ? 'neonwatty-bugdrop'
       : config.apiUrl.replace(/https?:\/\//, '').replace(/\..*/, ''));
   const installUrl = `https://github.com/apps/${appName}/installations/new`;
-  const message = errorMessage || 'BugDrop requires GitHub App installation to create issues.';
-  const title = errorMessage ? 'Connection Error' : 'Install Required';
+  const message = errorMessage || 'Configurazione mancante. Contatta il supporto tecnico.';
+  const title = errorMessage ? 'Errore di connessione' : 'Configurazione richiesta';
   const modal = createModal(
     root,
     title,
     `
       <p style="margin: 0 0 16px; color: var(--bd-text-secondary);">${message}</p>
       <div class="bd-actions">
-        <button class="bd-btn bd-btn-secondary" data-action="cancel">Cancel</button>
-        ${!errorMessage ? `<a href="${installUrl}" target="_blank" class="bd-btn bd-btn-primary" style="text-decoration: none;">Install App</a>` : ''}
+        <button class="bd-btn bd-btn-secondary" data-action="cancel">Annulla</button>
+        ${!errorMessage ? `<a href="${installUrl}" target="_blank" class="bd-btn bd-btn-primary" style="text-decoration: none;">Installa</a>` : ''}
       </div>
     `,
     true
@@ -1196,20 +1196,20 @@ function showWelcomeScreen(root: HTMLElement): Promise<boolean> {
   return new Promise(resolve => {
     const modal = createModal(
       root,
-      'Share Your Feedback',
+      'Inviaci un feedback',
       `
         <div style="text-align: center; padding: 8px 0 16px;">
           <div style="font-size: 3rem; margin-bottom: 12px;">💬</div>
           <p style="margin: 0 0 12px; color: var(--bd-text-primary); font-size: 1.05rem; font-weight: 500;">
-            Help us improve by sharing your thoughts
+            Aiutaci a migliorare: raccontaci cosa ne pensi
           </p>
           <p style="margin: 0 0 8px; color: var(--bd-text-secondary); font-size: 0.95rem; line-height: 1.6;">
-            Report bugs, suggest features, or leave feedback.<br/>
-            You can optionally include annotated screenshots.
+            Segnala un problema, proponi un'idea o lascia un commento.<br/>
+            Se vuoi, puoi allegare uno screenshot.
           </p>
         </div>
         <div class="bd-actions" style="justify-content: center;">
-          <button class="bd-btn bd-btn-primary" data-action="continue">Get Started</button>
+          <button class="bd-btn bd-btn-primary" data-action="continue">Inizia</button>
         </div>
       `,
       true
@@ -1251,8 +1251,8 @@ function showFeedbackFormWithScreenshotOption(
     const nameFieldHtml = config.showName
       ? `
           <div class="bd-form-group">
-            <label class="bd-label" for="name">Name${config.requireName ? ' *' : ''}</label>
-            <input type="text" id="name" class="bd-input" ${config.requireName ? 'required' : ''} placeholder="Your name" value="${escapeHtml(initialValues?.name || '')}" />
+            <label class="bd-label" for="name">Nome${config.requireName ? ' *' : ''}</label>
+            <input type="text" id="name" class="bd-input" ${config.requireName ? 'required' : ''} placeholder="Il tuo nome" value="${escapeHtml(initialValues?.name || '')}" />
           </div>
         `
       : '';
@@ -1262,40 +1262,40 @@ function showFeedbackFormWithScreenshotOption(
       ? `
           <div class="bd-form-group">
             <label class="bd-label" for="email">Email${config.requireEmail ? ' *' : ''}</label>
-            <input type="email" id="email" class="bd-input" ${config.requireEmail ? 'required' : ''} placeholder="your@email.com" value="${escapeHtml(initialValues?.email || '')}" />
+            <input type="email" id="email" class="bd-input" ${config.requireEmail ? 'required' : ''} placeholder="latua@email.com" value="${escapeHtml(initialValues?.email || '')}" />
           </div>
         `
       : '';
 
     const modal = createModal(
       root,
-      'Send Feedback',
+      'Inviaci un feedback',
       `
         <form id="feedback-form">
           <div class="bd-form-group">
-            <label class="bd-label">Category</label>
+            <label class="bd-label">Tipo</label>
             <div class="bd-category-selector" style="display: flex; gap: 8px; margin-top: 6px;">
               <label class="bd-category-option" style="flex: 1; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: var(--bd-border-style); border-radius: var(--bd-radius-sm); cursor: pointer; transition: all 0.15s ease;">
                 <input type="radio" name="category" value="bug" ${getCategoryChecked(initialValues, 'bug')} style="accent-color: var(--bd-primary);" />
-                <span style="font-size: 0.9rem;">🐛 Bug</span>
+                <span style="font-size: 0.9rem;">🐛 Problema</span>
               </label>
               <label class="bd-category-option" style="flex: 1; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: var(--bd-border-style); border-radius: var(--bd-radius-sm); cursor: pointer; transition: all 0.15s ease;">
                 <input type="radio" name="category" value="feature" ${getCategoryChecked(initialValues, 'feature')} style="accent-color: var(--bd-primary);" />
-                <span style="font-size: 0.9rem;">✨ Feature</span>
+                <span style="font-size: 0.9rem;">✨ Idea</span>
               </label>
               <label class="bd-category-option" style="flex: 1; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: var(--bd-border-style); border-radius: var(--bd-radius-sm); cursor: pointer; transition: all 0.15s ease;">
                 <input type="radio" name="category" value="question" ${getCategoryChecked(initialValues, 'question')} style="accent-color: var(--bd-primary);" />
-                <span style="font-size: 0.9rem;">❓ Question</span>
+                <span style="font-size: 0.9rem;">❓ Domanda</span>
               </label>
             </div>
           </div>
           <div class="bd-form-group">
-            <label class="bd-label" for="title">Title *</label>
-            <input type="text" id="title" class="bd-input" required placeholder="Brief description of the issue or suggestion" value="${escapeHtml(initialValues?.title || '')}" />
+            <label class="bd-label" for="title">Titolo *</label>
+            <input type="text" id="title" class="bd-input" required placeholder="Descrivi in breve" value="${escapeHtml(initialValues?.title || '')}" />
           </div>
           <div class="bd-form-group">
-            <label class="bd-label" for="description">Description</label>
-            <textarea id="description" class="bd-textarea" placeholder="Provide additional details, steps to reproduce, or context...">${escapeHtml(initialValues?.description || '')}</textarea>
+            <label class="bd-label" for="description">Descrizione</label>
+            <textarea id="description" class="bd-textarea" placeholder="Aggiungi dettagli: cosa stavi facendo e cosa è successo...">${escapeHtml(initialValues?.description || '')}</textarea>
           </div>
           ${nameFieldHtml}
           ${emailFieldHtml}
@@ -1312,8 +1312,8 @@ function showFeedbackFormWithScreenshotOption(
             ${getConsoleLogsFormControl(config, initialValues)}
           </div>
           <div class="bd-actions">
-            <button type="button" class="bd-btn bd-btn-secondary" data-action="cancel">Cancel</button>
-            <button type="submit" class="bd-btn bd-btn-primary" id="submit-btn">${config.screenshotMode === 'auto' ? 'Submit' : 'Continue'}</button>
+            <button type="button" class="bd-btn bd-btn-secondary" data-action="cancel">Annulla</button>
+            <button type="submit" class="bd-btn bd-btn-primary" id="submit-btn">${config.screenshotMode === 'auto' ? 'Invia' : 'Continua'}</button>
           </div>
         </form>
       `
@@ -1415,7 +1415,7 @@ function showFeedbackFormWithScreenshotOption(
       if (files.length > remainingSlots) {
         showUploadError(
           uploadError,
-          `Upload up to ${MAX_UPLOAD_FILES} files. Remove a file before adding another.`
+          `Puoi caricare al massimo ${MAX_UPLOAD_FILES} file. Rimuovine uno per aggiungerne un altro.`
         );
         return;
       }
@@ -1433,7 +1433,7 @@ function showFeedbackFormWithScreenshotOption(
         attachments = [...attachments, ...nextAttachments];
         rerenderUploads();
       } catch {
-        showUploadError(uploadError, 'Could not read that file. Try another one.');
+        showUploadError(uploadError, 'Impossibile leggere il file. Provane un altro.');
       }
     });
 
@@ -1444,14 +1444,14 @@ function showFeedbackFormWithScreenshotOption(
 function getUploadFormControl(): string {
   return `
     <div class="bd-upload-group">
-      <div class="bd-upload-row" aria-label="Uploads">
-        <button type="button" class="bd-btn bd-btn-secondary bd-upload-button" data-action="choose-uploads" aria-label="Upload files">
+      <div class="bd-upload-row" aria-label="Allegati">
+        <button type="button" class="bd-btn bd-btn-secondary bd-upload-button" data-action="choose-uploads" aria-label="Carica file">
           <svg class="bd-upload-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
             <path d="M8 11V3" />
             <path d="M4.5 6.5 8 3l3.5 3.5" />
             <path d="M3 12.5h10" />
           </svg>
-          Upload
+          Allega
         </button>
       </div>
     </div>
@@ -1460,10 +1460,10 @@ function getUploadFormControl(): string {
 
 function validateUploadFile(file: File): string | null {
   if (!ACCEPTED_UPLOAD_TYPES.includes(file.type)) {
-    return 'That file type is not supported. Upload an image, PDF, or short video.';
+    return "Tipo di file non supportato. Carica un'immagine, un PDF o un breve video.";
   }
   if (file.size > MAX_UPLOAD_SIZE_BYTES) {
-    return `File is too large. Upload files up to ${formatFileSize(MAX_UPLOAD_SIZE_BYTES)}.`;
+    return `File troppo grande. Massimo ${formatFileSize(MAX_UPLOAD_SIZE_BYTES)}.`;
   }
   return null;
 }
@@ -1484,7 +1484,7 @@ function renderUploadList(
         <div class="bd-upload-item">
           <span class="bd-upload-item__name">${escapeHtml(attachment.name)}</span>
           <span class="bd-upload-item__meta">${formatFileSize(attachment.size)}</span>
-          <button type="button" class="bd-upload-remove" data-index="${index}" aria-label="Remove ${escapeHtml(attachment.name)}">&times;</button>
+          <button type="button" class="bd-upload-remove" data-index="${index}" aria-label="Rimuovi ${escapeHtml(attachment.name)}">&times;</button>
         </div>
       `
     )
@@ -1531,11 +1531,11 @@ function getScreenshotFormControl(
   if (config.screenshotMode === 'auto') {
     const redactionNote =
       getRedactionCount() > 0
-        ? ' Some fields this site marked private may be visually masked on supported pages, but unmarked sensitive information can still be included.'
+        ? ' Alcuni campi contrassegnati come privati potrebbero essere oscurati, ma altre informazioni sensibili potrebbero comunque essere incluse.'
         : '';
     return `
       <p style="margin: 8px 0 0; color: var(--bd-text-secondary); font-size: 0.95rem;">
-        This site will attach a full-page screenshot when you submit without showing a preview. Review your page for sensitive information before sending.${redactionNote}
+        Quando invii, verrà allegato automaticamente uno screenshot della pagina (senza anteprima). Controlla che non contenga dati sensibili.${redactionNote}
       </p>
     `;
   }
@@ -1543,7 +1543,7 @@ function getScreenshotFormControl(
   if (config.screenshotMode === 'required') {
     return `
       <p style="margin: 8px 0 0; color: var(--bd-text-secondary); font-size: 0.95rem;">
-        📸 A screenshot is required before submitting.
+        📸 Serve uno screenshot per inviare.
       </p>
     `;
   }
@@ -1556,7 +1556,7 @@ function getScreenshotFormControl(
     <div class="bd-screenshot-control">
       <input type="checkbox" id="include-screenshot" ${includeScreenshot ? 'checked' : ''} class="bd-checkbox" />
       <label for="include-screenshot" class="bd-checkbox-label">
-        📸 Include a screenshot
+        📸 Allega uno screenshot
       </label>
     </div>
   `;
@@ -1572,7 +1572,7 @@ function getConsoleLogsFormControl(
     <div class="bd-form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
       <input type="checkbox" id="send-console-logs" ${sendConsoleLogs ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: var(--bd-primary); cursor: pointer;" />
       <label for="send-console-logs" style="font-size: 0.95rem; color: var(--bd-text-secondary); cursor: pointer; user-select: none;">
-        Send Console Logs
+        Invia info tecniche
       </label>
     </div>
   `;
@@ -1589,11 +1589,11 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
   // Show submitting modal with loading state
   const modal = createModal(
     root,
-    'Submitting...',
+    'Invio in corso...',
     `
       <div style="display: flex; flex-direction: column; align-items: center; padding: 20px;">
         <div class="bd-spinner bd-spinner--lg"></div>
-        <p class="bd-loading-text" style="margin-top: 12px;">Creating issue...</p>
+        <p class="bd-loading-text" style="margin-top: 12px;">Sto inviando la segnalazione...</p>
       </div>
     `
   );
@@ -1663,7 +1663,7 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
         root,
         config,
         data,
-        `Too many submissions. Please try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`
+        `Troppi invii. Riprova tra ${minutes} minut${minutes === 1 ? 'o' : 'i'}.`
       );
       return;
     }
@@ -1695,7 +1695,7 @@ function showSubmitError(
 ) {
   const modal = createModal(
     root,
-    'Submission Failed',
+    'Invio non riuscito',
     `
       <div class="bd-error-message">
         <svg class="bd-error-message__icon" viewBox="0 0 16 16" fill="currentColor">
@@ -1704,8 +1704,8 @@ function showSubmitError(
         <span class="bd-error-message__text">${errorMessage}</span>
       </div>
       <div class="bd-actions">
-        <button class="bd-btn bd-btn-secondary" data-action="cancel">Cancel</button>
-        <button class="bd-btn bd-btn-primary" data-action="retry">Try Again</button>
+        <button class="bd-btn bd-btn-secondary" data-action="cancel">Annulla</button>
+        <button class="bd-btn bd-btn-primary" data-action="retry">Riprova</button>
       </div>
     `,
     true

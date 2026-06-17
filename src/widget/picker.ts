@@ -79,12 +79,12 @@ function createTooltip(
   `;
 
   if (!showInlineCancel) {
-    tooltip.textContent = 'Click any element to capture it (ESC to cancel)';
+    tooltip.textContent = 'Clicca un elemento per catturarlo (ESC per annullare)';
     return { tooltip, cancelButton: null };
   }
 
   const cancelButton = createCancelButton(style.accent);
-  tooltip.append('Tap any element to capture it (', cancelButton, ')');
+  tooltip.append('Tocca un elemento per catturarlo (', cancelButton, ')');
   return { tooltip, cancelButton };
 }
 
@@ -340,7 +340,7 @@ function createCancelButton(accent: string): HTMLButtonElement {
   const cancelButton = document.createElement('button');
   cancelButton.id = 'bugdrop-element-picker-cancel';
   cancelButton.type = 'button';
-  cancelButton.textContent = 'Cancel';
+  cancelButton.textContent = 'Annulla';
   cancelButton.style.cssText = `
     align-items: center;
     appearance: none;

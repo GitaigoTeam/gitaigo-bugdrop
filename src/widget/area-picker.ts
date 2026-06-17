@@ -2,10 +2,10 @@ import type { PickerStyle } from './picker';
 import { resolvePickerStyle } from './picker';
 
 const MIN_SELECTION_SIZE = 10;
-const AREA_PICKER_INSTRUCTION = 'Draw a selection around the area to capture';
+const AREA_PICKER_INSTRUCTION = "Disegna un riquadro attorno all'area da catturare";
 const AREA_PICKER_REDACTION_INSTRUCTION =
-  'Draw a selection around the area to capture. Marked private fields may be masked if included.';
-const AREA_PICKER_DESKTOP_CANCEL_INSTRUCTION = 'ESC to cancel';
+  "Disegna un riquadro attorno all'area da catturare. I campi privati contrassegnati potrebbero essere oscurati se inclusi.";
+const AREA_PICKER_DESKTOP_CANCEL_INSTRUCTION = 'ESC per annullare';
 type ResolvedAreaPickerStyle = ReturnType<typeof resolvePickerStyle>;
 
 export function createAreaPicker(
@@ -222,7 +222,7 @@ function createTooltip(
     const cancelButton = document.createElement('button');
     cancelButton.id = 'bugdrop-area-picker-cancel';
     cancelButton.type = 'button';
-    cancelButton.textContent = 'Cancel';
+    cancelButton.textContent = 'Annulla';
     cancelButton.style.cssText = `
       align-items: center;
       appearance: none;

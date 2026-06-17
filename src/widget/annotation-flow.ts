@@ -15,17 +15,17 @@ export function showAnnotationStep(
     const redactionMessages: string[] = [];
     if (opts?.redactionUnavailable) {
       redactionMessages.push(
-        'This browser viewport capture could not apply automatic private-field masks. Review and cover any sensitive areas before sending.'
+        'Non è stato possibile oscurare automaticamente i campi privati in questa schermata. Controlla e copri le aree sensibili prima di inviare.'
       );
     } else {
       if (redactionCount > 0) {
         redactionMessages.push(
-          `${redactionCount} private ${redactionCount === 1 ? 'item was' : 'items were'} marked for redaction in this screenshot. Review before sending.`
+          `${redactionCount} ${redactionCount === 1 ? 'campo privato è stato oscurato' : 'campi privati sono stati oscurati'} in questo screenshot. Controlla prima di inviare.`
         );
       }
       if (opts?.redactionLimitations) {
         redactionMessages.push(
-          'BugDrop only covered the measured marked boxes. It does not inspect pixels inside embedded or rendered content such as iframes, canvas, images, SVGs, videos, CSS backgrounds, or custom controls. Confirm the black box fully covers the sensitive region before sending, or retake after marking a larger wrapper.'
+          'Sono state coperte solo le aree contrassegnate. Controlla che il riquadro nero copra davvero le informazioni sensibili prima di inviare.'
         );
       }
     }
@@ -35,30 +35,30 @@ export function showAnnotationStep(
     const selectedElementNote = opts?.selectedElementCapture
       ? `
         <p class="bd-selected-element-note" style="margin: -4px 0 12px; color: var(--bd-text-secondary); font-size: 13px;">
-          Need more surrounding context? Adjust <a href="https://bugdrop.dev/docs/configuration#select-element-screenshots" target="_blank" rel="noopener noreferrer">data-element-context-max-area</a> on the BugDrop script tag.
+          Vuoi includere più area attorno all'elemento? Seleziona un'area più ampia.
         </p>
       `
       : '';
     const modal = createModal(
       root,
-      'Review Screenshot',
+      'Controlla lo screenshot',
       `
         ${redactionNote}
         <p style="margin: 0 0 12px; color: var(--bd-text-secondary); font-size: 13px;">
-          Check that no sensitive information is visible before sending. Cover sensitive areas before submitting. Redactions are baked into the uploaded image.
+          Controlla che non siano visibili informazioni sensibili prima di inviare. Copri le aree riservate: le coperture vengono salvate nell'immagine.
         </p>
         ${selectedElementNote}
         <div class="bd-tools">
-          <button class="bd-tool active" data-tool="draw">✏️ Draw</button>
-          <button class="bd-tool" data-tool="arrow">➡️ Arrow</button>
-          <button class="bd-tool" data-tool="rect">▢ Rectangle</button>
-          <button class="bd-tool" data-tool="redact">Redact</button>
-          <button class="bd-tool" data-action="undo">↶ Undo</button>
+          <button class="bd-tool active" data-tool="draw">✏️ Disegna</button>
+          <button class="bd-tool" data-tool="arrow">➡️ Freccia</button>
+          <button class="bd-tool" data-tool="rect">▢ Rettangolo</button>
+          <button class="bd-tool" data-tool="redact">Oscura</button>
+          <button class="bd-tool" data-action="undo">↶ Annulla</button>
         </div>
         <div id="annotation-canvas" class="bd-annotation-stage"></div>
         <div class="bd-actions">
-          <button class="bd-btn bd-btn-secondary" data-action="retake">Retake</button>
-          <button class="bd-btn bd-btn-primary" data-action="done">Submit Feedback</button>
+          <button class="bd-btn bd-btn-secondary" data-action="retake">Rifai</button>
+          <button class="bd-btn bd-btn-primary" data-action="done">Invia feedback</button>
         </div>
       `,
       false,
