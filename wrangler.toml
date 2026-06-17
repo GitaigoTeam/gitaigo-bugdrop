@@ -18,7 +18,7 @@ binding = "ASSETS"
 [vars]
 ENVIRONMENT = "production"
 # Origins of the gitaigo frontend that may call this worker (no "*" in production)
-ALLOWED_ORIGINS = "https://gitaigo.it,https://gitaigo.test,https://gitaigo.test:3001,https://localhost:3001,http://localhost:3001,http://localhost:3005,http://localhost:3000"
+ALLOWED_ORIGINS = "https://app.gitaigo.it,https://staging.gitaigo.it,https://gitaigo.it,https://gitaigo.test,https://gitaigo.test:3001,https://localhost:3001,http://localhost:3001,http://localhost:3000"
 GITHUB_APP_NAME = "gitaigo-bugdrop"
 MAX_SCREENSHOT_SIZE_MB = "5"
 
